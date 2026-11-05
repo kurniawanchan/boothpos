@@ -18,6 +18,8 @@ const PAY_STATES = ['pending', 'rejected', 'verified'];
 const SETTLEMENTS = ['unpaid', 'partially_paid', 'fully_paid'];
 // 056 — filter Sale Reference: punya / tanpa (kosong = semua).
 const REFERENCE_FILTERS = ['has', 'none'];
+// 059 — status persetujuan KESELURUHAN transaksi (bukan status satu seller); nilai = `approval.status` dari server.
+const APPROVAL_FILTERS = ['pending', 'partial', 'full'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_LIST = 50;
 // 054 (US5) — halaman tabel. Hanya ukuran ini yang dikenal; nilai lain dari URL diabaikan.
@@ -57,7 +59,7 @@ export function useSalesFilters({ transactions, sessions, lockedSeller = '' }) {
   const includeVoided = ref(false);
   const filters = reactive({
     dateFrom: '', dateTo: '', cashiers: [], sellers: [], payments: [], sessions: [],
-    customerType: '', paymentState: '', settlement: '', reference: '', minTotal: '', maxTotal: '',
+    customerType: '', paymentState: '', settlement: '', reference: '', approval: '', minTotal: '', maxTotal: '',
   });
   const sortKey = ref('created_at');
   const sortDir = ref('desc');
@@ -113,6 +115,9 @@ export function useSalesFilters({ transactions, sessions, lockedSeller = '' }) {
     // 056 — `has_reference` sudah ada di tiap baris; payload lama tanpa flag dianggap TANPA referensi.
     if (f.reference === 'has' && tx.has_reference !== true) return false;
     if (f.reference === 'none' && tx.has_reference === true) return false;
+    // 059 — filter menurut status KESELURUHAN. Baris batal ('voided') atau tanpa ringkasan tak pernah cocok
+    // dengan nilai terisi; payload lama tanpa `approval` dianggap belum disetujui (sama dengan penjualan lama di server).
+    if (f.approval && (tx.approval?.status ?? 'pending') !== f.approval) return false;
     if (f.customerType === 'walkin' && tx.customer_name) return false;
     if (f.customerType === 'named' && !tx.customer_name) return false;
 
@@ -138,7 +143,7 @@ export function useSalesFilters({ transactions, sessions, lockedSeller = '' }) {
     const f = filters;
     return [
       search.value.trim() !== '', f.dateFrom !== '', f.dateTo !== '', f.cashiers.length > 0, f.sellers.length > 0,
-      f.payments.length > 0, f.sessions.length > 0, f.customerType !== '', f.paymentState !== '', f.settlement !== '', f.reference !== '',
+      f.payments.length > 0, f.sessions.length > 0, f.customerType !== '', f.paymentState !== '', f.settlement !== '', f.reference !== '', f.approval !== '',
       f.minTotal !== '' && f.minTotal !== null, f.maxTotal !== '' && f.maxTotal !== null,
     ].filter(Boolean).length;
   });
@@ -147,7 +152,7 @@ export function useSalesFilters({ transactions, sessions, lockedSeller = '' }) {
     search.value = '';
     Object.assign(filters, {
       dateFrom: '', dateTo: '', cashiers: [], sellers: [], payments: [], sessions: [],
-      customerType: '', paymentState: '', settlement: '', reference: '', minTotal: '', maxTotal: '',
+      customerType: '', paymentState: '', settlement: '', reference: '', approval: '', minTotal: '', maxTotal: '',
     });
   }
 
@@ -287,7 +292,7 @@ export function useSalesFilters({ transactions, sessions, lockedSeller = '' }) {
     put('q', search.value.trim());
     put('from', f.dateFrom); put('to', f.dateTo);
     put('cashier', f.cashiers); put('seller', f.sellers); put('pay', f.payments); put('session', f.sessions);
-    put('cust', f.customerType); put('pstate', f.paymentState); put('settle', f.settlement); put('ref', f.reference);
+    put('cust', f.customerType); put('pstate', f.paymentState); put('settle', f.settlement); put('ref', f.reference); put('appr', f.approval);
     put('min', f.minTotal); put('max', f.maxTotal);
     if (includeVoided.value) q.voided = '1';
     if (sortKey.value !== 'created_at' || sortDir.value !== 'desc') { q.sort = sortKey.value; q.dir = sortDir.value; }
@@ -314,6 +319,7 @@ export function useSalesFilters({ transactions, sessions, lockedSeller = '' }) {
     filters.paymentState = oneOf(query.pstate, PAY_STATES);
     filters.settlement = oneOf(query.settle, SETTLEMENTS);
     filters.reference = oneOf(query.ref, REFERENCE_FILTERS);
+    filters.approval = oneOf(query.appr, APPROVAL_FILTERS);
     filters.minTotal = amount(query.min);
     filters.maxTotal = amount(query.max);
     includeVoided.value = one(query.voided) === '1';

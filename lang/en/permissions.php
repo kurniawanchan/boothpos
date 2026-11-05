@@ -14,7 +14,7 @@ return [
         'dispatch' => 'Dispatch status', 'verify' => 'Verify payments', 'split' => 'Split', 'duplicate' => 'Duplicate',
         'notify' => 'Send notifications', 'activate' => 'Activate / deactivate', 'mark_paid' => 'Mark paid', 'cancel' => 'Cancel',
         'void' => 'Void sales', 'payment_method' => 'Change payment method', 'reference' => 'Sale reference', 'receipts' => 'Download receipts',
-        'refresh' => 'Refresh', 'finalize' => 'Finalize', 'reopen' => 'Reopen', 'acknowledge' => 'Acknowledgement', 'payout' => 'Payouts',
+        'refresh' => 'Refresh', 'finalize' => 'Finalize', 'reopen' => 'Reopen', 'acknowledge' => 'Acknowledgement', 'payout' => 'Payouts', 'approve' => 'Approve seller items',
         'backup' => 'Backups', 'restore' => 'Restore', 'branding' => 'Store branding',
     ],
 ];

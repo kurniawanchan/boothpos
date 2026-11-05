@@ -26,6 +26,7 @@ import ReceiptModal from '../components/receipt/ReceiptModal.vue';
 import OrderReferenceModal from '../components/sales/OrderReferenceModal.vue';
 import PaymentProofsModal from '../components/sales/PaymentProofsModal.vue';
 import RowAttachments from '../components/sales/RowAttachments.vue';
+import ApprovalStatusIcon from '../components/sales/ApprovalStatusIcon.vue';
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
@@ -92,7 +93,7 @@ async function load() {
 }
 
 // --- filter tersimpan di URL (bisa di-bookmark / dibagikan) -----------------------
-const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'seller', 'pay', 'session', 'cust', 'pstate', 'settle', 'ref', 'min', 'max', 'voided', 'sort', 'dir', 'page', 'size'];
+const OUR_QUERY_KEYS = ['q', 'from', 'to', 'cashier', 'seller', 'pay', 'session', 'cust', 'pstate', 'settle', 'ref', 'appr', 'min', 'max', 'voided', 'sort', 'dir', 'page', 'size'];
 watch(() => JSON.stringify(toQuery()), (json) => {
   if (!restored || !router) return;
   const others = Object.fromEntries(Object.entries(route.query).filter(([k]) => !OUR_QUERY_KEYS.includes(k)));
@@ -134,6 +135,13 @@ const settlementOptions = computed(() => [
 const referenceOptions = computed(() => [
   { value: 'has', label: t('sales_reference.filter_has') },
   { value: 'none', label: t('sales_reference.filter_none') },
+]);
+// 059 — filter status persetujuan KESELURUHAN transaksi (kosong = semua).
+const approvalOptions = computed(() => [
+  { value: '', label: t('approvals.filter_all') },
+  { value: 'pending', label: t('approvals.status_pending') },
+  { value: 'partial', label: t('approvals.status_partial') },
+  { value: 'full', label: t('approvals.status_full') },
 ]);
 const sessionOptions = computed(() =>
   sessions.value.map((s) => ({
@@ -464,6 +472,7 @@ function showCustomerDetail(row) {
           <BaseSelect v-model="filters.customerType" :placeholder="t('reports.filter_customer_all')" :options="customerTypeOptions" />
           <BaseSelect v-model="filters.settlement" data-testid="filter-settlement" :placeholder="t('payment_ledger.filter_all')" :options="settlementOptions" />
           <BaseSelect v-model="filters.reference" data-testid="filter-reference" :placeholder="t('sales_reference.filter_all')" :options="referenceOptions" />
+          <BaseSelect v-model="filters.approval" data-testid="filter-approval" :placeholder="t('approvals.filter_label')" :options="approvalOptions" />
 
           <input v-model="filters.minTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_min_total')" :placeholder="t('reports.filter_min_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
           <input v-model="filters.maxTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_max_total')" :placeholder="t('reports.filter_max_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
@@ -539,7 +548,11 @@ function showCustomerDetail(row) {
           </template>
           <template #cell-order_number="{ row }">
             <div class="flex flex-col items-start gap-1 whitespace-nowrap">
-              <button type="button" class="whitespace-nowrap font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" :class="{ 'line-through': isVoided(row) }" @click="openDetail(row)">{{ row.order_number }}</button>
+              <!-- 059 — ikon status persetujuan keseluruhan tepat di samping nomor (tanpa kolom baru, tanpa menggeser kolom lain). -->
+              <div class="flex items-center gap-1">
+                <button type="button" class="whitespace-nowrap font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" :class="{ 'line-through': isVoided(row) }" @click="openDetail(row)">{{ row.order_number }}</button>
+                <ApprovalStatusIcon :approval="row.approval" />
+              </div>
               <!-- 055 — tautan referensi tepat di bawah nomor transaksi (dulu di kolom aksi), hanya pada
                    penjualan yang punya referensi (catatan/gambar). -->
               <button v-if="row.has_reference" type="button" class="flex items-center gap-1 whitespace-nowrap text-[12px] font-semibold text-brand-active hover:underline" data-testid="reference-link" @click="referenceOrderId = row.id">

@@ -6,6 +6,7 @@ use App\Models\CashierSession;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\User;
+use App\Support\OrderApprovalSummary;
 use App\Support\PaymentSummary;
 use Illuminate\Support\Collection;
 
@@ -42,7 +43,7 @@ class SalesTransactionsService
 
         $orders = ($ids === []) ? collect() : Order::query()
             // 056 — `payments.proofs` dimuat SEKALI untuk `payment_proof_count` (bukan per baris).
-            ->with(array_merge(['cashier', 'customer', 'items.artist', 'payments.proofs', 'session.user'],
+            ->with(array_merge(['cashier', 'customer', 'items.artist', 'payments.proofs', 'session.user', 'approvals'],
                 // 056 (US8) — path gambar referensi hanya dibutuhkan ekspor (detail); daftar tetap memakai withCount.
                 $detail ? ['referenceImages'] : []))
             // 055 — `has_reference` butuh jumlah gambar referensi; satu agregat, bukan kueri per baris.
@@ -54,7 +55,11 @@ class SalesTransactionsService
             ->when($ids !== null, fn ($q) => $q->whereIn('id', $ids))
             ->get();
 
-        $rows = $orders->map(fn (Order $o) => $this->orderRow($o, $withMargin, $detail, $user))
+        // 059 — nama seller untuk ringkasan persetujuan: SATU kueri untuk seluruh halaman (bukan per baris), dibaca tanpa
+        // scope seller karena pengguna ber-seller tetap melihat status seller lain pada penjualan campuran (058 Q1:B).
+        $artistNames = OrderApprovalSummary::namesFor($orders->flatMap(fn (Order $o) => $o->items->pluck('artist_id'))->filter()->unique()->values()->all());
+
+        $rows = $orders->map(fn (Order $o) => $this->orderRow($o, $withMargin, $detail, $user, $artistNames))
             ->sortByDesc(fn (array $r) => $r['created_at'].sprintf('%012d', $r['id']))
             ->values();
 
@@ -91,7 +96,7 @@ class SalesTransactionsService
         return ['transactions' => $rows, 'sessions' => $sessions];
     }
 
-    private function orderRow(Order $order, bool $withMargin, bool $detail, User $user): array
+    private function orderRow(Order $order, bool $withMargin, bool $detail, User $user, array $artistNames = []): array
     {
         $items = $order->items;
         $payments = $order->payments->where('verification', '!=', 'rejected');
@@ -154,6 +159,9 @@ class SalesTransactionsService
             // server yang tak mengenal filter sisi-klien (akar masalah "statistik tak cocok dengan filter").
             // 054 (US8) — hanya penanda; isi catatan/gambar dimuat saat tautannya dibuka (daftar tetap ramping).
             'has_reference' => $order->hasReference(),
+            // 059 — ringkasan persetujuan seller (ikon, popover, filter). Hanya status + fakta per seller: TANPA hash,
+            // URL, maupun gambar — gambar tanda tangan dimuat dari endpoint berotorisasi saat detail dibuka.
+            'approval' => OrderApprovalSummary::listShape(OrderApprovalSummary::for($order, $artistNames)),
             // 056 — berapa pembayaran NON-TUNAI yang bukti BERLAKU-nya boleh dilihat PENGGUNA INI. Hanya
             // hitungan: tak ada id/URL/gambar di daftar (gambar dimuat saat tautannya dibuka, lewat endpoint
             // berotorisasi). Dihitung per pengguna lewat Payment::proofViewableBy() — satu-satunya definisi

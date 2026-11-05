@@ -14,7 +14,7 @@ return [
         'dispatch' => 'Status pengiriman', 'verify' => 'Verifikasi pembayaran', 'split' => 'Pisah', 'duplicate' => 'Duplikat',
         'notify' => 'Kirim notifikasi', 'activate' => 'Aktifkan / nonaktifkan', 'mark_paid' => 'Tandai lunas', 'cancel' => 'Batalkan',
         'void' => 'Batalkan penjualan', 'payment_method' => 'Ubah metode bayar', 'reference' => 'Referensi penjualan', 'receipts' => 'Unduh struk',
-        'refresh' => 'Segarkan', 'finalize' => 'Finalisasi', 'reopen' => 'Buka kembali', 'acknowledge' => 'Tanda terima', 'payout' => 'Pembayaran ke penjual',
+        'refresh' => 'Segarkan', 'finalize' => 'Finalisasi', 'reopen' => 'Buka kembali', 'acknowledge' => 'Tanda terima', 'payout' => 'Pembayaran ke penjual', 'approve' => 'Setujui item seller',
         'backup' => 'Cadangan', 'restore' => 'Pulihkan', 'branding' => 'Identitas toko',
     ],
 ];

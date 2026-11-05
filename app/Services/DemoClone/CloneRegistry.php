@@ -77,6 +77,14 @@ final class CloneRegistry
                 'via' => 'orders.order_id',
             ],
             'order_items' => ['fks' => ['order_id' => 'orders', 'variant_id' => 'product_variants', 'artist_id' => 'artists']],
+            // 059 — persetujuan seller atas item penjualan. Tanpa data_mode: ikut mode order-nya. `items_hash`
+            // sengaja bebas-id (OrderApprovalSummary), jadi persetujuan hasil clone tetap berlaku walau id dipetakan ulang.
+            // Berkas gambar DISALIN; baris yang berkasnya hilang dilewati (CHECK DB mewajibkan gambar untuk draw/upload).
+            'order_approvals' => [
+                'fks' => ['order_id' => 'orders', 'artist_id' => 'artists'],
+                'files' => ['image_path' => 'local'],
+                'via' => 'orders.order_id',
+            ],
             'preorders' => [
                 'fks' => ['customer_id' => 'customers', 'event_id' => 'events'],
                 'deferred' => ['source_preorder_id' => 'preorders'],

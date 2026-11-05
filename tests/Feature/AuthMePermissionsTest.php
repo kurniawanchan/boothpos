@@ -25,7 +25,7 @@ class AuthMePermissionsTest extends TestCase
     {
         $json = $this->me(['sales', 'pos'], null);
 
-        $this->assertSame(['view', 'void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts'], $json['permissions']['sales']);
+        $this->assertSame(['view', 'void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts', 'approve'], $json['permissions']['sales']);
         $this->assertSame(['view', 'create', 'draft'], $json['permissions']['pos']);
         $this->assertSame(['sales', 'pos'], $json['menu_keys']);
     }

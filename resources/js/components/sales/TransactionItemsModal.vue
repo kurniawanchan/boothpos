@@ -14,6 +14,7 @@ import AddPaymentModal from '../payment/AddPaymentModal.vue';
 import PaymentConfirmationModal from '../payment/PaymentConfirmationModal.vue';
 import ChangePaymentMethodModal from './ChangePaymentMethodModal.vue';
 import OrderReferenceModal from './OrderReferenceModal.vue';
+import OrderApprovalSection from './OrderApprovalSection.vue';
 import ReferenceThumbnails from './ReferenceThumbnails.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
 import { getOrder, voidOrder, addOrderPayment, deleteOrderPayment } from '../../api/orders';
@@ -337,6 +338,9 @@ async function performVoid() {
             {{ order.reference.note || order.reference.has_image ? t('sales_reference.view') : t('sales_reference.add') }}
           </button>
         </div>
+
+        <!-- 059 — persetujuan seller: GET saja saat dibuka, tidak pernah menyetujui otomatis. -->
+        <OrderApprovalSection :order-id="order.id" @changed="emit('changed')" />
 
         <div v-if="payments.length || order.payment_summary" data-testid="order-payments" class="flex flex-col gap-3 rounded-lg border border-line-2 px-4 py-3.5">
           <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">{{ t('reports.order_payments') }}</span>

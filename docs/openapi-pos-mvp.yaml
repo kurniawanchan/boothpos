@@ -2118,6 +2118,78 @@ paths:
         '403': { description: Tanpa menu sales }
         '404': { description: "Gambar tak ada, bukan milik penjualan ini, sudah dihapus, atau berkasnya hilang." }
 
+  /orders/{id}/approvals:
+    get:
+      tags: [Order]
+      summary: Status persetujuan seller atas item penjualan (059)
+      description: |
+        Satu seller unik pada baris penjualan = SATU syarat persetujuan (bukan satu per item). Status
+        keseluruhan (`pending|partial|full|voided`) dan `X/N` DITURUNKAN dari catatan per seller, tidak pernah
+        disimpan; penjualan lama tanpa catatan tampil `pending`. Persetujuan hanya berlaku selama hash isi baris
+        seller itu sama dengan saat disetujui — baris berubah ⇒ seller itu `pending` + `stale: true`, seller lain
+        tak terusik. GET tidak pernah menulis apa pun. Menu `sales`; penjualan tanpa baris milik seller pengguna
+        ber-seller → 404 (058). `can_approve`/`can_view_image` dihitung server untuk PENGGUNA INI; `history`
+        (semua siklus, termasuk yang dibatalkan) HANYA ada bagi owner/admin (kuncinya tak dikirim ke yang lain).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Status persetujuan, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/OrderApprovals' } } } } } }
+        '403': { description: Tanpa menu sales }
+        '404': { description: Penjualan tak ada / di luar jangkauan seller pengguna }
+    post:
+      tags: [Order]
+      summary: Setujui item satu seller (059)
+      description: |
+        Aksi `sales.approve` DAN (owner/admin ATAU pengguna yang terikat ke seller itu). Owner/admin boleh
+        menyetujui atas nama seller mana pun (`on_behalf: true`). Metode `draw`/`upload` wajib `image` (PNG/JPEG,
+        ≤ 5 MB, jenis dibaca dari ISI berkas); `stamp` tanpa berkas. `items_hash` = nilai dari GET yang ditinjau
+        pengguna — hanya bisa membuat permintaan GAGAL bila item berubah. Semuanya dalam satu transaksi dengan
+        kunci baris penjualan; satu persetujuan aktif per (penjualan, seller) dijamin juga oleh indeks unik.
+        Urutan pemeriksaan: hak (403) → penjualan batal (409) → seller termasuk syarat (422) → sudah disetujui
+        (409) → hash kedaluwarsa (409). Persetujuan basi dibatalkan dan dicatat lebih dulu (tetap tercatat walau
+        percobaan ini ditolak). Tidak ada rute ubah/hapus: catatan hanya bertambah.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [artist_id, method, items_hash]
+              properties:
+                artist_id: { type: integer }
+                method: { type: string, enum: [draw, upload, stamp] }
+                items_hash: { type: string, maxLength: 80, description: "Dari GET `sellers[].items_hash`." }
+                image: { type: string, format: binary, description: "Wajib untuk draw/upload, dilarang untuk stamp." }
+      responses:
+        '201': { description: Status persetujuan terbaru, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/OrderApprovals' } } } } } }
+        '403':
+          description: "Bukan seller itu / bukan owner-admin (`approval_not_allowed`), atau peran tanpa aksi `approve` (`action_not_allowed`)."
+          content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalError' } } }
+        '404': { description: Penjualan tak ada / di luar jangkauan seller pengguna }
+        '409':
+          description: "`order_voided`, `already_approved`, atau `approval_stale` (item seller berubah sejak halaman dibuka — muat ulang)."
+          content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalError' } } }
+        '422': { description: "Bentuk salah: gambar kurang/berlebih untuk metodenya, bukan PNG/JPEG, > 5 MB, atau seller tak punya item di penjualan ini (`errors.artist_id`)." }
+
+  /orders/{id}/approvals/{approvalId}/image:
+    get:
+      tags: [Order]
+      summary: Gambar tanda tangan/persetujuan (059)
+      description: |
+        Disajikan dari disk privat hanya lewat endpoint ini, `Cache-Control: private, no-store`; harus diunduh dengan
+        token (blob). Boleh dilihat: owner/admin, penyetuju, dan pengguna yang terikat ke seller persetujuan itu
+        (`can_view_image` pada payload). Persetujuan harus milik penjualan `{id}` (scoped binding). Stempel tidak
+        punya gambar → 404. Gambar persetujuan yang sudah dibatalkan tetap bisa dibuka oleh yang berhak (audit).
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+        - { name: approvalId, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: "Berkas gambar", content: { 'image/*': { schema: { type: string, format: binary } } } }
+        '403': { description: "Tak berhak melihat gambar ini (`image_forbidden`)", content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalError' } } } }
+        '404': { description: "Persetujuan bukan milik penjualan ini, stempel (tanpa gambar), atau berkasnya hilang." }
+
   /orders/bulk-receipts:
     post:
       tags: [Order]
@@ -6273,6 +6345,87 @@ components:
                   items: { type: string }
 
   schemas:
+    OrderApprovalSummary:
+      type: object
+      description: "059 — ringkasan untuk daftar Sales. `status` keseluruhan; `sellers[]` satu per seller unik."
+      required: [status, total, approved, pending, sellers]
+      properties:
+        status: { type: string, enum: [pending, partial, full, voided] }
+        total: { type: integer, minimum: 0 }
+        approved: { type: integer, minimum: 0 }
+        pending: { type: integer, minimum: 0 }
+        sellers:
+          type: array
+          items:
+            type: object
+            properties:
+              artist_id: { type: integer }
+              name: { type: string }
+              status: { type: string, enum: [approved, pending] }
+              stale: { type: boolean, description: "Pernah disetujui tetapi baris seller ini berubah sejak itu (perlu persetujuan ulang)." }
+              approver_name: { type: string, nullable: true }
+              method: { type: string, enum: [draw, upload, stamp], nullable: true }
+              approved_at: { type: string, format: date-time, nullable: true }
+              on_behalf: { type: boolean, nullable: true }
+    OrderApprovals:
+      type: object
+      description: "059 — respons GET/POST `/orders/{id}/approvals`."
+      required: [order_id, status, total, approved, pending, progress, sellers]
+      properties:
+        order_id: { type: integer }
+        status: { type: string, enum: [pending, partial, full, voided] }
+        total: { type: integer }
+        approved: { type: integer }
+        pending: { type: integer }
+        progress: { type: string, example: "2/3" }
+        sellers:
+          type: array
+          items:
+            type: object
+            properties:
+              artist_id: { type: integer }
+              artist_name: { type: string }
+              status: { type: string, enum: [approved, pending] }
+              stale: { type: boolean }
+              items: { type: array, items: { type: object, properties: { sku: { type: string }, name: { type: string }, qty: { type: integer }, sell_price: { $ref: '#/components/schemas/Money' }, discount_amount: { $ref: '#/components/schemas/Money' }, line_total: { $ref: '#/components/schemas/Money' } } } }
+              subtotal: { $ref: '#/components/schemas/Money' }
+              items_hash: { type: string, description: "`v1:` + SHA-256 isi baris seller ini (tanpa id). Kirim kembali pada POST." }
+              can_approve: { type: boolean, description: "Server: belum disetujui, penjualan tak batal, dan pengguna berhak untuk seller ini. UI hanya menampilkan tombol bila true." }
+              approval:
+                type: object
+                nullable: true
+                properties:
+                  id: { type: integer }
+                  method: { type: string, enum: [draw, upload, stamp] }
+                  approver_id: { type: integer }
+                  approver_name: { type: string }
+                  on_behalf: { type: boolean }
+                  approved_at: { type: string, format: date-time }
+                  has_image: { type: boolean }
+                  can_view_image: { type: boolean }
+        history:
+          type: array
+          description: "Hanya owner/admin (kunci tidak dikirim ke yang lain). Semua siklus, terbaru dulu."
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              artist_id: { type: integer }
+              artist_name: { type: string }
+              method: { type: string, enum: [draw, upload, stamp] }
+              approver_id: { type: integer }
+              approver_name: { type: string }
+              on_behalf: { type: boolean }
+              approved_at: { type: string, format: date-time }
+              has_image: { type: boolean }
+              can_view_image: { type: boolean }
+              invalidated_at: { type: string, format: date-time, nullable: true }
+              invalidation_reason: { type: string, nullable: true, example: items_changed }
+    ApprovalError:
+      type: object
+      properties:
+        message: { type: string }
+        code: { type: string, enum: [approval_not_allowed, action_not_allowed, order_voided, already_approved, approval_stale, image_forbidden] }
 
     CustomerImportResult:
       type: object
@@ -7829,6 +7982,7 @@ components:
               payment_state: { type: string, enum: [verified, pending, rejected, none], description: "Verifikasi TERBURUK di antara pembayaran (rejected > pending > verified); `none` bila belum ada pembayaran." }
               cash_amount: { $ref: '#/components/schemas/Money', description: "Tunai BERSIH: tunai diterima dikurangi kembalian (pembayaran rejected tidak dihitung)." }
               noncash_amount: { $ref: '#/components/schemas/Money' }
+              approval: { $ref: '#/components/schemas/OrderApprovalSummary', description: "059 — ringkasan persetujuan seller untuk ikon/popover/filter `appr` di daftar. Selalu ada. Status KESELURUHAN penjualan (seluruh baris, juga bagi pengguna ber-seller). Tanpa hash, id persetujuan, URL, atau gambar; ekspor Excel tidak memuatnya." }
               payment_proof_count: { type: integer, minimum: 0, description: "056 — jumlah pembayaran NON-TUNAI penjualan ini yang bukti berlakunya (belum ter-supersede) boleh dilihat PENGGUNA YANG MEMINTA (`Payment::proofViewableBy`); selalu ada, 0 bila tak ada. Hanya hitungan — tak ada id/URL/gambar bukti di daftar; bukti dibuka lewat `GET /orders/{id}` (flag `can_view_proof`) dan `GET /payment-proofs/{id}/file`. Ekspor Excel tidak memuat kolom ini." }
               items_gross: { $ref: '#/components/schemas/Money', description: "054 — Σ(line_total + diskon item) baris ini; definisi item-level yang sama dengan `totals.pos_gross_sales` (diskon tingkat order TIDAK ikut). Dipakai kartu ringkasan halaman Sales supaya mengikuti filter sisi-klien." }
               items_net: { $ref: '#/components/schemas/Money', description: "054 — Σ line_total baris ini (= `totals.pos_net_sales` bila dijumlahkan atas baris non-batal)." }

@@ -31,6 +31,9 @@ class Order extends Model
 
     public function items(): HasMany { return $this->hasMany(OrderItem::class); }
     public function payments(): HasMany { return $this->hasMany(Payment::class); }
+
+    /** 059 — persetujuan seller (append-only; penulis: OrderApprovalService). Status keseluruhan diturunkan, tidak disimpan. */
+    public function approvals(): HasMany { return $this->hasMany(OrderApproval::class)->orderBy('id'); }
     public function event(): BelongsTo { return $this->belongsTo(Event::class); }
     public function session(): BelongsTo { return $this->belongsTo(CashierSession::class, 'session_id'); }
     public function customer(): BelongsTo { return $this->belongsTo(Customer::class); }

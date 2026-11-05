@@ -44,7 +44,7 @@ class RoleMenuActionsApiTest extends TestCase
             ->assertJsonPath('has_custom_actions', false)->json('id');
 
         $this->getJson("/api/v1/roles/{$id}")->assertOk()
-            ->assertJsonPath('menu_actions.sales', ['void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts']);
+            ->assertJsonPath('menu_actions.sales', ['void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts', 'approve']);
     }
 
     public function test_validation_rejects_unknown_menu_unknown_action_and_a_menu_the_role_does_not_hold(): void
