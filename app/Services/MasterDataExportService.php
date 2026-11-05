@@ -291,6 +291,7 @@ class MasterDataExportService
             ->get()
             ->map(fn (ProductVariant $v) => [
                 'sku' => $v->sku,
+                'variant_name' => $v->variant_name,
                 'current_stock' => $v->current_stock,
                 'reason' => null,
             ])->all();

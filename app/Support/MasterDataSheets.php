@@ -39,6 +39,16 @@ final class MasterDataSheets
         'cost_price', 'sell_price', 'profit_margin', 'low_stock_alert',
     ];
 
+    /**
+     * Judul kolom EKSPOR sheet 'stock' (spec 060, 2026-11-05). `variant_name`
+     * hanyalah kolom bantu agar baris mudah dikenali tanpa membuka layar
+     * lain: HANYA-BACA dan diabaikan saat impor (impor membaca per nama
+     * kolom dan sudah mengabaikan kolom asing), sedangkan
+     * headings('stock') — kontrak impor dan template — tetap
+     * `sku, current_stock, reason`. Pola yang sama dengan PRODUCTS_EXPORT.
+     */
+    public const STOCK_EXPORT = ['sku', 'variant_name', 'current_stock', 'reason'];
+
     public const STOCK = 'stock';
 
     /**
@@ -156,15 +166,17 @@ final class MasterDataSheets
     }
 
     /**
-     * Judul kolom untuk EKSPOR satu sheet. Hanya 'products' yang berbeda
-     * dari impor (lihat PRODUCTS_EXPORT); sheet lain memakai daftar yang
-     * sama dengan impor supaya tetap bisa diunggah balik.
+     * Judul kolom untuk EKSPOR satu sheet. Hanya 'products' (PRODUCTS_EXPORT)
+     * dan 'stock' (STOCK_EXPORT) yang berbeda dari impor; sheet lain memakai
+     * daftar yang sama dengan impor supaya tetap bisa diunggah balik.
      */
     public static function exportHeadings(string $sheet): array
     {
-        return $sheet === self::PRODUCTS
-            ? self::PRODUCTS_EXPORT
-            : self::headings($sheet);
+        return match ($sheet) {
+            self::PRODUCTS => self::PRODUCTS_EXPORT,
+            self::STOCK => self::STOCK_EXPORT,
+            default => self::headings($sheet),
+        };
     }
 
     /**

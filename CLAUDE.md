@@ -117,6 +117,7 @@ Non-obvious rules, all enforced in `app/Services/MasterDataImportService.php` (r
 - **A blank cell means "leave unchanged"**, not "clear the value".
 - **The Pro/Master license quota is re-checked inside the import** — `ArtistPolicy` is not on this path, so without that check a spreadsheet would be a free licence upgrade.
 - Sheet names and column headers come from one place, `app/Support/MasterDataSheets.php`, shared by export, template, and import — so export files round-trip back through import. Don't fork that list.
+- **Stock export has an export-only `variant_name` column (spec 060, 2026-11-05).** `STOCK_EXPORT` = `sku, variant_name, current_stock, reason`, returned by `exportHeadings('stock')` (like `PRODUCTS_EXPORT`); `headings('stock')` — import and template — stays `sku, current_stock, reason`. The importer reads by column NAME and ignores the new column, so an export still re-imports and can never rename a variant. `current_stock` moved from column B to C: anything that edits the exported file by cell address (the round-trip test did, with `B2`) must use the header, not a fixed letter.
 
 ## Vendor, material, and BOM tracking (added post-MVP, 2026-09-01)
 
@@ -504,7 +505,15 @@ One required approval per UNIQUE seller among a POS sale's lines (`order_items.a
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/059-seller-transaction-approval/plan.md`
+Active feature plan: `specs/060-stock-export-variant-name/plan.md`
+(branch `085-stock-export-variant-name`, from `develop`; spec dir number ≠ branch number) — no migration, no route, no
+frontend change. The Stock page's Excel export (`GET /exports/stock`, the `stock` sheet) gains ONE export-only column,
+`variant_name`, right after `sku` (live `ProductVariant.variant_name`). Same pattern as 041/050: a new
+`MasterDataSheets::STOCK_EXPORT` list returned by `exportHeadings('stock')`, while `headings('stock')` (import + template)
+stays `sku, current_stock, reason`; the importer ignores extra columns, so an export still re-imports and never changes a
+name. Row set/order, permissions and formula-text protection unchanged. OpenAPI moves in the same commit. See research.md.
+
+Previous feature: `specs/059-seller-transaction-approval/plan.md`
 (branch `095-seller-transaction-approval`, from `develop`; spec dir number ≠ branch number) — one new append-only table
 `order_approvals` (one row per seller per cycle; no columns on `orders`). One unique seller in a POS sale's lines = one
 required approval; overall status (pending/partial/full, "X/N") is DERIVED by `App\Support\OrderApprovalSummary`, never
