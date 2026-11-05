@@ -36,4 +36,28 @@ class SettingsBrandingActionTest extends TestCase
 
         $this->putJson('/api/v1/settings', ['settings' => [['key' => 'app_name', 'value' => 'Tokoku']]])->assertOk();
     }
+
+    public function test_the_logo_path_and_any_store_or_theme_key_are_branding_too(): void
+    {
+        $this->actAs(['edit']);
+
+        foreach (['store_logo_path', 'store_anything_new', 'theme_future_key', 'receipt_show_logo'] as $key) {
+            $this->putJson('/api/v1/settings', ['settings' => [['key' => $key, 'value' => 'x']]])
+                ->assertStatus(403)->assertJsonPath('action', 'branding');
+        }
+    }
+
+    public function test_keys_that_could_dodge_the_check_by_case_are_rejected_outright(): void
+    {
+        $this->actAs(['edit', 'branding']);
+
+        $this->putJson('/api/v1/settings', ['settings' => [['key' => 'APP_NAME', 'value' => 'x']]])->assertStatus(422);
+    }
+
+    public function test_a_key_with_surrounding_spaces_is_trimmed_by_the_framework_and_still_gated_as_branding(): void
+    {
+        $this->actAs(['edit']);
+
+        $this->putJson('/api/v1/settings', ['settings' => [['key' => ' app_name ', 'value' => 'x']]])->assertStatus(403)->assertJsonPath('action', 'branding');
+    }
 }

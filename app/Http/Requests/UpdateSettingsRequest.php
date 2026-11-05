@@ -37,7 +37,9 @@ class UpdateSettingsRequest extends FormRequest
     {
         return [
             'settings' => ['required', 'array', 'min:1'],
-            'settings.*.key' => ['required', 'string', 'max:100'],
+            // 057 — kunci huruf kecil/angka/underscore saja: pencarian DB tak peka huruf besar-kecil, jadi `APP_NAME` akan
+            // menimpa `app_name` sambil lolos dari daftar kunci branding di controller.
+            'settings.*.key' => ['required', 'string', 'max:100', 'regex:/^[a-z0-9_]+$/'],
             // 'present' (bukan 'required') — value BOLEH null (mis. mengosongkan
             // logo/kontak), tapi kuncinya harus dikirim eksplisit supaya tidak
             // ambigu dengan field yang memang tidak disertakan sama sekali.
