@@ -40,7 +40,7 @@ class MenuActions
         'companies' => ['standard' => self::CRUD, 'named' => ['activate']],
         'licenses' => ['standard' => self::CRUD, 'named' => []],
         'invoices' => ['standard' => self::CRUD, 'named' => ['mark_paid', 'cancel', 'import', 'export']],
-        'sales' => ['standard' => [], 'named' => ['void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts']],
+        'sales' => ['standard' => [], 'named' => ['void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts', 'approve']],
         'reports' => ['standard' => [], 'named' => ['export']],
         'settlements' => ['standard' => ['create', 'delete'], 'named' => ['refresh', 'finalize', 'reopen', 'adjust', 'acknowledge', 'payout']],
         'users' => ['standard' => self::CRUD, 'named' => ['import', 'export']],

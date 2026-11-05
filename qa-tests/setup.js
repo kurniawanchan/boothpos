@@ -39,3 +39,13 @@ i18n.global.locale.value = 'id';
 afterEach(() => {
   cleanup();
 });
+
+// 059 — OrderApprovalSection (di dalam TransactionItemsModal) memanggil GET /orders/{id}/approvals saat dibuka.
+// Puluhan tes lama merender modal itu tanpa tahu fitur ini; tanpa default ini tiap tes memukul jaringan sungguhan
+// ("socket hang up"). Tes persetujuan sendiri memakai vi.mock miliknya, yang menimpa default ini.
+import { vi } from 'vitest';
+vi.mock('../resources/js/api/orderApprovals', () => ({
+  getApprovals: vi.fn().mockResolvedValue({ order_id: 0, status: 'pending', total: 0, approved: 0, pending: 0, progress: '0/0', sellers: [] }),
+  approveSeller: vi.fn(),
+  getApprovalImageBlobUrl: vi.fn().mockResolvedValue('blob:approval'),
+}));

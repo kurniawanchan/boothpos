@@ -26,7 +26,7 @@ class MenuActionsRegistryTest extends TestCase
 
     public function test_sales_has_exactly_the_named_actions_of_the_data_model(): void
     {
-        $this->assertSame(['void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts'], MenuActions::for('sales'));
+        $this->assertSame(['void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts', 'approve'], MenuActions::for('sales'));
     }
 
     public function test_standard_actions_are_only_create_edit_delete_and_never_duplicated(): void

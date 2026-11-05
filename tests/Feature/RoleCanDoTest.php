@@ -76,7 +76,7 @@ class RoleCanDoTest extends TestCase
         $u = $u->fresh();
 
         $this->assertTrue($u->canDo('sales', 'void'));
-        $this->assertSame(['view', 'void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts'], $u->role->resolvedActions()['sales']);
+        $this->assertSame(['view', 'void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts', 'approve'], $u->role->resolvedActions()['sales']);
     }
 
     public function test_a_user_without_a_role_can_do_nothing(): void

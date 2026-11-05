@@ -44,7 +44,7 @@ describe('Sales screens — permission-aware controls (057)', () => {
     return user;
   }
 
-  const FULL = { sales: ['view', 'void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts'], settings: ['view', 'edit'] };
+  const FULL = { sales: ['view', 'void', 'payment', 'payment_method', 'verify', 'reference', 'export', 'receipts', 'approve'], settings: ['view', 'edit'] };
   const VIEW_ONLY = { sales: ['view'], settings: ['view'] };
 
   it('view-only: no export, receipts or bulk verify, and the detail has no void/add payment/verify/edit actions', async () => {

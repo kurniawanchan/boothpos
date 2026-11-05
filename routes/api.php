@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\MasterDataExportController;
 use App\Http\Controllers\Api\MasterDataImportController;
 use App\Http\Controllers\Api\MaterialController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\OrderApprovalController;
 use App\Http\Controllers\Api\PaymentChannelController;
 use App\Http\Controllers\Api\PaymentProofController;
 use App\Http\Controllers\Api\PreorderController;
@@ -264,6 +265,11 @@ Route::prefix('v1')->group(function () {
         // 054 (US9) — statis, sebelum '/orders/{order}'.
         Route::post('/orders/bulk-receipts', [OrderController::class, 'bulkReceipts'])->middleware('ability:sales,receipts');
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);
+        // 059 — persetujuan seller atas item penjualan. `{approval}` di-scope ke `{order}`; nama parameter harus
+        // `approval` karena Laravel menurunkan relasi (Order::approvals()) darinya. Tidak ada rute ubah/hapus: append-only.
+        Route::get('/orders/{order}/approvals', [OrderApprovalController::class, 'index']);
+        Route::get('/orders/{order}/approvals/{approval}/image', [OrderApprovalController::class, 'image'])->scopeBindings();
+        Route::post('/orders/{order}/approvals', [OrderApprovalController::class, 'store'])->middleware('ability:sales,approve');
 
         // 007-preorder-import-export-notify — rute statis ('export',
         // 'import/template', 'import') WAJIB didaftarkan SEBELUM

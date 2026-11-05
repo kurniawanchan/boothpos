@@ -482,6 +482,21 @@ A user can be linked to ONE seller (`users.artist_id`, NULL = today's behaviour)
 - **SPA is cosmetic:** `auth.user.seller_scoped/artist/seller_active` from `/auth/me`; `canAccessMenu` hides the forbidden menus; Sales cards lock to the seller's share through `useSalesFilters({ lockedSeller })`.
 - **Not verified in a real browser** (browser tooling unavailable in the build session). The API side was checked against the dev database with a throwaway scoped user (counts only): own products/orders/pre-orders/customers narrowed, admin surfaces 403, foreign record 404.
 
+## Transaction approval & seller audit (feature 059, 2026-11-05)
+
+One required approval per UNIQUE seller among a POS sale's lines (`order_items.artist_id`); the sale's overall status is **derived**, never stored. It is an audit overlay only — it never touches money, stock, reports or `SellerSettlement`. Rules a future change must not break:
+
+- **One calculator, one writer.** `App\Support\OrderApprovalSummary` is the ONLY formula (requirements, per-seller state, overall `pending|partial|full|voided`, `X/N`, content hash, the list-row shape). `App\Services\OrderApprovalService` is the ONLY writer of `order_approvals` (order row lock, one transaction, one `ActivityLogger` row, uploaded file deleted if the transaction rolls back). Never write the table or compute a second status anywhere (the SPA only displays server fields).
+- **Append-only.** No PUT/PATCH/DELETE route exists (a test asserts it); the only legitimate change to a row is `reconcile()` marking it `invalidated_at` + `invalidation_reason` + `active_slot = NULL`. There is no "undo approval". `UNIQUE(order_id, artist_id, active_slot)` makes the DB itself refuse a second active row (pattern of `seller_settlements`); a unique violation that slips past the checks maps to 409 `already_approved`, never 500.
+- **"Approved" is bound to a content hash, and invalidation is derived.** `items_hash` = `v1:` + SHA-256 of that seller's lines `(sku_snapshot, name_snapshot, qty, sell_price, discount_amount, line_total)` sorted. It contains **NO ids** (`order_items.id`, `variant_id`, `artist_id`) because the LIVE→DEMO clone remaps ids — an id-based hash would silently invalidate every cloned approval (`OrderApprovalCloneTest` guards it). A pinned-hash test freezes the canonical form: changing it invalidates EVERY stored approval, so use a new version prefix, never edit `v1`. An approval whose hash no longer matches reads as Pending + `stale` **without any write** (GET never writes); `OrderApprovalService::reconcile()` persists + logs it (called by `approve()` in its own committed transaction BEFORE the attempt, so a refused attempt keeps the trace; skipped for voided sales). **Any future code that edits/removes/moves `order_items` MUST call `reconcile()` in its transaction** — today no such path exists (only void).
+- **Eligibility = action AND relation, additive.** Route middleware `ability:sales,approve` (057; legacy NULL-action roles keep it) AND (`isOwnerOrAdmin()` OR `user.artist_id === seller`, 058). Owner/admin may approve on behalf of any seller (`on_behalf = true`). The permission check runs before any state is revealed (403 `approval_not_allowed`). `can_approve` / `can_view_image` / `history` are server-computed per viewer; `history` is omitted (not empty) for non-admins. The `orders` route segment was already classified scope-aware for 058; a seller-scoped user sees the WHOLE sale's approval status (058 Q1:B) but acts only on their own seller.
+- **`freshness`:** POST echoes the `items_hash` the user reviewed; a mismatch → 409 `approval_stale`. The hash can only make a request FAIL, never succeed, so it is not "trusting the client".
+- **Files:** drawn PNG (reuse `components/settlement/SignaturePad.vue`) / uploaded PNG|JPEG ≤ 5 MB, type sniffed from CONTENT, private `local` disk `order-approvals/<uuid>`, served only by `GET /orders/{o}/approvals/{approval}/image` (`scopeBindings()` — the param name must stay `approval`; `Cache-Control: private, no-store`; owner/admin, the approver, or users linked to that seller). Stamp = no file; the artwork is rendered by `ApprovalStamp.vue` from tokens. The DB CHECK only says "a stamp has no image"; "draw/upload must have an image" is the service's job because a clone of a row whose source file is missing copies NULL. **Images are NOT in backups** (same known gap as 054/055 reference images). "Signature" here is not a certified e-signature.
+- **List:** each Sales row carries a small `approval` summary (status, counts, per-seller facts; no hash/URL/image) built from ONE eager load (`approvals`) and ONE names query for the page — query counts do not grow with rows (mutation-checked). Names are read WITHOUT the seller scope. The `appr` filter lives in `useSalesFilters` (`''|pending|partial|full`, URL key `appr`, in `OUR_QUERY_KEYS`); voided rows never match a non-empty filter. The icon + popover (`ApprovalStatusIcon.vue`) make no network call.
+- **Detail:** `OrderApprovalSection.vue` inside `TransactionItemsModal` (GET on open, never approves); `ApproveSellerModal.vue` (dynamic import; keeps the signature pad MOUNTED with `v-show` across its confirm step — unmounting it made `toBlob()` return nothing) always shows a confirmation naming seller, item count and amount. A failed load shows message + Retry, never an empty state. `qa-tests/setup.js` mocks `api/orderApprovals` by default because dozens of older tests render the transaction modal.
+- **Not built, on purpose:** pre-order approval, withdraw/undo, per-store custom stamp, approval columns in the Sales Excel export, reminders, and gating settlement/finalize on approval status.
+- **Not verified in a real browser** (Constitution II, task T043 open): drawing on desktop (mouse/touchpad) and on an Android touch device, popover keyboard behaviour, phone-width layout.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -489,7 +504,21 @@ A user can be linked to ONE seller (`users.artist_id`, NULL = today's behaviour)
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/058-seller-scoped-user-access/plan.md`
+Active feature plan: `specs/059-seller-transaction-approval/plan.md`
+(branch `095-seller-transaction-approval`, from `develop`; spec dir number ≠ branch number) — one new append-only table
+`order_approvals` (one row per seller per cycle; no columns on `orders`). One unique seller in a POS sale's lines = one
+required approval; overall status (pending/partial/full, "X/N") is DERIVED by `App\Support\OrderApprovalSummary`, never
+stored, so legacy sales work with no migration. ONE writer `OrderApprovalService` (order row lock, one transaction, one
+`ActivityLogger` row, file cleanup on rollback); the DB guarantees one active row per (sale, seller) through
+`active_slot` UNIQUE (pattern of `seller_settlements`). "Approved" is bound to a content hash of that seller's lines
+(`v1:` + SHA-256, NO ids inside — the LIVE→DEMO clone remaps them); a hash mismatch reads as Pending without any write,
+`reconcile()` persists the invalidation at the next write. Methods: drawn PNG (reuse `settlement/SignaturePad.vue`),
+uploaded PNG/JPEG ≤ 5 MB (type sniffed), or stamp (no file). Eligibility = new named action `sales.approve` AND (owner/admin
+OR user linked to that seller, 058); owner/admin approve "on behalf". Images private, served by an authorizing endpoint.
+Sales list rows carry a small `approval` summary (no image/hash) feeding the icon, popover and a client-side `appr`
+filter. Not built: pre-orders, undo, export columns, settlement gating. See research.md D1–D15.
+
+Previous feature: `specs/058-seller-scoped-user-access/plan.md`
 (branch `094-seller-scoped-user-access`, from `develop`; spec dir number ≠ branch number) — nullable `users.artist_id`
 (NULL = today's behaviour) links a user to ONE seller; ONE gate `App\Support\SellerGate` narrows reads/writes through
 Eloquent scopes AND an explicit helper on the hand-rolled `DB::table` report queries (they bypass scopes, like `data_mode`).
