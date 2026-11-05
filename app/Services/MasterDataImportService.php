@@ -176,6 +176,7 @@ class MasterDataImportService
         $plan[MasterDataSheets::USERS] = $this->validateUsers(
             $sheets[MasterDataSheets::USERS] ?? [],
             $plan[MasterDataSheets::ROLES],
+            $plan[MasterDataSheets::ARTISTS],
         );
 
         // Sheet yang tidak dikirim sama sekali tidak dilaporkan — nol baris
@@ -1952,8 +1953,9 @@ class MasterDataImportService
      * yang "akan diganti nanti". Pemilik akun ini harus mengatur ulang
      * passwordnya lewat PUT /users/{user} (CRUD biasa) setelah impor.
      */
-    private function validateUsers(array $rows, array $rolePlan): array
+    private function validateUsers(array $rows, array $rolePlan, array $artistPlan = []): array
     {
+        $artistCodesInFile = array_column($artistPlan, 'code');
         $sheet = MasterDataSheets::USERS;
         $plan = [];
         $seen = [];
@@ -2023,6 +2025,22 @@ class MasterDataImportService
                 }
             } elseif ($existing === null) {
                 $this->addError($sheet, $row, 'role_name', 'Peran (role_name) wajib diisi untuk akun baru.');
+            }
+
+            // 058 — seller pengguna (kosong = biarkan). Peran Owner (di berkas atau yang sudah dimiliki) tak boleh punya seller.
+            if ($this->filled($values, 'artist_code')) {
+                $artistCode = strtoupper($this->stringValue($values, 'artist_code'));
+                $effectiveRole = $roleName ?? $existing?->role?->name;
+                $knownArtist = in_array($artistCode, $artistCodesInFile, true)
+                    || Artist::where('code', $artistCode)->where('is_active', true)->exists();
+
+                if (! $knownArtist) {
+                    $this->addError($sheet, $row, 'artist_code', "Seller dengan kode '{$artistCode}' tidak ditemukan atau tidak aktif.");
+                } elseif ($effectiveRole !== null && $this->isOwnerRoleName($effectiveRole)) {
+                    $this->addError($sheet, $row, 'artist_code', 'Peran Owner selalu melihat semua seller dan tidak dapat dikaitkan ke satu seller.');
+                } else {
+                    $attributes['artist_code'] = $artistCode;
+                }
             }
 
             if ($this->filled($values, 'is_active')) {
@@ -2099,6 +2117,16 @@ class MasterDataImportService
 
                 $user->role_id = $role->id;
                 unset($attributes['role_name']);
+
+                // 058 — pengguna yang dijadikan Owner melepas ikatan seller lamanya (sama seperti UserController).
+                if ($this->isOwnerRoleName($role->name)) {
+                    $user->artist_id = null;
+                }
+            }
+
+            if (array_key_exists('artist_code', $attributes)) {
+                $user->artist_id = Artist::where('code', $attributes['artist_code'])->value('id');
+                unset($attributes['artist_code']);
             }
 
             $user->fill($attributes);
@@ -2115,6 +2143,13 @@ class MasterDataImportService
 
             $user->save();
         }
+    }
+
+    /** 058 — peran Owner bawaan (nama 'Owner', bukan peran buatan pengguna bernama sama). */
+    private function isOwnerRoleName(string $name): bool
+    {
+        return strcasecmp($name, 'Owner') === 0
+            && Role::where('name', $name)->where('is_system_default', true)->exists();
     }
 
     // =================================================================

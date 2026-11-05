@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n';
 import { usePaginatedList } from '../composables/usePaginatedList';
 import { listUsers, createUser, updateUser, deleteUser, uploadUserPhoto } from '../api/users';
 import { listRoles } from '../api/roles';
+import { listArtists } from '../api/artists';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toast';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
@@ -34,10 +35,28 @@ const statusFilterOptions = computed(() => [
 const roleFilter = ref('');
 const statusFilter = ref('');
 
+// 058 — seller yang membatasi data pengguna. Peran Owner tak boleh punya seller (server menolak; UI menyembunyikan).
+const sellerRows = ref([]);
+const sellerFilter = ref('');
+const sellerOptions = computed(() => [{ value: '', label: t('users.no_seller') }, ...sellerRows.value.map((a) => ({ value: a.id, label: `${a.name} (${a.code})` }))]);
+const sellerFilterOptions = computed(() => [{ value: '', label: t('users.all_sellers') }, ...sellerRows.value.map((a) => ({ value: a.id, label: a.name }))]);
+async function loadSellers() {
+  try {
+    const res = await listArtists({ per_page: 100 });
+    sellerRows.value = res.data ?? [];
+  } catch {
+    sellerRows.value = [];
+  }
+}
+function onSellerFilterChange(value) {
+  sellerFilter.value = value;
+  setFilter({ artist_id: value || undefined });
+}
+
 async function loadRoles() {
   try {
     const res = await listRoles({ per_page: 100 });
-    roleOptions.value = (res.data ?? []).map((r) => ({ value: r.id, label: r.name }));
+    roleOptions.value = (res.data ?? []).map((r) => ({ value: r.id, label: r.name, isOwner: Boolean(r.is_locked) }));
   } catch {
     // Gagal memuat daftar peran tidak boleh meng-crash layar pengguna —
     // dropdown peran kosong, form tetap bisa dibuka untuk field lain.
@@ -48,6 +67,7 @@ async function loadRoles() {
 onMounted(() => {
   load();
   loadRoles();
+  loadSellers();
 });
 
 function onRoleFilterChange(value) {
@@ -63,6 +83,7 @@ const columns = computed(() => [
   { key: 'name', label: t('users.col_name') },
   { key: 'username', label: t('users.col_username') },
   { key: 'role', label: t('users.col_role') },
+  { key: 'artist', label: t('users.col_seller') },
   { key: 'last_login_at', label: t('users.col_last_access') },
   { key: 'is_active', label: t('users.col_status') },
   { key: 'actions', label: '' },
@@ -75,7 +96,8 @@ function formatLastAccess(value) {
 
 const showForm = ref(false);
 const editingUser = ref(null);
-const form = reactive({ name: '', username: '', password: '', role_id: '', is_active: true });
+const form = reactive({ name: '', username: '', password: '', role_id: '', artist_id: '', is_active: true });
+const ownerRoleSelected = computed(() => roleOptions.value.some((o) => o.value === form.role_id && o.isOwner));
 const formErrors = reactive({});
 const saving = ref(false);
 const photoFile = ref(null);
@@ -94,7 +116,7 @@ function isSelf(row) {
 
 function openCreate() {
   editingUser.value = null;
-  Object.assign(form, { name: '', username: '', password: '', role_id: '', is_active: true });
+  Object.assign(form, { name: '', username: '', password: '', role_id: '', artist_id: '', is_active: true });
   photoFile.value = null;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
@@ -107,6 +129,7 @@ function openEdit(user) {
     username: user.username,
     password: '',
     role_id: user.role?.id ?? '',
+    artist_id: user.artist_id ?? '',
     is_active: user.is_active,
   });
   photoFile.value = null;
@@ -126,6 +149,8 @@ async function saveUser() {
     username: form.username,
     role_id: form.role_id,
     is_active: form.is_active,
+    // Owner selalu tanpa seller (server juga memaksa); kosong = lepas batasan.
+    artist_id: ownerRoleSelected.value ? null : (form.artist_id || null),
   };
   if (form.password) payload.password = form.password;
 
@@ -210,6 +235,9 @@ async function performDelete() {
       <div class="w-[180px]">
         <BaseSelect :model-value="roleFilter" :options="roleFilterOptions" :placeholder="t('users.all_roles')" @update:model-value="onRoleFilterChange" />
       </div>
+      <div class="w-[180px]">
+        <BaseSelect :model-value="sellerFilter" :options="sellerFilterOptions" :placeholder="t('users.all_sellers')" @update:model-value="onSellerFilterChange" />
+      </div>
       <div class="w-[160px]">
         <BaseSelect :model-value="statusFilter" :options="statusFilterOptions" :placeholder="t('users.all_status')" @update:model-value="onStatusFilterChange" />
       </div>
@@ -231,6 +259,7 @@ async function performDelete() {
           </div>
         </template>
         <template #cell-role="{ row }">{{ row.role?.name ?? '—' }}</template>
+        <template #cell-artist="{ row }">{{ row.artist?.name ?? '—' }}</template>
         <template #cell-last_login_at="{ row }">
           <span class="text-[12.5px] text-muted-4">{{ formatLastAccess(row.last_login_at) }}</span>
         </template>
@@ -274,6 +303,15 @@ async function performDelete() {
           :disabled="isSelf(editingUser ?? {})"
           :hint="isSelf(editingUser ?? {}) ? t('users.cannot_change_own_role') : ''"
           :error="formErrors.role_id"
+        />
+        <p v-if="ownerRoleSelected" class="text-[12.5px] text-muted-4" data-testid="owner-all-sellers">{{ t('users.owner_sees_all_sellers') }}</p>
+        <BaseSelect
+          v-else
+          v-model="form.artist_id"
+          :label="t('users.seller')"
+          :options="sellerOptions"
+          :hint="t('users.seller_hint')"
+          :error="formErrors.artist_id"
         />
         <div class="flex flex-col gap-1.5">
           <span class="text-[12.5px] font-semibold text-muted-4">{{ t('users.photo') }}</span>

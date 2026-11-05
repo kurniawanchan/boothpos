@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\HasSellerScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ProductVariantBomLine extends Model
 {
-    use HasDataMode, HasFactory;
+    use HasDataMode, HasSellerScope, HasFactory;
 
     protected $fillable = [
         'product_variant_id',

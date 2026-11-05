@@ -158,6 +158,22 @@ class LiveToDemoClonerSafetyTest extends TestCase
         $this->assertTrue(DB::table('artists')->where('code', 'DMO')->exists(), 'DEMO tidak boleh dihapus');
     }
 
+    public function test_a_user_linked_to_a_demo_seller_aborts_before_anything_is_wiped(): void
+    {
+        // 058 — users tidak disalin, tapi users.artist_id (RESTRICT) menahan penghapusan seller DEMO.
+        DB::table('users')->where('id', $this->live['user'])->update(['artist_id' => $this->oldDemo['artist']]);
+        $before = LiveFingerprint::capture();
+
+        try {
+            (new LiveToDemoCloner)->run();
+            $this->fail('Seharusnya CloneException');
+        } catch (CloneException $e) {
+            $this->assertStringContainsString('users.artist_id', $e->getMessage());
+        }
+
+        $this->assertTrue(DB::table('artists')->where('code', 'DMO')->exists(), 'DEMO tidak boleh dihapus');
+    }
+
     public function test_failure_after_copy_restores_demo_and_removes_copied_files(): void
     {
         $filesBefore = $this->files();

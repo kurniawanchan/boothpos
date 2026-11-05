@@ -64,53 +64,53 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/photo', [AuthController::class, 'updatePhoto']);
 
         Route::get('/settings/features', [SettingsController::class, 'features']);
-        Route::get('/settings', [SettingsController::class, 'index']);
-        Route::put('/settings', [SettingsController::class, 'update'])->middleware('ability:settings');
-        Route::post('/settings/store-logo', [SettingsController::class, 'uploadStoreLogo'])->middleware('ability:settings,branding');
-        Route::get('/settings/payment', [InvoicePaymentSettingController::class, 'show']);
-        Route::put('/settings/payment', [InvoicePaymentSettingController::class, 'update'])->middleware('ability:settings');
+        Route::get('/settings', [SettingsController::class, 'index'])->middleware('seller.forbidden');
+        Route::put('/settings', [SettingsController::class, 'update'])->middleware('ability:settings')->middleware('seller.forbidden');
+        Route::post('/settings/store-logo', [SettingsController::class, 'uploadStoreLogo'])->middleware('ability:settings,branding')->middleware('seller.forbidden');
+        Route::get('/settings/payment', [InvoicePaymentSettingController::class, 'show'])->middleware('seller.forbidden');
+        Route::put('/settings/payment', [InvoicePaymentSettingController::class, 'update'])->middleware('ability:settings')->middleware('seller.forbidden');
 
         // Cadangan & pemulihan database (Pengaturan) — owner/admin, dicek di
         // BackupController. 'restore-upload' didaftarkan sebelum rute ber-{id}
         // dan {id} dibatasi polanya, jadi id sembarang (mis. '../x') 404 di rute.
-        Route::get('/backups', [BackupController::class, 'index']);
-        Route::post('/backups', [BackupController::class, 'store'])->middleware('ability:settings,backup');
-        Route::post('/backups/restore-upload', [BackupController::class, 'restoreUpload'])->middleware('ability:settings,restore');
-        Route::get('/backups/{id}/download', [BackupController::class, 'download'])->middleware('ability:settings,backup')->where('id', BackupService::ID_PATTERN);
-        Route::post('/backups/{id}/restore', [BackupController::class, 'restore'])->middleware('ability:settings,restore')->where('id', BackupService::ID_PATTERN);
-        Route::delete('/backups/{id}', [BackupController::class, 'destroy'])->middleware('ability:settings,backup')->where('id', BackupService::ID_PATTERN);
+        Route::get('/backups', [BackupController::class, 'index'])->middleware('seller.forbidden');
+        Route::post('/backups', [BackupController::class, 'store'])->middleware('ability:settings,backup')->middleware('seller.forbidden');
+        Route::post('/backups/restore-upload', [BackupController::class, 'restoreUpload'])->middleware('ability:settings,restore')->middleware('seller.forbidden');
+        Route::get('/backups/{id}/download', [BackupController::class, 'download'])->middleware('ability:settings,backup')->where('id', BackupService::ID_PATTERN)->middleware('seller.forbidden');
+        Route::post('/backups/{id}/restore', [BackupController::class, 'restore'])->middleware('ability:settings,restore')->where('id', BackupService::ID_PATTERN)->middleware('seller.forbidden');
+        Route::delete('/backups/{id}', [BackupController::class, 'destroy'])->middleware('ability:settings,backup')->where('id', BackupService::ID_PATTERN)->middleware('seller.forbidden');
 
-        Route::get('/activity-logs', [ActivityLogController::class, 'index']);
+        Route::get('/activity-logs', [ActivityLogController::class, 'index'])->middleware('seller.forbidden');
 
         // Manajemen pengguna (001-user-store-settings US1). Foto memakai
         // pola yang sama seperti /products/{product}/image — attach
         // terpisah, bukan bagian dari apiResource, karena multipart.
-        Route::apiResource('users', UserController::class)->only(['index', 'show']);
-        Route::apiResource('users', UserController::class)->only(['store', 'update', 'destroy'])->middleware('ability:users');
-        Route::post('/users/{user}/photo', [UserController::class, 'uploadPhoto'])->middleware('ability:users,edit');
+        Route::apiResource('users', UserController::class)->only(['index', 'show'])->middleware('seller.forbidden');
+        Route::apiResource('users', UserController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:users', 'seller.forbidden']);
+        Route::post('/users/{user}/photo', [UserController::class, 'uploadPhoto'])->middleware('ability:users,edit')->middleware('seller.forbidden');
 
         // Peran (Role) dan registry menu — 001-user-store-settings User
         // Story 2. /menu-keys adalah App\Support\MenuKeys registry, bukan
         // bagian dari resource /roles — dipisah supaya frontend bisa
         // memuat daftar menu (untuk checkbox RoleMenuPicker) tanpa harus
         // punya akses baca ke satu peran pun.
-        Route::get('/menu-keys', [RoleController::class, 'menuKeys']);
-        Route::apiResource('roles', RoleController::class)->only(['index', 'show']);
-        Route::apiResource('roles', RoleController::class)->only(['store', 'update', 'destroy'])->middleware('ability:roles');
+        Route::get('/menu-keys', [RoleController::class, 'menuKeys'])->middleware('seller.forbidden');
+        Route::apiResource('roles', RoleController::class)->only(['index', 'show'])->middleware('seller.forbidden');
+        Route::apiResource('roles', RoleController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:roles', 'seller.forbidden']);
 
         Route::apiResource('artists', ArtistController::class)->only(['index', 'show']);
-        Route::apiResource('artists', ArtistController::class)->only(['store', 'update', 'destroy'])->middleware('ability:artists');
+        Route::apiResource('artists', ArtistController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:artists', 'seller.forbidden']);
         Route::apiResource('categories', CategoryController::class)->only(['index', 'show']);
-        Route::apiResource('categories', CategoryController::class)->only(['store', 'update', 'destroy'])->middleware('ability:categories');
-        Route::post('/categories/{category}/image', [CategoryController::class, 'uploadImage'])->middleware('ability:categories,edit');
+        Route::apiResource('categories', CategoryController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:categories', 'seller.forbidden']);
+        Route::post('/categories/{category}/image', [CategoryController::class, 'uploadImage'])->middleware('ability:categories,edit')->middleware('seller.forbidden');
         // 020-customer-data-import-export — rute statis DIDAFTARKAN
         // sebelum apiResource, mengikuti konvensi yang sama seperti
         // /preorders/export (meski resource ini hari ini belum
         // mendaftarkan GET /customers/{customer}, urutan ini tetap dijaga
         // sebagai proteksi terhadap penambahan rute {customer} di masa depan).
-        Route::get('/customers/export', [CustomerController::class, 'export'])->middleware('ability:customers,export');
-        Route::get('/customers/import/template', [CustomerController::class, 'importTemplate'])->middleware('ability:customers,import');
-        Route::post('/customers/import', [CustomerController::class, 'import'])->middleware('ability:customers,import');
+        Route::get('/customers/export', [CustomerController::class, 'export'])->middleware('ability:customers,export')->middleware('seller.forbidden');
+        Route::get('/customers/import/template', [CustomerController::class, 'importTemplate'])->middleware('ability:customers,import')->middleware('seller.forbidden');
+        Route::post('/customers/import', [CustomerController::class, 'import'])->middleware('ability:customers,import')->middleware('seller.forbidden');
         Route::apiResource('customers', CustomerController::class)->only(['index', 'show']);
         Route::apiResource('customers', CustomerController::class)->only(['store', 'update', 'destroy'])->middleware('ability:customers');
         Route::get('/customers/{customer}/transactions', [CustomerController::class, 'transactions']);
@@ -139,9 +139,9 @@ Route::prefix('v1')->group(function () {
         // /products/{product}/variants tidak berdiri sendiri sebagai
         // apiResource.
         Route::apiResource('vendors', VendorController::class)->only(['index', 'show']);
-        Route::apiResource('vendors', VendorController::class)->only(['store', 'update', 'destroy'])->middleware('ability:vendors');
+        Route::apiResource('vendors', VendorController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:vendors', 'seller.forbidden']);
         Route::apiResource('materials', MaterialController::class)->only(['index', 'show']);
-        Route::apiResource('materials', MaterialController::class)->only(['store', 'update', 'destroy'])->middleware('ability:materials');
+        Route::apiResource('materials', MaterialController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:materials', 'seller.forbidden']);
 
         // 006-purchase-order-and-ops (US1) — membalik pencoretan PRD §10.2
         // "purchase management (PO to vendors)" (lihat migrasi
@@ -151,9 +151,9 @@ Route::prefix('v1')->group(function () {
         Route::patch('/purchase-orders/{purchase_order}/status', [PurchaseOrderController::class, 'updateStatus'])->middleware('ability:purchase_orders,status');
         Route::post('/purchase-orders/{purchase_order}/payments', [PurchaseOrderController::class, 'storePayment'])->middleware('ability:purchase_orders,payment');
         Route::get('/purchase-orders/{purchase_order}/invoice', [PurchaseOrderController::class, 'invoice']);
-        Route::post('/materials/{material}/vendor-prices', [MaterialController::class, 'storeVendorPrice'])->middleware('ability:materials,edit');
-        Route::put('/vendor-prices/{vendorPrice}', [MaterialController::class, 'updateVendorPrice'])->middleware('ability:materials,edit');
-        Route::delete('/vendor-prices/{vendorPrice}', [MaterialController::class, 'destroyVendorPrice'])->middleware('ability:materials,edit');
+        Route::post('/materials/{material}/vendor-prices', [MaterialController::class, 'storeVendorPrice'])->middleware('ability:materials,edit')->middleware('seller.forbidden');
+        Route::put('/vendor-prices/{vendorPrice}', [MaterialController::class, 'updateVendorPrice'])->middleware('ability:materials,edit')->middleware('seller.forbidden');
+        Route::delete('/vendor-prices/{vendorPrice}', [MaterialController::class, 'destroyVendorPrice'])->middleware('ability:materials,edit')->middleware('seller.forbidden');
 
         // 017-company-onboarding — pipeline sales/ops internal, gated
         // 'companies' menu key (owner/admin only, lihat migrasi
@@ -161,20 +161,20 @@ Route::prefix('v1')->group(function () {
         // 019-billing-system (second expansion, T087) — update/destroy
         // ditambahkan (research.md R10/R11); tetap bukan apiResource penuh
         // karena tidak ada 'store' terpisah dari onboarding flow di atas.
-        Route::apiResource('business-types', BusinessTypeController::class)->only(['index', 'show']);
-        Route::apiResource('business-types', BusinessTypeController::class)->only(['store', 'update', 'destroy'])->middleware('ability:companies');
+        Route::apiResource('business-types', BusinessTypeController::class)->only(['index', 'show'])->middleware('seller.forbidden');
+        Route::apiResource('business-types', BusinessTypeController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:companies', 'seller.forbidden']);
         // 019-billing-system — rename dari /packages (research.md R1',
         // R0). LicenseCatalogController, BUKAN LicenseController — nama
         // itu sudah dipakai gerbang aktivasi instalasi 018 di atas.
-        Route::apiResource('licenses', LicenseCatalogController::class)->only(['index', 'show']);
-        Route::apiResource('licenses', LicenseCatalogController::class)->only(['store', 'update', 'destroy'])->middleware('ability:licenses');
-        Route::get('/companies', [CompanyController::class, 'index']);
-        Route::post('/companies', [CompanyController::class, 'store'])->middleware('ability:companies,create');
-        Route::get('/companies/{company}', [CompanyController::class, 'show']);
-        Route::put('/companies/{company}', [CompanyController::class, 'update'])->middleware('ability:companies,edit');
-        Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->middleware('ability:companies,delete');
-        Route::post('/companies/{company}/activate', [CompanyController::class, 'activate'])->middleware('ability:companies,activate')->middleware('throttle:10,1');
-        Route::post('/companies/{company}/deactivate', [CompanyController::class, 'deactivate'])->middleware('ability:companies,activate')->middleware('throttle:10,1');
+        Route::apiResource('licenses', LicenseCatalogController::class)->only(['index', 'show'])->middleware('seller.forbidden');
+        Route::apiResource('licenses', LicenseCatalogController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:licenses', 'seller.forbidden']);
+        Route::get('/companies', [CompanyController::class, 'index'])->middleware('seller.forbidden');
+        Route::post('/companies', [CompanyController::class, 'store'])->middleware('ability:companies,create')->middleware('seller.forbidden');
+        Route::get('/companies/{company}', [CompanyController::class, 'show'])->middleware('seller.forbidden');
+        Route::put('/companies/{company}', [CompanyController::class, 'update'])->middleware('ability:companies,edit')->middleware('seller.forbidden');
+        Route::delete('/companies/{company}', [CompanyController::class, 'destroy'])->middleware('ability:companies,delete')->middleware('seller.forbidden');
+        Route::post('/companies/{company}/activate', [CompanyController::class, 'activate'])->middleware('ability:companies,activate')->middleware('throttle:10,1')->middleware('seller.forbidden');
+        Route::post('/companies/{company}/deactivate', [CompanyController::class, 'deactivate'])->middleware('ability:companies,activate')->middleware('throttle:10,1')->middleware('seller.forbidden');
 
         // 019-billing-system (contracts/api.md, research.md R2') — Invoice
         // kini dokumen mandiri dengan menu sendiri ('invoices'), bukan lagi
@@ -182,19 +182,19 @@ Route::prefix('v1')->group(function () {
         // SEBELUM apiResource('invoices', ...)'s {invoice} agar 'summary'
         // tidak ditangkap sebagai route-model-binding {invoice} (pola sama
         // dengan /preorders/export di atas apiResource('preorders', ...)).
-        Route::get('/invoices/summary', [InvoiceController::class, 'summary']);
+        Route::get('/invoices/summary', [InvoiceController::class, 'summary'])->middleware('seller.forbidden');
         // 019-billing-system (T075) — sama seperti /preorders/export di
         // atas apiResource('preorders', ...): rute statis ini WAJIB
         // didaftarkan SEBELUM apiResource('invoices', ...)'s {invoice}
         // supaya 'export'/'import' tidak ditangkap sebagai route-model-
         // binding {invoice}.
-        Route::get('/invoices/export', [InvoiceExportImportController::class, 'export'])->middleware('ability:invoices,export');
-        Route::get('/invoices/import/template', [InvoiceExportImportController::class, 'importTemplate'])->middleware('ability:invoices,import');
-        Route::post('/invoices/import', [InvoiceExportImportController::class, 'import'])->middleware('ability:invoices,import');
-        Route::post('/invoices/{invoice}/mark-paid', [InvoiceController::class, 'markPaid'])->middleware('ability:invoices,mark_paid');
-        Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->middleware('ability:invoices,cancel');
-        Route::apiResource('invoices', InvoiceController::class)->only(['index', 'show']);
-        Route::apiResource('invoices', InvoiceController::class)->only(['store', 'update', 'destroy'])->middleware('ability:invoices');
+        Route::get('/invoices/export', [InvoiceExportImportController::class, 'export'])->middleware('ability:invoices,export')->middleware('seller.forbidden');
+        Route::get('/invoices/import/template', [InvoiceExportImportController::class, 'importTemplate'])->middleware('ability:invoices,import')->middleware('seller.forbidden');
+        Route::post('/invoices/import', [InvoiceExportImportController::class, 'import'])->middleware('ability:invoices,import')->middleware('seller.forbidden');
+        Route::post('/invoices/{invoice}/mark-paid', [InvoiceController::class, 'markPaid'])->middleware('ability:invoices,mark_paid')->middleware('seller.forbidden');
+        Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->middleware('ability:invoices,cancel')->middleware('seller.forbidden');
+        Route::apiResource('invoices', InvoiceController::class)->only(['index', 'show'])->middleware('seller.forbidden');
+        Route::apiResource('invoices', InvoiceController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:invoices', 'seller.forbidden']);
 
         // 034-seller-po-bom — BOM bersumber baris purchase order. Rute statis
         // 'bom/eligible-lines' & 'bom/items' sengaja di atas rute lain yang
@@ -216,8 +216,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/variants/{variant}/cost-breakdown', [MaterialController::class, 'costBreakdown']);
 
         Route::apiResource('events', EventController::class)->only(['index', 'show']);
-        Route::apiResource('events', EventController::class)->only(['store', 'update', 'destroy'])->middleware('ability:events');
-        Route::patch('/events/{event}/status', [EventController::class, 'updateStatus'])->middleware('ability:events,status');
+        Route::apiResource('events', EventController::class)->only(['store', 'update', 'destroy'])->middleware(['ability:events', 'seller.forbidden']);
+        Route::patch('/events/{event}/status', [EventController::class, 'updateStatus'])->middleware('ability:events,status')->middleware('seller.forbidden');
 
         Route::get('/sessions', [CashierSessionController::class, 'index']);
         Route::get('/sessions/current', [CashierSessionController::class, 'current']);
@@ -228,9 +228,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/sessions/{session}/transactions', [CashierSessionController::class, 'transactions']);
 
         Route::get('/payment-channels', [PaymentChannelController::class, 'index']);
-        Route::post('/payment-channels', [PaymentChannelController::class, 'store'])->middleware('ability:settings,edit');
-        Route::post('/payment-channels/{channel}', [PaymentChannelController::class, 'update'])->middleware('ability:settings,edit');
-        Route::delete('/payment-channels/{channel}', [PaymentChannelController::class, 'destroy'])->middleware('ability:settings,edit');
+        Route::post('/payment-channels', [PaymentChannelController::class, 'store'])->middleware('ability:settings,edit')->middleware('seller.forbidden');
+        Route::post('/payment-channels/{channel}', [PaymentChannelController::class, 'update'])->middleware('ability:settings,edit')->middleware('seller.forbidden');
+        Route::delete('/payment-channels/{channel}', [PaymentChannelController::class, 'destroy'])->middleware('ability:settings,edit')->middleware('seller.forbidden');
         Route::post('/payment-proofs', [PaymentProofController::class, 'store']);
         Route::get('/payment-proofs/{proof}/file', [PaymentProofController::class, 'show'])->name('payment-proofs.file');
 
@@ -271,8 +271,8 @@ Route::prefix('v1')->group(function () {
         // supaya 'export'/'import' tidak tertangkap sebagai {preorder} id
         // dan gagal route-model-binding (404).
         Route::get('/preorders/export', [PreorderController::class, 'export'])->middleware('ability:preorders,export');
-        Route::get('/preorders/import/template', [PreorderController::class, 'importTemplate'])->middleware('ability:preorders,import');
-        Route::post('/preorders/import', [PreorderController::class, 'import'])->middleware('ability:preorders,import');
+        Route::get('/preorders/import/template', [PreorderController::class, 'importTemplate'])->middleware('ability:preorders,import')->middleware('seller.forbidden');
+        Route::post('/preorders/import', [PreorderController::class, 'import'])->middleware('ability:preorders,import')->middleware('seller.forbidden');
 
         // 013-preorder-list-filters-receipt (T023) — rute statis 'summary'
         // WAJIB didaftarkan SEBELUM apiResource('preorders', ...)'s 'show'
@@ -312,9 +312,9 @@ Route::prefix('v1')->group(function () {
         // bertabrakan dengan apiResource /artists/{artist} dan supaya
         // seluruh permukaan berkas berpasangan simetris di satu tempat.
         Route::get('/exports/{entity}', [MasterDataExportController::class, 'show'])
-            ->where('entity', 'artists|categories|products|stock|vendors|materials|vendor_prices|bom|roles|users');
-        Route::get('/imports/master-data/template', [MasterDataImportController::class, 'template']);
-        Route::post('/imports/master-data', [MasterDataImportController::class, 'store']);
+            ->where('entity', 'artists|categories|products|stock|vendors|materials|vendor_prices|bom|roles|users')->middleware('seller.forbidden');
+        Route::get('/imports/master-data/template', [MasterDataImportController::class, 'template'])->middleware('seller.forbidden');
+        Route::post('/imports/master-data', [MasterDataImportController::class, 'store'])->middleware('seller.forbidden');
 
         Route::get('/reports/sales', [ReportController::class, 'sales']);
         Route::post('/reports/sales/transactions/export', [ReportController::class, 'exportSalesTransactions'])->middleware('ability:sales,export');
@@ -322,8 +322,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/sales-by-product', [ReportController::class, 'salesByProduct']);
         Route::get('/reports/sales-by-product/export', [ReportController::class, 'exportSalesByProduct'])->middleware('ability:reports,export');
         Route::get('/reports/sales-by-product/{product}/transactions', [ReportController::class, 'salesByProductTransactions'])->whereNumber('product');
-        Route::get('/reports/sales-by-payment-method', [ReportController::class, 'salesByPaymentMethod']);
-        Route::get('/reports/sales-by-payment-method/transactions', [ReportController::class, 'salesByPaymentMethodTransactions']);
+        Route::get('/reports/sales-by-payment-method', [ReportController::class, 'salesByPaymentMethod'])->middleware('seller.forbidden');
+        Route::get('/reports/sales-by-payment-method/transactions', [ReportController::class, 'salesByPaymentMethodTransactions'])->middleware('seller.forbidden');
         Route::get('/reports/profit', [ReportController::class, 'profit']);
         Route::get('/reports/purchases', [ReportController::class, 'purchases']);
         Route::get('/reports/stock-by-artist', [ReportController::class, 'stockByArtist']);

@@ -88,7 +88,8 @@ function blankRow() {
 
 function openCreate() {
   editingPo.value = null;
-  Object.assign(form, { vendor_id: '', artist_id: '', notes: '' });
+  // 058 — pengguna ber-seller: seller PO = seller-nya sendiri (pilihan disembunyikan; server memaksa).
+  Object.assign(form, { vendor_id: '', artist_id: auth.user?.artist?.id ?? '', notes: '' });
   itemRows.value = [blankRow()];
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
@@ -334,7 +335,7 @@ function openDetail(po) {
     <BaseDrawer :open="showForm" :title="editingPo ? t('purchase_orders.edit_po') : t('purchase_orders.new_po')" @close="showForm = false">
       <form class="flex flex-col gap-4 px-6 py-5" @submit.prevent="savePo">
         <BaseSelect v-model="form.vendor_id" :label="t('purchase_orders.vendor')" required :options="vendorOptions" :error="formErrors.vendor_id" />
-        <BaseSelect v-model="form.artist_id" :label="t('purchase_orders.seller')" required :options="artistOptions" :placeholder="t('purchase_orders.seller_placeholder')" :hint="t('purchase_orders.seller_hint')" :error="formErrors.artist_id" />
+        <BaseSelect v-if="!auth.isSellerScoped" v-model="form.artist_id" :label="t('purchase_orders.seller')" required :options="artistOptions" :placeholder="t('purchase_orders.seller_placeholder')" :hint="t('purchase_orders.seller_hint')" :error="formErrors.artist_id" />
         <BaseTextarea v-model="form.notes" :label="t('master_data.notes')" :rows="2" :error="formErrors.notes" />
 
         <div class="flex items-center justify-between">

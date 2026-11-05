@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\HasSellerScope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Product extends Model
 {
-    use HasDataMode, HasFactory, SoftDeletes;
+    use HasDataMode, HasSellerScope, HasFactory, SoftDeletes;
 
     /**
      * BUG YANG DITEMUKAN & DIPERBAIKI — 'code_prefix' dan 'product_segment'

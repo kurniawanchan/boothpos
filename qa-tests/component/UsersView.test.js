@@ -5,6 +5,7 @@ import UsersView from '../../resources/js/views/UsersView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
 import { listUsers, createUser, updateUser, deleteUser, uploadUserPhoto } from '../../resources/js/api/users';
 import { listRoles } from '../../resources/js/api/roles';
+import { listArtists } from '../../resources/js/api/artists';
 
 vi.mock('../../resources/js/api/users', () => ({
   listUsers: vi.fn(),
@@ -13,6 +14,13 @@ vi.mock('../../resources/js/api/users', () => ({
   updateUser: vi.fn(),
   deleteUser: vi.fn(),
   uploadUserPhoto: vi.fn(),
+}));
+vi.mock('../../resources/js/api/artists', () => ({
+  listArtists: vi.fn(),
+  getArtist: vi.fn(),
+  createArtist: vi.fn(),
+  updateArtist: vi.fn(),
+  deleteArtist: vi.fn(),
 }));
 vi.mock('../../resources/js/api/roles', () => ({
   listRoles: vi.fn(),
@@ -41,7 +49,49 @@ describe('UsersView', () => {
       ],
       meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 },
     });
-    listRoles.mockResolvedValue({ data: [{ id: 1, name: 'Owner' }, { id: 2, name: 'Kasir' }] });
+    listRoles.mockResolvedValue({ data: [{ id: 1, name: 'Owner', is_locked: true }, { id: 2, name: 'Kasir', is_locked: false }] });
+    listArtists.mockResolvedValue({ data: [{ id: 7, name: 'Seller A', code: 'AAA' }, { id: 8, name: 'Seller B', code: 'BBB' }] });
+  });
+
+  // 058 — seller pengguna: kolom di daftar, pilihan di form, dan Owner tak punya pilihan seller.
+  it('shows the seller in the list and a seller select for a non-owner role', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    listUsers.mockResolvedValue({
+      data: [
+        { id: 1, name: 'Owner', username: 'owner', role: { id: 1, name: 'Owner' }, artist_id: null, artist: null, is_active: true, photo_url: null, last_login_at: null },
+        { id: 2, name: 'Kasir Satu', username: 'kasir01', role: { id: 2, name: 'Kasir' }, artist_id: 7, artist: { id: 7, name: 'Seller A', code: 'AAA' }, is_active: true, photo_url: null, last_login_at: null },
+      ],
+      meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 },
+    });
+    renderUsers();
+
+    await screen.findByText('Kasir Satu');
+    const kasirRow = screen.getAllByRole('row').find((r) => r.textContent.includes('kasir01'));
+    expect(within(kasirRow).getByText('Seller A')).toBeInTheDocument();
+
+    await user.click(within(kasirRow).getByText(/^edit$/i));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByTestId('owner-all-sellers')).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/hanya melihat data seller yang dipilih/i)).toBeInTheDocument();
+  });
+
+  it('offers no seller choice for the Owner role and sends artist_id null', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    updateUser.mockResolvedValue({ id: 1, name: 'Owner', username: 'owner' });
+    renderUsers({ id: 99, role: 'Owner', name: 'Lain', menu_keys: ['dashboard', 'users'] });
+
+    await screen.findByText('Kasir Satu');
+    const ownerRow = screen.getAllByRole('row').find((r) => r.textContent.includes('owner') && !r.textContent.includes('kasir'));
+    await user.click(within(ownerRow).getByText(/^edit$/i));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getByTestId('owner-all-sellers')).toBeInTheDocument();
+    expect(within(dialog).queryByText(/hanya melihat data seller yang dipilih/i)).not.toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: /^simpan$/i }));
+    await waitFor(() => expect(updateUser).toHaveBeenCalledWith(1, expect.objectContaining({ artist_id: null })));
   });
 
   it('lists users from the API', async () => {

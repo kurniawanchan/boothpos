@@ -19,6 +19,13 @@ class UserResource extends JsonResource
                 'name' => $this->role->name,
             ] : null,
             'is_active' => $this->is_active,
+            // 058 — seller yang membatasi pengguna ini; hanya terisi bila relasi `artist` dimuat (relationLoaded).
+            'artist_id' => $this->artist_id,
+            'artist' => $this->relationLoaded('artist') && $this->artist ? [
+                'id' => $this->artist->id,
+                'name' => $this->artist->name,
+                'code' => $this->artist->code,
+            ] : null,
             // password TIDAK PERNAH disertakan (FR-007) — model sudah
             // menyembunyikannya via $hidden, tapi resource ini eksplisit
             // hanya menyusun kolom yang memang boleh terlihat, bukan

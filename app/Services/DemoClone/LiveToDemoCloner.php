@@ -332,6 +332,16 @@ class LiveToDemoCloner
         if ($drafts > 0) {
             throw new CloneException("pos_drafts.event_id: {$drafts} baris LIVE menunjuk events milik DEMO; data lintas mode harus dibereskan dulu, tidak ada yang diubah.");
         }
+
+        // 058 — pengguna tidak disalin, tapi users.artist_id (RESTRICT) menahan penghapusan seller DEMO. Pengguna
+        // yang terikat ke seller DEMO harus dibereskan dulu: berhenti dengan pesan jelas, bukan galat FK mentah.
+        $linkedUsers = DB::table('users')
+            ->whereIn('artist_id', DB::table('artists')->where('data_mode', 'demo')->select('id'))
+            ->count();
+
+        if ($linkedUsers > 0) {
+            throw new CloneException("users.artist_id: {$linkedUsers} pengguna terikat ke seller milik DEMO; lepas atau ganti seller-nya dulu, tidak ada yang diubah.");
+        }
     }
 
     /** @return list<string> */

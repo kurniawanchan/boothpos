@@ -7,6 +7,7 @@ use App\Http\Requests\LoginRequest;
 use App\Http\Requests\UpdateLanguageRequest;
 use App\Http\Requests\UpdatePasswordRequest;
 use App\Models\User;
+use App\Support\SellerGate;
 use App\Services\ImageUploadService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -149,6 +150,16 @@ class AuthController extends Controller
             'is_active' => $user->is_active,
             'language' => $user->language,
             'photo_url' => $this->imageUploadService->url($user->photo_path),
+            // 058 — pengguna ber-seller: SPA menyembunyikan menu administratif & mengunci filter penjual (kosmetik;
+            // server yang menegakkan). Owner selalu false walau ada artist_id basi (SellerGate::forUser).
+            'seller_scoped' => SellerGate::forUser($user) !== null,
+            'artist' => SellerGate::forUser($user) !== null && $user->artist ? [
+                'id' => $user->artist->id,
+                'name' => $user->artist->name,
+                'code' => $user->artist->code,
+                'is_active' => (bool) $user->artist->is_active,
+            ] : null,
+            'seller_active' => SellerGate::forUser($user) === null ? true : (bool) ($user->artist?->is_active),
         ];
     }
 }

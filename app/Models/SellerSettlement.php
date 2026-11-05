@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\HasSellerScope;
 use App\Support\ReportSplit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -20,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  */
 class SellerSettlement extends Model
 {
-    use HasDataMode;
+    use HasDataMode, HasSellerScope;
 
     public const STATUS_DRAFT = 'draft';
 

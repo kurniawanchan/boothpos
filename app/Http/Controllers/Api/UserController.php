@@ -31,7 +31,7 @@ class UserController extends Controller
         $perPage = min((int) $request->integer('per_page', 25), 100);
 
         $users = User::query()
-            ->with('role')
+            ->with(['role', 'artist'])
             // 003-seed-demo-live follow-up (FR-017) — daftar tampilan
             // saja; TIDAK memengaruhi login (lihat catatan di User model).
             ->where('data_mode', ModeGate::current())
@@ -40,6 +40,7 @@ class UserController extends Controller
                 $q->where(fn ($qq) => $qq->where('name', 'like', $term)->orWhere('username', 'like', $term));
             })
             ->when($request->filled('role_id'), fn ($q) => $q->where('role_id', $request->integer('role_id')))
+            ->when($request->filled('artist_id'), fn ($q) => $q->where('artist_id', $request->integer('artist_id')))
             ->when($request->has('is_active'), fn ($q) => $q->where('is_active', $request->boolean('is_active')))
             ->orderBy('name')
             ->paginate($perPage);
@@ -69,18 +70,18 @@ class UserController extends Controller
                 entityType: 'User',
                 entityId: $user->id,
                 description: "Menambah pengguna {$user->username} ({$user->name}).",
-                newValues: ['name' => $user->name, 'username' => $user->username, 'role_id' => $user->role_id, 'is_active' => $user->is_active],
+                newValues: ['name' => $user->name, 'username' => $user->username, 'role_id' => $user->role_id, 'is_active' => $user->is_active, 'artist_id' => $user->artist_id],
             );
         });
 
-        return response()->json(new UserResource($user->fresh('role')), 201);
+        return response()->json(new UserResource($user->fresh(['role', 'artist'])), 201);
     }
 
     public function show(User $user): JsonResponse
     {
         $this->authorize('view', $user);
 
-        return response()->json(new UserResource($user->load('role')));
+        return response()->json(new UserResource($user->load(['role', 'artist'])));
     }
 
     public function update(UpdateUserRequest $request, User $user): JsonResponse
@@ -108,9 +109,30 @@ class UserController extends Controller
             }
         }
 
-        $user->update($validated);
+        // 058 — peran Owner tak pernah terikat ke seller: menjadikan pengguna Owner melepas ikatannya (request
+        // sudah menolak artist_id eksplisit untuk Owner; ini menangani ikatan lama yang tersisa).
+        if ($roleChanging && \App\Models\Role::find($validated['role_id'])?->isOwner()) {
+            $validated['artist_id'] = null;
+        }
 
-        return response()->json(new UserResource($user->fresh('role')));
+        DB::transaction(function () use ($user, $validated, $request) {
+            $oldArtistId = $user->artist_id;
+            $user->update($validated);
+
+            if ((int) $oldArtistId !== (int) $user->artist_id) {
+                $this->activityLogger->log(
+                    userId: $request->user()?->id,
+                    action: 'user_seller_changed',
+                    entityType: 'User',
+                    entityId: $user->id,
+                    description: "Mengubah seller pengguna {$user->username}.",
+                    oldValues: ['artist_id' => $oldArtistId],
+                    newValues: ['artist_id' => $user->artist_id],
+                );
+            }
+        });
+
+        return response()->json(new UserResource($user->fresh(['role', 'artist'])));
     }
 
     public function destroy(Request $request, User $user): JsonResponse

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\HasSellerScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PurchaseOrder extends Model
 {
-    use HasDataMode, HasFactory, SoftDeletes;
+    use HasDataMode, HasSellerScope, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'po_number', 'vendor_id', 'artist_id', 'status', 'ordered_at', 'received_at', 'paid_at',

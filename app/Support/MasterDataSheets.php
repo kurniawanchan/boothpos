@@ -148,6 +148,8 @@ final class MasterDataSheets
             // POST /users/{user}/photo, bukan lewat sel spreadsheet).
             self::USERS => [
                 'name', 'username', 'role_name', 'is_active', 'photo_path',
+                // 058 — seller pengguna (kode artist). Kosong = biarkan; peran Owner tak boleh punya seller.
+                'artist_code',
             ],
             default => throw new \InvalidArgumentException("Sheet tidak dikenali: {$sheet}."),
         };
@@ -273,6 +275,7 @@ final class MasterDataSheets
                 'role_name' => 'Kasir Cabang Contoh',
                 'is_active' => 1,
                 'photo_path' => '',
+                'artist_code' => '',
             ],
             default => throw new \InvalidArgumentException("Sheet tidak dikenali: {$sheet}."),
         };

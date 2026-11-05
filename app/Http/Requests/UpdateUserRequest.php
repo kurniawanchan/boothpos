@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\ValidatesUserSeller;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -9,6 +10,8 @@ use Illuminate\Validation\Rule;
 
 class UpdateUserRequest extends FormRequest
 {
+    use ValidatesUserSeller;
+
     public function authorize(): bool
     {
         // Ini HANYA gerbang menu ('users' di menu_keys) → 403. Guard
@@ -46,6 +49,13 @@ class UpdateUserRequest extends FormRequest
                 Rule::exists('roles', 'id')->whereNull('deleted_at'),
             ],
             'is_active' => ['sometimes', 'boolean'],
+            // 058 — seller; null melepas batasan. Peran Owner tak boleh punya seller.
+            'artist_id' => $this->sellerRules($user?->artist_id),
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $this->refuseSellerForOwner($validator, $this->route('user')?->role_id);
     }
 }

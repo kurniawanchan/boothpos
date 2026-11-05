@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\PurchaseOrder;
 use Illuminate\Auth\Access\AuthorizationException;
+use App\Http\Requests\Concerns\ForcesOwnSeller;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -11,6 +12,8 @@ use Illuminate\Validation\Validator;
 
 class StorePurchaseOrderRequest extends FormRequest
 {
+    use ForcesOwnSeller;
+
     public function authorize(): bool
     {
         return $this->user()?->can('create', PurchaseOrder::class) ?? false;
@@ -21,6 +24,11 @@ class StorePurchaseOrderRequest extends FormRequest
         $response = Gate::inspect('create', PurchaseOrder::class);
 
         throw new AuthorizationException($response->message() ?: 'Tidak berhak.');
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $this->defaultOwnSeller(true);
     }
 
     public function rules(): array
@@ -50,6 +58,7 @@ class StorePurchaseOrderRequest extends FormRequest
      */
     public function withValidator(Validator $validator): void
     {
+        $this->refuseForeignSeller($validator);
         $validator->after(function (Validator $validator) {
             foreach ($this->input('items', []) as $index => $item) {
                 if (($item['line_type'] ?? null) === 'material' && empty($item['material_id'])) {

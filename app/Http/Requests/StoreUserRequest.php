@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Role;
 use App\Models\User;
+use App\Http\Requests\Concerns\ValidatesUserSeller;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -11,6 +12,8 @@ use Illuminate\Validation\Rule;
 
 class StoreUserRequest extends FormRequest
 {
+    use ValidatesUserSeller;
+
     public function authorize(): bool
     {
         return $this->user()?->can('create', User::class) ?? false;
@@ -37,6 +40,13 @@ class StoreUserRequest extends FormRequest
                 Rule::exists('roles', 'id')->whereNull('deleted_at'),
             ],
             'is_active' => ['sometimes', 'boolean'],
+            // 058 — seller yang membatasi data pengguna ini (kosong = tanpa batasan).
+            'artist_id' => $this->sellerRules(),
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $this->refuseSellerForOwner($validator);
     }
 }

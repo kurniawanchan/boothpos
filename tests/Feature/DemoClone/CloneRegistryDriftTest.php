@@ -19,8 +19,9 @@ class CloneRegistryDriftTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** Anak yang SENGAJA tidak disalin tetapi menunjuk tabel terdaftar (ditangani cek awal/cascade). */
-    private const UNREGISTERED_CHILDREN = ['pos_drafts.event_id', 'preorder_notifications.preorder_id'];
+    /** 058: users.artist_id dijaga cek awal di LiveToDemoCloner (pengguna terikat ke seller DEMO).
+     * Anak yang SENGAJA tidak disalin tetapi menunjuk tabel terdaftar (ditangani cek awal/cascade). */
+    private const UNREGISTERED_CHILDREN = ['pos_drafts.event_id', 'preorder_notifications.preorder_id', 'users.artist_id'];
 
     /** Induk bersama (tidak dimoded) yang boleh ditunjuk tabel terdaftar tanpa dipetakan. */
     private const SHARED_PARENTS = ['users', 'payment_channels', 'roles'];

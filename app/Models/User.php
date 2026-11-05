@@ -18,6 +18,7 @@ class User extends Authenticatable
         'username',
         'password',
         'role_id',
+        'artist_id',
         'photo_path',
         'is_active',
         'language',
@@ -57,6 +58,17 @@ class User extends Authenticatable
     public function role(): BelongsTo
     {
         return $this->belongsTo(Role::class);
+    }
+
+    /** 058 — seller yang membatasi data pengguna ini (NULL = tanpa batasan). */
+    public function artist(): BelongsTo
+    {
+        return $this->belongsTo(Artist::class)->withTrashed()->withoutGlobalScopes();
+    }
+
+    public function isSellerScoped(): bool
+    {
+        return $this->artist_id !== null;
     }
 
     /**

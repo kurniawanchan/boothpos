@@ -15,6 +15,7 @@ use App\Support\ModeGate;
 use App\Support\PreorderRecognizedRevenue;
 use App\Support\PreorderSellerSubtotals;
 use App\Support\ReportSplit;
+use App\Support\SellerGate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -83,7 +84,9 @@ class ReportController extends Controller
             ->where('order_items.data_mode', ModeGate::current())
             ->when($request->filled('event_id'), fn ($q) => $q->where('orders.event_id', $request->integer('event_id')))
             ->when($request->filled('date_from'), fn ($q) => $q->whereDate('orders.created_at', '>=', $request->date('date_from')))
-            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('orders.created_at', '<=', $request->date('date_to')));
+            ->when($request->filled('date_to'), fn ($q) => $q->whereDate('orders.created_at', '<=', $request->date('date_to')))
+            // 058 — query mentah melewati scope Eloquent: pengguna ber-seller hanya menghitung baris miliknya.
+            ->tap(fn ($q) => SellerGate::applyToItems($q, 'order_items.artist_id'));
 
         // Task 1 — setiap baris agregat kini membawa entity_id (product_id/
         // category_id/artist_id) di samping label, supaya frontend bisa
@@ -575,6 +578,7 @@ class ReportController extends Controller
             // supaya tidak diam-diam benar hanya karena kebetulan digerbang
             // lookup lain).
             ->where('order_items.data_mode', ModeGate::current())
+            ->tap(fn ($q) => SellerGate::applyToItems($q, 'order_items.artist_id')) // 058
             ->selectRaw('
                 SUM(order_items.line_total) as revenue,
                 SUM(order_items.cost_price * order_items.qty) as cost_of_goods
@@ -827,6 +831,7 @@ class ReportController extends Controller
             ->where('orders.event_id', $eventId)
             ->where('orders.status', 'completed')
             ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat catatan sales()
+            ->tap(fn ($q) => SellerGate::applyToItems($q, 'order_items.artist_id')) // 058
             ->selectRaw('
                 artists.id as artist_id,
                 artists.name as artist_name,
@@ -1081,6 +1086,13 @@ class ReportController extends Controller
             return $this->preordersByArtist($request);
         }
 
+        // 058 — pengguna ber-seller: laporan header-level (total_amount utuh) akan menjumlahkan item seller lain.
+        // Ringkasan dihitung dari PORSI item milik seller (jalur yang sama dengan breakdown=artist, dijumlah per
+        // status × kelengkapan), dan drilldown dipaksa ke seller pengguna sehingga memakai jalur porsi juga.
+        if (SellerGate::active() && ! $request->filled('status')) {
+            return $this->preordersOwnShareSummary($request);
+        }
+
         // 012-seller-preorder-report-detail-export (US3/T013, research.md R3,
         // data-model.md "Pre-order drilldown row") — path KETIGA, dipicu oleh
         // hadirnya `status` (dengan atau tanpa `payment_completeness`/
@@ -1132,6 +1144,26 @@ class ReportController extends Controller
                 'total_collected' => number_format((float) $row->total_collected, 2, '.', ''),
                 'total_outstanding' => number_format((float) $row->total_outstanding, 2, '.', ''),
             ]);
+
+        return response()->json(['rows' => $rows]);
+    }
+
+    /**
+     * 058 — ringkasan pre-order untuk pengguna ber-seller: porsi item seller itu, dijumlah per status ×
+     * kelengkapan pembayaran (bentuk sama dengan ringkasan default, tanpa baris seller lain).
+     */
+    private function preordersOwnShareSummary(Request $request): JsonResponse
+    {
+        $byArtist = json_decode($this->preordersByArtist($request)->getContent(), true)['rows'] ?? [];
+
+        $rows = collect($byArtist)->groupBy(fn ($r) => $r['status'].'|'.$r['payment_completeness'])->map(fn ($g) => [
+            'status' => $g->first()['status'],
+            'payment_completeness' => $g->first()['payment_completeness'],
+            'preorder_count' => (int) $g->sum('preorder_count'),
+            'total_order_value' => number_format((float) $g->sum(fn ($r) => (float) $r['total_order_value']), 2, '.', ''),
+            'total_collected' => number_format((float) $g->sum(fn ($r) => (float) $r['total_collected']), 2, '.', ''),
+            'total_outstanding' => number_format((float) $g->sum(fn ($r) => (float) $r['total_outstanding']), 2, '.', ''),
+        ])->sortBy(['status', 'payment_completeness'])->values();
 
         return response()->json(['rows' => $rows]);
     }
@@ -1226,7 +1258,8 @@ class ReportController extends Controller
     private function preordersDrilldown(Request $request): JsonResponse
     {
         $status = $request->string('status')->toString();
-        $artistId = $request->filled('artist_id') ? $request->integer('artist_id') : null;
+        // 058 — pengguna ber-seller selalu memakai jalur PORSI item seller-nya (abaikan artist_id yang dikirim).
+        $artistId = SellerGate::current() ?? ($request->filled('artist_id') ? $request->integer('artist_id') : null);
 
         if ($artistId !== null) {
             $fraction = self::PREORDER_FRACTION_EXPR;
@@ -1399,6 +1432,7 @@ class ReportController extends Controller
             ->where('orders.event_id', $eventId)
             ->where('orders.status', 'completed')
             ->where('order_items.data_mode', ModeGate::current()) // 003-seed-demo-live, lihat catatan sales()
+            ->tap(fn ($q) => SellerGate::applyToItems($q, 'order_items.artist_id')) // 058
             ->orderBy('artists.name')
             ->orderBy('orders.created_at')
             ->get([

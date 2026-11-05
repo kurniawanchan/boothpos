@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\HasSellerScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ProductVariant extends Model
 {
-    use HasDataMode, HasFactory, SoftDeletes;
+    use HasDataMode, HasSellerScope, HasFactory, SoftDeletes;
 
     /**
      * BUG YANG DITEMUKAN & DIPERBAIKI — 'sku' semula dikeluarkan dari

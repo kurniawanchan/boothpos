@@ -9,6 +9,7 @@ import { listEvents } from '../../api/events';
 import AppSidebar from './AppSidebar.vue';
 import AppTopbar from './AppTopbar.vue';
 import SchemaUpdateBanner from './SchemaUpdateBanner.vue';
+import SellerInactiveBanner from './SellerInactiveBanner.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -119,6 +120,7 @@ async function handleLogout() {
         @logout="handleLogout"
       />
       <SchemaUpdateBanner v-if="settings.schemaUpdateRequired" />
+      <SellerInactiveBanner v-if="auth.sellerInactive" />
       <main class="min-h-0 flex-1 overflow-auto">
         <RouterView />
       </main>

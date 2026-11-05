@@ -23,7 +23,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(prepend: [EnsureInstallationIsActivated::class]);
 
         // 057 — izin aksi per menu pada rute: `ability:sales,void` (lihat EnsureMenuAction).
-        $middleware->alias(['ability' => \App\Http\Middleware\EnsureMenuAction::class]);
+        $middleware->alias([
+            'ability' => \App\Http\Middleware\EnsureMenuAction::class,
+            // 058 — tolak pengguna ber-seller dari permukaan administratif (lihat EnsureNotSellerScoped).
+            'seller.forbidden' => \App\Http\Middleware\EnsureNotSellerScoped::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

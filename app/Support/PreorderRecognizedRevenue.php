@@ -44,7 +44,7 @@ final class PreorderRecognizedRevenue
             ->where('data_mode', ModeGate::current())
             ->groupBy('preorder_id');
 
-        return DB::table('preorder_items')
+        $query = DB::table('preorder_items')
             ->join('preorders', 'preorders.id', '=', 'preorder_items.preorder_id')
             ->join('product_variants', 'product_variants.id', '=', 'preorder_items.variant_id')
             ->join('products', 'products.id', '=', 'product_variants.product_id')
@@ -57,5 +57,10 @@ final class PreorderRecognizedRevenue
             ->when($eventId !== null, fn ($q) => $q->where('preorders.event_id', $eventId))
             ->when($dateFrom !== null, fn ($q) => $q->whereDate('preorders.created_at', '>=', $dateFrom))
             ->when($dateTo !== null, fn ($q) => $q->whereDate('preorders.created_at', '<=', $dateTo));
+
+        // 058 — query mentah melewati scope Eloquent: pengguna ber-seller hanya menghitung baris miliknya.
+        \App\Support\SellerGate::applyToItems($query, 'preorder_items.artist_id');
+
+        return $query;
     }
 }
