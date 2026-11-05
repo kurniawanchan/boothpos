@@ -14,6 +14,10 @@ class RoleResource extends JsonResource
             'name' => $this->name,
             'menu_keys' => $this->menu_keys,
             'is_system_default' => $this->is_system_default,
+            // 057 — aksi TAMBAHAN selain View per menu, selalu eksplisit (peran lama = penuh); editor memakai ini apa adanya.
+            'menu_actions' => collect($this->resolvedActions())->map(fn (array $a) => array_values(array_filter($a, fn ($x) => $x !== 'view')))->all(),
+            'has_custom_actions' => $this->hasCustomActions(),
+            'is_locked' => $this->isOwner(),
             // Dihitung di controller lewat withCount('users') dan dibatasi
             // ke pengguna aktif — dipasok siap pakai supaya frontend tidak
             // perlu request kedua, dan supaya pesan penolakan 409 (lihat

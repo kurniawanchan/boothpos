@@ -4362,6 +4362,15 @@ paths:
                       properties:
                         key: { type: string, example: roles }
                         label: { type: string, example: Peran }
+                        actions:
+                          type: array
+                          description: 057 — aksi tambahan selain View untuk menu ini (label mengikuti bahasa pengguna).
+                          items:
+                            type: object
+                            properties:
+                              key: { type: string, example: void }
+                              label: { type: string, example: Batalkan penjualan }
+                              standard: { type: boolean, description: "true untuk create/edit/delete." }
 
   /vendors:
     get:
@@ -6203,7 +6212,10 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
-      description: Peran tidak memiliki izin
+      description: |
+        Peran tidak memiliki izin. 057 — bila penyebabnya izin AKSI per menu, badan membawa
+        `code: action_not_allowed`, `menu` dan `action` (middleware `ability` pada rute mutasi/ekspor);
+        tak ada data yang berubah dan penolakan tidak dicatat di activity log.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -6359,6 +6371,16 @@ components:
           type: array
           items: { type: string }
           example: [dashboard, pos, session, products, reports, settings]
+        permissions:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+          example: { sales: [view, verify, export], pos: [view, create] }
+          description: |
+            057 — aksi yang diizinkan per menu (View selalu ada untuk menu yang dimiliki), hasil `Role::resolvedActions()` —
+            SATU sumber dengan penegakan di server. Menu yang tak dimiliki peran tidak muncul. Frontend memakainya
+            untuk menyembunyikan tombol (kosmetik); penegakan sesungguhnya di middleware `ability`.
         is_active: { type: boolean }
         photo_url:
           type: string
@@ -6435,6 +6457,13 @@ components:
           type: integer
           readOnly: true
           description: Jumlah pengguna AKTIF yang memakai peran ini.
+        menu_actions:
+          type: object
+          readOnly: true
+          additionalProperties: { type: array, items: { type: string } }
+          description: 057 — aksi TAMBAHAN selain View per menu, SELALU eksplisit (peran lama = penuh). `[]` = hanya lihat.
+        has_custom_actions: { type: boolean, readOnly: true, description: true bila ada pembatasan aksi pada menu yang dimiliki. }
+        is_locked: { type: boolean, readOnly: true, description: true untuk peran Owner bawaan (selalu akses penuh; tak bisa dibatasi). }
 
     RoleInput:
       type: object
@@ -6445,6 +6474,15 @@ components:
           type: array
           items: { type: string }
           description: Setiap nilai harus salah satu kunci App\Support\MenuKeys — kunci tak dikenal ditolak 422.
+        menu_actions:
+          type: object
+          nullable: true
+          additionalProperties: { type: array, items: { type: string } }
+          description: |
+            057 — `{ "sales": ["void", "export"], "pos": [] }`: aksi TAMBAHAN selain View per menu. Dihilangkan pada
+            POST = akses penuh (perilaku lama); dihilangkan pada PUT = tidak diubah. 422 untuk menu/aksi tak dikenal atau
+            menu yang bukan bagian `menu_keys`; 422 bila membatasi peran Owner; 409 bila perubahan membuat tak ada lagi
+            peran dengan AKSI PENUH pada `users` dan `roles`.
 
     UserInput:
       type: object

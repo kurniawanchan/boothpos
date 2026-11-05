@@ -1351,7 +1351,14 @@
     "role_created": "Role created.",
     "role_deleted": "Role deleted.",
     "delete_role": "Delete role?",
-    "delete_role_confirm": "The role '{name}' will be deleted. This action cannot be undone."
+    "delete_role_confirm": "The role '{name}' will be deleted. This action cannot be undone.",
+    "locked_owner": "The Owner role always has full access and cannot be restricted.",
+    "view_only": "View only",
+    "full_access": "Full access",
+    "view_only_for": "{menu}: view only",
+    "full_access_for": "{menu}: full access",
+    "action_view": "View",
+    "custom_actions": "custom actions"
   },
   "activity_log": {
     "col_when": "Time",

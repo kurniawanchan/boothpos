@@ -31,6 +31,17 @@ export const useAuthStore = defineStore('auth', {
      * this feature — see specs/001-user-store-settings).
      */
     canAccessMenu: (state) => (menuKey) => (state.user?.menu_keys ?? []).includes(menuKey),
+    /**
+     * 057 — izin AKSI per menu (kosmetik; server menegakkan). Dibaca dari `permissions` hasil GET /auth/me.
+     * Payload tanpa `permissions` (server lama / sebelum fitur ini) = tak ada informasi pembatasan ⇒ tampilkan
+     * (perilaku lama, semua tombol); server tetap menolak yang tak diizinkan. Layar hanya dirender untuk pengguna yang
+     * sudah masuk, jadi "tanpa pengguna" diperlakukan sama (tak ada informasi pembatasan).
+     */
+    canDo: (state) => (menuKey, action = 'view') => {
+      const perms = state.user?.permissions;
+      if (!perms) return true;
+      return (perms[menuKey] ?? []).includes(action);
+    },
   },
   actions: {
     async login(username, password) {
@@ -38,6 +49,14 @@ export const useAuthStore = defineStore('auth', {
       setToken(token);
       this.user = user;
       syncLocale(user);
+    },
+    // 057 — muat ulang izin (mis. peran diubah saat pengguna sedang masuk, atau 403 `action_not_allowed`).
+    async refreshPermissions() {
+      try {
+        this.user = await authApi.me();
+      } catch {
+        // Gagal memuat ulang: biarkan izin lama; permintaan berikutnya tetap ditegakkan server.
+      }
     },
     async setLanguage(language) {
       const updated = await authApi.updateLanguage(language);

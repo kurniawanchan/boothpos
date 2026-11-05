@@ -75,6 +75,18 @@ class User extends Authenticatable
     }
 
     /**
+     * 057 — izin AKSI per menu (View/Create/Edit/Delete/aksi bernama). `canAccessMenu($m)` setara
+     * `canDo($m, 'view')` dan tetap dipakai 147 pemanggil lama. Pasangan (menu, aksi) tak dikenal melempar
+     * supaya salah ketik tak diam-diam menolak atau memberi akses. Tak menambah query: peran sudah dimuat.
+     */
+    public function canDo(string $menuKey, string $action = 'view'): bool
+    {
+        \App\Support\MenuActions::assertValid($menuKey, $action);
+
+        return $this->role?->allows($menuKey, $action) ?? false;
+    }
+
+    /**
      * Sama seperti canAccessMenu() tapi untuk gerbang gabungan yang
      * menyentuh beberapa menu sekaligus (mis. impor/ekspor data master
      * lintas entitas) — delegasi ke Role::canAccessAnyOf() supaya tidak

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\MenuActions;
 use App\Support\MenuKeys;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
@@ -10,6 +11,18 @@ use Illuminate\Validation\Rule;
 
 class UpdateRoleRequest extends FormRequest
 {
+    use \App\Http\Requests\Concerns\ValidatesMenuActions;
+
+    protected function effectiveMenuKeys(): array
+    {
+        return (array) ($this->input('menu_keys') ?? $this->route('role')?->menu_keys ?? []);
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(fn ($v) => $this->validateMenuActions($v));
+    }
+
     public function authorize(): bool
     {
         // Ini HANYA gerbang menu ('roles' di menu_keys) → 403. Guard FR-013
@@ -39,6 +52,10 @@ class UpdateRoleRequest extends FormRequest
             ],
             'menu_keys' => ['sometimes', 'required', 'array'],
             'menu_keys.*' => [Rule::in(MenuKeys::keys())],
+            // 057 — aksi TAMBAHAN per menu; diperiksa terhadap registri dan terhadap menu yang dimiliki peran.
+            'menu_actions' => ['sometimes', 'nullable', 'array'],
+            'menu_actions.*' => ['array'],
+            'menu_actions.*.*' => ['string'],
         ];
     }
 

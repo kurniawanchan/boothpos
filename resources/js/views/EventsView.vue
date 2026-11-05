@@ -169,7 +169,7 @@ async function performDelete() {
         @update:model-value="(v) => setFilter({ status: v || undefined })"
       />
       <span class="flex-1"></span>
-      <BaseButton v-if="auth.canAccessMenu('settings')" @click="openCreate">
+      <BaseButton v-if="(auth.canAccessMenu('settings')) && auth.canDo('events', 'create')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('events_sessions.new_event') }}
       </BaseButton>
@@ -185,11 +185,11 @@ async function performDelete() {
         </template>
         <template #cell-actions="{ row }">
           <div v-if="auth.canAccessMenu('settings')" class="flex justify-end gap-1.5">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
-            <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'active')">{{ t('events_sessions.activate') }}</button>
-            <button v-if="row.status === 'draft'" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="transition(row, 'cancelled')">{{ t('events_sessions.cancel_event') }}</button>
-            <button v-if="row.status === 'active'" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'closed')">{{ t('events_sessions.close_event') }}</button>
-            <button v-if="isOwnerOrAdmin" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
+            <button v-if="auth.canDo('events', 'edit')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button v-if="(row.status === 'draft') && auth.canDo('events', 'status')" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'active')">{{ t('events_sessions.activate') }}</button>
+            <button v-if="(row.status === 'draft') && auth.canDo('events', 'status')" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="transition(row, 'cancelled')">{{ t('events_sessions.cancel_event') }}</button>
+            <button v-if="(row.status === 'active') && auth.canDo('events', 'status')" type="button" class="text-[12.5px] font-semibold text-brand-active" @click="transition(row, 'closed')">{{ t('events_sessions.close_event') }}</button>
+            <button v-if="(isOwnerOrAdmin) && auth.canDo('events', 'delete')" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>

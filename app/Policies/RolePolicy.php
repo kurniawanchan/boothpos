@@ -75,7 +75,8 @@ class RolePolicy
         $anotherCapableRoleExists = Role::query()
             ->where('id', '!=', $excludeRoleId)
             ->get()
-            ->contains(fn (Role $candidate) => count(array_intersect($reserved, $candidate->menu_keys ?? [])) === count($reserved));
+            // 057 — "mampu" kini berarti AKSI PENUH pada kedua menu reserved, bukan sekadar memiliki menunya.
+            ->contains(fn (Role $candidate) => count(array_intersect($reserved, $candidate->menu_keys ?? [])) === count($reserved) && $candidate->hasFullAccessTo($reserved));
 
         return ! $anotherCapableRoleExists;
     }

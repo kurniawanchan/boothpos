@@ -9,6 +9,7 @@ import { listBackups, createBackup, downloadBackup, restoreBackup, restoreFromUp
 import { useToastStore } from '../../stores/toast';
 import { formatDateTime } from '../../utils/date';
 import { reloadApp } from '../../utils/reloadApp';
+import { useAuthStore } from '../../stores/auth';
 
 /**
  * Cadangan & pemulihan database. Seluruh aturan penting ada di server
@@ -22,6 +23,7 @@ import { reloadApp } from '../../utils/reloadApp';
 const CONFIRM_WORD = 'RESTORE';
 
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 const toast = useToastStore();
 
 const backups = ref([]);
@@ -160,7 +162,7 @@ async function performRestore() {
         <span class="text-[15px] font-bold tracking-tight">{{ t('backup.title') }}</span>
         <p class="max-w-[640px] text-[12px] leading-relaxed text-muted-3">{{ t('backup.description') }}</p>
       </div>
-      <BaseButton size="sm" :loading="creating" @click="create">{{ t('backup.create') }}</BaseButton>
+      <BaseButton v-if="auth.canDo('settings', 'backup')" size="sm" :loading="creating" @click="create">{{ t('backup.create') }}</BaseButton>
     </div>
 
     <p v-if="loading" class="text-[12.5px] text-muted-3">{{ t('backup.loading') }}</p>
@@ -176,9 +178,9 @@ async function performRestore() {
           </span>
         </div>
         <div class="flex items-center gap-2">
-          <BaseButton variant="secondary" size="sm" :loading="downloadingId === backup.id" @click="download(backup)">{{ t('backup.download') }}</BaseButton>
-          <BaseButton variant="danger" size="sm" @click="askRestore({ kind: 'backup', id: backup.id })">{{ t('backup.restore') }}</BaseButton>
-          <BaseButton variant="secondary" size="sm" @click="deleteTarget = backup">{{ t('common.delete') }}</BaseButton>
+          <BaseButton v-if="auth.canDo('settings', 'backup')" variant="secondary" size="sm" :loading="downloadingId === backup.id" @click="download(backup)">{{ t('backup.download') }}</BaseButton>
+          <BaseButton v-if="auth.canDo('settings', 'restore')" variant="danger" size="sm" @click="askRestore({ kind: 'backup', id: backup.id })">{{ t('backup.restore') }}</BaseButton>
+          <BaseButton v-if="auth.canDo('settings', 'backup')" variant="secondary" size="sm" @click="deleteTarget = backup">{{ t('common.delete') }}</BaseButton>
         </div>
       </li>
     </ul>
@@ -192,7 +194,7 @@ async function performRestore() {
           <input type="file" accept=".sql" class="sr-only" @change="onFileChosen" />
         </label>
         <span v-if="chosenFile" class="font-mono text-[12px] text-muted-4">{{ chosenFile.name }}</span>
-        <BaseButton variant="danger" size="sm" :disabled="!chosenFile" @click="askRestore({ kind: 'file', file: chosenFile })">{{ t('backup.upload_restore') }}</BaseButton>
+        <BaseButton v-if="auth.canDo('settings', 'restore')" variant="danger" size="sm" :disabled="!chosenFile" @click="askRestore({ kind: 'file', file: chosenFile })">{{ t('backup.upload_restore') }}</BaseButton>
       </div>
     </div>
 

@@ -53,6 +53,11 @@ class MasterDataImportController extends Controller
             return response()->json(['message' => __('master_data_import.not_authorized_template')], 403);
         }
 
+        // 057 — impor menyentuh banyak entitas: `import` wajib pada setiap menu master data yang dipegang pengguna.
+        if (! \App\Support\MenuActions::userMayImportMasterData($request->user())) {
+            return response()->json(['message' => __('permissions.action_not_allowed', ['action' => __('permissions.actions.import'), 'menu' => 'master data']), 'code' => 'action_not_allowed', 'action' => 'import'], 403);
+        }
+
         $sheets = array_map(
             fn (string $sheet) => new SheetArrayExport(
                 $sheet,
@@ -67,6 +72,10 @@ class MasterDataImportController extends Controller
 
     public function store(ImportMasterDataRequest $request): JsonResponse
     {
+        // 057 — impor menyentuh banyak entitas: `import` wajib pada setiap menu master data yang dipegang pengguna.
+        if (! \App\Support\MenuActions::userMayImportMasterData($request->user())) {
+            return response()->json(['message' => __('permissions.action_not_allowed', ['action' => __('permissions.actions.import'), 'menu' => 'master data']), 'code' => 'action_not_allowed', 'action' => 'import'], 403);
+        }
         $file = $request->file('file');
 
         $actualMime = $file->getMimeType();

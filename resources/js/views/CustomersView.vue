@@ -287,16 +287,16 @@ const isImportDone = computed(() => !!previewResult.value?.applied);
         />
       </div>
       <template v-if="canBulkManageCustomers">
-        <BaseButton variant="secondary" :loading="exporting" @click="doExportCustomers">
+        <BaseButton v-if="auth.canDo('customers', 'export')" variant="secondary" :loading="exporting" @click="doExportCustomers">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('events_sessions.export_customers_action') }}
         </BaseButton>
-        <BaseButton variant="secondary" @click="openImport">
+        <BaseButton v-if="auth.canDo('customers', 'import')" variant="secondary" @click="openImport">
           <i class="ph-duotone ph-upload-simple text-[16px]" aria-hidden="true"></i>
           {{ t('events_sessions.import_customers_action') }}
         </BaseButton>
       </template>
-      <BaseButton @click="openCreate">
+      <BaseButton v-if="auth.canDo('customers', 'create')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('events_sessions.new_customer') }}
       </BaseButton>
@@ -310,8 +310,8 @@ const isImportDone = computed(() => !!previewResult.value?.applied);
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
             <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openTransactions(row)">{{ t('events_sessions.view_transactions') }}</button>
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
-            <button v-if="isOwnerOrAdmin" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
+            <button v-if="auth.canDo('customers', 'edit')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button v-if="(isOwnerOrAdmin) && auth.canDo('customers', 'delete')" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>

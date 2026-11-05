@@ -6,6 +6,7 @@ import { formatIDR, parseMoney, toMoneyString } from '../../utils/money';
 import EmptyState from '../ui/EmptyState.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
+import { useAuthStore } from '../../stores/auth';
 
 const props = defineProps({
   discount: { type: Number, default: 0 },
@@ -19,6 +20,7 @@ const emit = defineEmits(['update:discount', 'pick-customer', 'pay', 'save-draft
 
 const cart = usePosCartStore();
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 
 const subtotalNum = computed(() => parseMoney(cart.subtotal));
 const total = computed(() => Math.max(subtotalNum.value - (props.discount || 0), 0));
@@ -53,7 +55,7 @@ function openImageLightbox(item) {
            keranjang (bukan di baris pencarian). flex-wrap: di lebar sempit tombol turun baris,
            tidak menimpa judul atau tombol Kosongkan. -->
       <div class="flex flex-wrap gap-2">
-        <BaseButton variant="secondary" size="sm" :disabled="cart.isEmpty" :loading="savingDraft" @click="emit('save-draft')">
+        <BaseButton v-if="auth.canDo('pos', 'draft')" variant="secondary" size="sm" :disabled="cart.isEmpty" :loading="savingDraft" @click="emit('save-draft')">
           <i class="ph-duotone ph-note-pencil text-[15px]" aria-hidden="true"></i>
           {{ t('pos.save_as_draft') }}
         </BaseButton>
@@ -129,7 +131,7 @@ function openImageLightbox(item) {
         <span class="text-[14px] font-bold">{{ t('pos.total') }}</span>
         <span class="text-[25px] font-extrabold tracking-tight">{{ formatIDR(total) }}</span>
       </div>
-      <BaseButton size="lg" class="w-full" :disabled="cart.isEmpty || !canCheckout" @click="emit('pay')">
+      <BaseButton v-if="auth.canDo('pos', 'create')" size="lg" class="w-full" :disabled="cart.isEmpty || !canCheckout" @click="emit('pay')">
         {{ t('pos.pay') }}<i class="ph-duotone ph-arrow-right text-[18px]" aria-hidden="true"></i>
       </BaseButton>
       <p v-if="!canCheckout && checkoutBlockedReason" class="text-center text-[11.5px] text-danger-text">{{ checkoutBlockedReason }}</p>

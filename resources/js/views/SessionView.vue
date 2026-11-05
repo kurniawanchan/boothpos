@@ -12,9 +12,11 @@ import BaseInput from '../components/ui/BaseInput.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
+import { useAuthStore } from '../stores/auth';
 
 const toast = useToastStore();
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 
 const loading = ref(true);
 const session = ref(null);
@@ -163,7 +165,7 @@ async function handleClose() {
         <i class="ph-duotone ph-info text-[18px]" aria-hidden="true"></i>
         {{ t('events_sessions.no_active_event_open_one') }}
       </div>
-      <form v-else class="flex flex-col gap-3.5" @submit.prevent="handleOpen">
+      <form v-else-if="auth.canDo('session', 'create')" class="flex flex-col gap-3.5" @submit.prevent="handleOpen">
         <BaseSelect
           v-model="openForm.event_id"
           :label="t('events_sessions.event')"
@@ -278,7 +280,7 @@ async function handleClose() {
           :error="closeErrors.notes"
         />
 
-        <BaseButton variant="dark" size="lg" class="w-full" :loading="closing" @click="handleClose">
+        <BaseButton v-if="auth.canDo('session', 'edit')" variant="dark" size="lg" class="w-full" :loading="closing" @click="handleClose">
           <i class="ph-duotone ph-lock-simple text-[17px]" aria-hidden="true"></i>
           {{ t('events_sessions.close_session_btn') }}
         </BaseButton>

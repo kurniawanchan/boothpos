@@ -80,17 +80,45 @@ class RoleController extends Controller
         // kunci reserved. Mengubah name saja, atau mengubah menu_keys tapi
         // tetap mempertahankan keduanya, tidak pernah bisa melanggar guard
         // ini — dicek dulu di sini murah, sebelum query lintas-peran.
-        if (array_key_exists('menu_keys', $data)) {
-            $stillCapable = count(array_intersect(MenuKeys::RESERVED, $data['menu_keys'])) === count(MenuKeys::RESERVED);
+        if (array_key_exists('menu_keys', $data) || array_key_exists('menu_actions', $data)) {
+            // 057 — "mampu" = AKSI PENUH pada users DAN roles: dinilai pada peran SETELAH perubahan (hipotetis).
+            $after = new Role;
+            $after->name = $role->name;
+            $after->is_system_default = $role->is_system_default;
+            $after->menu_keys = $data['menu_keys'] ?? $role->menu_keys;
+            $after->menu_actions = array_key_exists('menu_actions', $data) ? $data['menu_actions'] : $role->menu_actions;
+            $stillCapable = count(array_intersect(MenuKeys::RESERVED, $after->menu_keys ?? [])) === count(MenuKeys::RESERVED)
+                && $after->hasFullAccessTo(MenuKeys::RESERVED);
 
             if (! $stillCapable && app(\App\Policies\RolePolicy::class)->wouldLeaveNoRoleCapableOfManagingAccess($role->id)) {
                 return response()->json([
                     'message' => __('policies.role_would_leave_no_capable_role'),
                 ], 409);
             }
+
+            // 057 (FR-013) — peran Owner bawaan selalu akses penuh: perubahan yang MEMBATASI aksinya ditolak.
+            // `isOwner()` curi-hasil (selalu penuh), jadi data yang DIUSULKAN diperiksa pada salinan tanpa penanda sistem.
+            $probe = new Role(['menu_keys' => $after->menu_keys, 'menu_actions' => $after->menu_actions]);
+            if ($role->isOwner() && array_key_exists('menu_actions', $data) && ! $probe->hasFullAccessTo($probe->menu_keys ?? [])) {
+                return response()->json(['message' => __('permissions.owner_locked')], 422);
+            }
         }
 
-        $role->update($data);
+        $old = $role->only(['menu_keys', 'menu_actions']);
+        DB::transaction(function () use ($role, $data, $old, $request) {
+            $role->update($data);
+            if (array_key_exists('menu_actions', $data) || array_key_exists('menu_keys', $data)) {
+                $this->activityLogger->log(
+                    userId: $request->user()?->id,
+                    action: 'updated',
+                    entityType: 'Role',
+                    entityId: $role->id,
+                    description: "Mengubah akses peran {$role->name}.",
+                    oldValues: $old,
+                    newValues: $role->only(['menu_keys', 'menu_actions']),
+                );
+            }
+        });
         $role->refresh()->loadCount(['users as active_users_count' => fn ($q) => $q->where('is_active', true)]);
 
         return response()->json(new RoleResource($role));
@@ -143,6 +171,10 @@ class RoleController extends Controller
      */
     public function menuKeys(): JsonResponse
     {
-        return response()->json(['data' => MenuKeys::list()]);
+        // 057 — tiap menu membawa aksi yang tersedia (label mengikuti bahasa pengguna) untuk grid pada editor peran.
+        return response()->json(['data' => array_map(
+            fn (array $m) => $m + ['actions' => \App\Support\MenuActions::describe($m['key'])],
+            MenuKeys::list(),
+        )]);
     }
 }

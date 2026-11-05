@@ -369,27 +369,27 @@ function openPreorderDetail(row) {
         :options="[{ value: '', label: t('reports.all_sellers') }, ...artists.map((a) => ({ value: a.id, label: a.name }))]"
       />
       <span class="flex-1"></span>
-      <BaseButton v-if="activeTab === 'settlement'" variant="secondary" @click="doExport('artist-settlements')">
+      <BaseButton v-if="(activeTab === 'settlement') && auth.canDo('reports', 'export')" variant="secondary" @click="doExport('artist-settlements')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         {{ t('common.export_xlsx') }}
       </BaseButton>
-      <BaseButton v-if="activeTab === 'profit'" variant="secondary" @click="doExport('profit')">
+      <BaseButton v-if="(activeTab === 'profit') && auth.canDo('reports', 'export')" variant="secondary" @click="doExport('profit')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         {{ t('common.export_xlsx') }}
       </BaseButton>
-      <BaseButton v-if="activeTab === 'artist-profit'" variant="secondary" @click="doExport('artist-profit')">
+      <BaseButton v-if="(activeTab === 'artist-profit') && auth.canDo('reports', 'export')" variant="secondary" @click="doExport('artist-profit')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         {{ t('common.export_xlsx') }}
       </BaseButton>
-      <BaseButton v-if="activeTab === 'purchases'" variant="secondary" @click="doExport('purchases')">
+      <BaseButton v-if="(activeTab === 'purchases') && auth.canDo('reports', 'export')" variant="secondary" @click="doExport('purchases')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         {{ t('common.export_xlsx') }}
       </BaseButton>
-      <BaseButton v-if="activeTab === 'stock-by-artist'" variant="secondary" @click="doExport('stock-by-artist')">
+      <BaseButton v-if="(activeTab === 'stock-by-artist') && auth.canDo('reports', 'export')" variant="secondary" @click="doExport('stock-by-artist')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         {{ t('common.export_xlsx') }}
       </BaseButton>
-      <BaseButton v-if="activeTab === 'preorder'" variant="secondary" @click="doExport('preorder')">
+      <BaseButton v-if="(activeTab === 'preorder') && auth.canDo('reports', 'export')" variant="secondary" @click="doExport('preorder')">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         {{ t('common.export_xlsx') }}
       </BaseButton>

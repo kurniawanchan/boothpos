@@ -14,11 +14,13 @@ import BaseButton from '../components/ui/BaseButton.vue';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import SettlementStatusPill from '../components/settlement/SettlementStatusPill.vue';
+import { useAuthStore } from '../stores/auth';
 
 // 076-settlement-tab-session-branding — daftar settlement seller + dialog
 // "Settlement baru". Daftar, filter, dan TOTAL semuanya dari server (total
 // mengikuti baris terfilter); layar ini tidak menghitung uang sendiri.
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 const router = useRouter();
 const toast = useToastStore();
 
@@ -147,7 +149,7 @@ async function createDraft() {
         <BaseSelect v-model="sellerFilter" :options="sellerOptions" :aria-label="t('settlements.seller')" @update:model-value="applyFilters" />
         <BaseSelect v-model="statusFilter" :options="statusOptions" :aria-label="t('settlements.col_status')" @update:model-value="applyFilters" />
       </div>
-      <BaseButton @click="openNew">
+      <BaseButton v-if="auth.canDo('settlements', 'create')" @click="openNew">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('settlements.new') }}
       </BaseButton>

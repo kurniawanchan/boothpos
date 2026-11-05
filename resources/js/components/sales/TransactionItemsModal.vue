@@ -102,8 +102,14 @@ const showReceipt = ref(false);
 // Ringkasan + riwayat bersama dengan pre-order; Tambah pembayaran selama masih ada sisa dan
 // penjualannya tidak batal; Hapus hanya owner/admin (server menegakkan: 403 / 409).
 const isOwnerOrAdmin = computed(() => ['owner', 'admin'].includes((auth.role || '').toLowerCase()));
-const canAddPayment = computed(() => !!order.value && !voided.value && parseMoney(order.value.payment_summary?.remaining) > 0);
-const canDeletePayments = computed(() => isOwnerOrAdmin.value && !voided.value);
+// 057 — peran dengan Sales = View saja tak melihat tombol ubah apa pun (server tetap menolak dengan 403).
+const canAddPayment = computed(() => !!order.value && !voided.value && parseMoney(order.value.payment_summary?.remaining) > 0 && auth.canDo('sales', 'payment'));
+const canDeletePayments = computed(() => isOwnerOrAdmin.value && !voided.value && auth.canDo('sales', 'payment'));
+const paymentAllow = computed(() => ({
+  verify: auth.canDo('sales', 'verify'),
+  confirm: auth.canDo('sales', 'payment'),
+  method: auth.canDo('sales', 'payment_method'),
+}));
 const showAddPayment = ref(false);
 const paymentDeleteTarget = ref(null);
 const deletingPayment = ref(false);
@@ -202,7 +208,7 @@ async function performVerify() {
 // Digerbang menu 'settings' — persis aturan server (OrderController::void() memetakan aksi
 // ini ke canAccessMenu('settings')); ini hanya cermin tampilan, server tetap yang menolak (403).
 // Hanya untuk transaksi yang masih berjalan: yang sudah batal tak bisa dibatalkan dua kali.
-const canVoid = computed(() => auth.canAccessMenu('settings') && order.value?.status === 'completed');
+const canVoid = computed(() => auth.canAccessMenu('settings') && auth.canDo('sales', 'void') && order.value?.status === 'completed');
 const showVoid = ref(false);
 const voidReason = ref('');
 const voiding = ref(false);
@@ -322,7 +328,7 @@ async function performVoid() {
           <div class="flex items-baseline justify-between border-t border-dashed border-line-2 pt-2"><span class="text-[13.5px] font-bold">{{ t('reports.col_total') }}</span><span class="text-[19px] font-extrabold tracking-tight">{{ formatIDR(order.total_amount) }}</span></div>
         </div>
 
-        <div v-if="order.reference && (order.reference.note || order.reference.has_image || order.reference.can_edit)" data-testid="order-reference" class="flex flex-col gap-2 rounded-lg border border-line-2 px-4 py-3.5">
+        <div v-if="order.reference && (order.reference.note || order.reference.has_image || (order.reference.can_edit && auth.canDo('sales', 'reference')))" data-testid="order-reference" class="flex flex-col gap-2 rounded-lg border border-line-2 px-4 py-3.5">
           <span class="text-[12px] font-bold uppercase tracking-wider text-muted-3">{{ t('sales_reference.title') }}</span>
           <p v-if="order.reference.note" class="line-clamp-3 whitespace-pre-line break-words text-[13px]">{{ order.reference.note }}</p>
           <!-- 055 — gambar langsung terlihat sebagai thumbnail (dulu hanya teks "Gambar"); klik = ukuran penuh. -->
@@ -341,6 +347,7 @@ async function performVoid() {
             :proof-thumbnails="true"
             :show-print="false"
             :can-delete="canDeletePayments"
+            :allow="paymentAllow"
             @delete="(p) => (paymentDeleteTarget = p)"
             @view-proof="viewPaymentProof"
             @verify="(p) => (verifyTarget = p)"

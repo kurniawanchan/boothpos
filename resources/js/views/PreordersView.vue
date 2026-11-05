@@ -723,12 +723,13 @@ function rowActions(row) {
       title: noPayment ? t('preorders.print_payment_invoice_disabled') : '',
     },
   ];
-  if (!['handed_over', 'cancelled'].includes(row.status)) actions.push({ key: 'edit', label: t('common.edit') });
-  if (['ordered', 'cancelled'].includes(row.status)) actions.push({ key: 'delete', label: t('common.delete'), danger: true });
-  actions.push({ key: 'duplicate', label: t('preorders.duplicate') });
+  // 057 — izin aksi peran penampil: aksi yang tak diizinkan tak muncul di menu baris (server tetap menolak).
+  if (!['handed_over', 'cancelled'].includes(row.status) && auth.canDo('preorders', 'edit')) actions.push({ key: 'edit', label: t('common.edit') });
+  if (['ordered', 'cancelled'].includes(row.status) && auth.canDo('preorders', 'delete')) actions.push({ key: 'delete', label: t('common.delete'), danger: true });
+  if (auth.canDo('preorders', 'duplicate')) actions.push({ key: 'duplicate', label: t('preorders.duplicate') });
   // 027 — Split disembunyikan untuk status tertutup (pasti ditolak server) tetapi
   // DINONAKTIFKAN dengan alasan bila sudah ada pembayaran, seperti "Invoice pembayaran".
-  if (!['handed_over', 'cancelled'].includes(row.status)) {
+  if (!['handed_over', 'cancelled'].includes(row.status) && auth.canDo('preorders', 'split')) {
     const paid = !!row.has_payments || parseMoney(row.paid_amount) > 0;
     actions.push({
       key: 'split',
@@ -1433,20 +1434,20 @@ async function saveShipmentChanges() {
       />
       <span class="flex-1"></span>
       <template v-if="isOwnerOrAdmin">
-        <BaseButton variant="secondary" :loading="exporting" @click="doExportPreorders">
+        <BaseButton v-if="auth.canDo('preorders', 'export')" variant="secondary" :loading="exporting" @click="doExportPreorders">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('preorders.export_action') }}
         </BaseButton>
-        <BaseButton variant="secondary" @click="triggerImportFile">
+        <BaseButton v-if="auth.canDo('preorders', 'import')" variant="secondary" @click="triggerImportFile">
           <i class="ph-duotone ph-upload-simple text-[16px]" aria-hidden="true"></i>
           {{ t('preorders.import_action') }}
         </BaseButton>
-        <button type="button" class="text-[12px] font-semibold text-muted-4 underline hover:text-brand-active" @click="doDownloadImportTemplate">
+        <button v-if="auth.canDo('preorders', 'import')" type="button" class="text-[12px] font-semibold text-muted-4 underline hover:text-brand-active" @click="doDownloadImportTemplate">
           {{ t('preorders.download_template_action') }}
         </button>
         <input ref="importFileInput" type="file" accept=".xlsx" class="hidden" @change="onImportFileSelected" />
       </template>
-      <BaseButton @click="openCreate">
+      <BaseButton v-if="auth.canDo('preorders', 'create')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('preorders.new_preorder') }}
       </BaseButton>
@@ -1463,20 +1464,20 @@ async function saveShipmentChanges() {
         :options="[{ value: 'invoice', label: t('preorders.document_invoice_title') }, { value: 'payment_invoice', label: t('preorders.payment_receipt_title') }]"
       />
       <span class="flex-1"></span>
-      <BaseButton variant="secondary" size="sm" :loading="bulkDownloading" @click="doBulkDownload">
+      <BaseButton v-if="auth.canDo('preorders', 'export')" variant="secondary" size="sm" :loading="bulkDownloading" @click="doBulkDownload">
         <i class="ph-duotone ph-file-zip text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.bulk_download_action') }}
       </BaseButton>
-      <BaseButton variant="secondary" size="sm" :loading="bulkDownloading" @click="doBulkShippingSlips">
+      <BaseButton v-if="auth.canDo('preorders', 'export')" variant="secondary" size="sm" :loading="bulkDownloading" @click="doBulkShippingSlips">
         <i class="ph-duotone ph-truck text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.bulk_download_shipping_slip') }}
       </BaseButton>
-      <BaseButton variant="secondary" size="sm" :loading="bulkEmailing" @click="doBulkEmail">
+      <BaseButton v-if="auth.canDo('preorders', 'notify')" variant="secondary" size="sm" :loading="bulkEmailing" @click="doBulkEmail">
         <i class="ph-duotone ph-envelope-simple text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.bulk_email_action') }}
       </BaseButton>
       <!-- 027 — salinan dibuat satu per pre-order terpilih (tidak digabung). -->
-      <BaseButton variant="secondary" size="sm" :loading="duplicating" data-testid="bulk-duplicate" @click="doDuplicateSelected">
+      <BaseButton v-if="auth.canDo('preorders', 'duplicate')" variant="secondary" size="sm" :loading="duplicating" data-testid="bulk-duplicate" @click="doDuplicateSelected">
         <i class="ph-duotone ph-copy text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.duplicate_selected') }}
       </BaseButton>
@@ -1782,12 +1783,12 @@ async function saveShipmentChanges() {
           <div class="flex items-center justify-between gap-3">
             <span class="text-[14.5px] font-bold">{{ t('preorders.preorder_status') }}</span>
             <div class="flex items-center gap-2">
-              <BaseButton variant="secondary" size="sm" :loading="duplicating" data-testid="detail-duplicate" @click="doDuplicate([detail.id])">
+              <BaseButton v-if="auth.canDo('preorders', 'duplicate')" variant="secondary" size="sm" :loading="duplicating" data-testid="detail-duplicate" @click="doDuplicate([detail.id])">
                 <i class="ph-duotone ph-copy" aria-hidden="true"></i>
                 {{ t('preorders.duplicate') }}
               </BaseButton>
               <BaseButton
-                v-if="!['handed_over', 'cancelled'].includes(detail.status)"
+                v-if="!['handed_over', 'cancelled'].includes(detail.status) && auth.canDo('preorders', 'split')"
                 variant="secondary"
                 size="sm"
                 :disabled="(detail.payments ?? []).length > 0"
@@ -1833,9 +1834,9 @@ async function saveShipmentChanges() {
             </span>
           </div>
           <div v-if="!['handed_over', 'cancelled'].includes(detail.status)" class="flex flex-wrap items-center gap-2.5 pt-1.5">
-            <BaseButton v-if="detail.status === 'dp_paid'" size="sm" :loading="transitioning" @click="markArrived">{{ t('preorders.mark_arrived') }}</BaseButton>
-            <BaseButton v-if="detail.status === 'settled'" size="sm" :loading="transitioning" @click="markHandedOver">{{ t('preorders.mark_handed_over') }}</BaseButton>
-            <BaseButton v-if="['ordered', 'dp_paid', 'arrived'].includes(detail.status)" variant="danger" size="sm" @click="showCancelForm = true">{{ t('preorders.cancel_preorder_btn') }}</BaseButton>
+            <BaseButton v-if="(detail.status === 'dp_paid') && auth.canDo('preorders', 'status')" size="sm" :loading="transitioning" @click="markArrived">{{ t('preorders.mark_arrived') }}</BaseButton>
+            <BaseButton v-if="(detail.status === 'settled') && auth.canDo('preorders', 'status')" size="sm" :loading="transitioning" @click="markHandedOver">{{ t('preorders.mark_handed_over') }}</BaseButton>
+            <BaseButton v-if="(['ordered', 'dp_paid', 'arrived'].includes(detail.status)) && auth.canDo('preorders', 'status')" variant="danger" size="sm" @click="showCancelForm = true">{{ t('preorders.cancel_preorder_btn') }}</BaseButton>
             <span class="text-[11.5px] leading-relaxed text-muted-3">{{ t('preorders.handover_note') }}</span>
           </div>
         </div>
@@ -1850,7 +1851,7 @@ async function saveShipmentChanges() {
               v-for="opt in detailDispatchOptions"
               :key="opt.value"
               type="button"
-              :disabled="savingDispatch || detail.status === 'cancelled'"
+              :disabled="savingDispatch || detail.status === 'cancelled' || !auth.canDo('preorders', 'dispatch')"
               :aria-pressed="detail.dispatch_status === opt.value"
               class="h-9 rounded-lg border px-3.5 text-[12.5px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               :class="detail.dispatch_status === opt.value
@@ -1944,7 +1945,8 @@ async function saveShipmentChanges() {
                  owner/admin dan diaudit server. -->
             <PaymentHistoryList
               :payments="detail.payments ?? []"
-              :can-delete="canDeletePayments"
+              :can-delete="canDeletePayments && auth.canDo('preorders', 'payment')"
+              :allow="{ verify: auth.canDo('preorders', 'verify'), confirm: auth.canDo('preorders', 'payment'), method: auth.canDo('preorders', 'payment') }"
               @view-proof="(p) => viewPaymentProof(p.proof_id)"
               @edit-confirmation="(p) => (confirmationTarget = p)"
               @verify="(p) => (verifyTarget = p)"
@@ -1952,7 +1954,7 @@ async function saveShipmentChanges() {
               @delete="confirmDeletePayment"
             />
 
-            <BaseButton v-if="canAddPayment" data-testid="add-payment" @click="showRecordPayment = true">
+            <BaseButton v-if="(canAddPayment) && auth.canDo('preorders', 'payment')" data-testid="add-payment" @click="showRecordPayment = true">
               <i class="ph-duotone ph-plus-circle text-[17px]" aria-hidden="true"></i>
               {{ t('payment_ledger.add_payment') }}
             </BaseButton>
@@ -1972,7 +1974,7 @@ async function saveShipmentChanges() {
               <span>{{ t(`preorders.notification_status_${detail.latest_notification.status}`) }}</span>
             </div>
             <p v-else class="text-[12px] text-muted-3">{{ t('preorders.notification_none_yet') }}</p>
-            <BaseButton variant="secondary" size="sm" :loading="resendingNotification" @click="doResendNotification">
+            <BaseButton v-if="auth.canDo('preorders', 'notify')" variant="secondary" size="sm" :loading="resendingNotification" @click="doResendNotification">
               <i class="ph-duotone ph-paper-plane-tilt text-[15px]" aria-hidden="true"></i>
               {{ t('preorders.resend_notification_action') }}
             </BaseButton>
@@ -1987,7 +1989,7 @@ async function saveShipmentChanges() {
 
           <div v-if="!shipment && !showShipmentForm" class="flex flex-col items-start gap-2.5">
             <EmptyState icon="ph-truck" :message="t('preorders.no_shipment_data')" />
-            <BaseButton size="sm" @click="openShipmentForm">{{ t('preorders.create_shipment_data') }}</BaseButton>
+            <BaseButton v-if="auth.canDo('preorders', 'edit')" size="sm" @click="openShipmentForm">{{ t('preorders.create_shipment_data') }}</BaseButton>
           </div>
 
           <form v-else-if="showShipmentForm" class="grid grid-cols-2 gap-3.5" @submit.prevent="saveShipment">
@@ -2011,10 +2013,10 @@ async function saveShipmentChanges() {
             </div>
             <BaseInput v-model="shipment.tracking_number" :label="t('preorders.tracking_number')" :placeholder="t('preorders.not_filled_yet')" />
             <div class="flex justify-end gap-2.5">
-              <BaseButton v-if="shipment.status === 'pending'" variant="secondary" size="sm" @click="markPacked">{{ t('preorders.mark_packed') }}</BaseButton>
-              <BaseButton v-if="['pending', 'packed'].includes(shipment.status)" size="sm" @click="saveTrackingAndShip">{{ t('preorders.save_tracking_and_ship') }}</BaseButton>
-              <BaseButton v-if="shipment.status === 'shipped'" size="sm" @click="markDelivered">{{ t('preorders.mark_delivered') }}</BaseButton>
-              <BaseButton variant="secondary" size="sm" :loading="savingShipment" @click="saveShipmentChanges"><i class="ph-duotone ph-check text-[14px]" aria-hidden="true"></i>{{ t('preorders.save_shipment_changes') }}</BaseButton>
+              <BaseButton v-if="(shipment.status === 'pending') && auth.canDo('preorders', 'edit')" variant="secondary" size="sm" @click="markPacked">{{ t('preorders.mark_packed') }}</BaseButton>
+              <BaseButton v-if="(['pending', 'packed'].includes(shipment.status)) && auth.canDo('preorders', 'edit')" size="sm" @click="saveTrackingAndShip">{{ t('preorders.save_tracking_and_ship') }}</BaseButton>
+              <BaseButton v-if="(shipment.status === 'shipped') && auth.canDo('preorders', 'edit')" size="sm" @click="markDelivered">{{ t('preorders.mark_delivered') }}</BaseButton>
+              <BaseButton v-if="auth.canDo('preorders', 'edit')" variant="secondary" size="sm" :loading="savingShipment" @click="saveShipmentChanges"><i class="ph-duotone ph-check text-[14px]" aria-hidden="true"></i>{{ t('preorders.save_shipment_changes') }}</BaseButton>
               <BaseButton variant="secondary" size="sm" @click="downloadShippingSlip"><i class="ph-duotone ph-file-pdf text-[14px]" aria-hidden="true"></i>{{ t('preorders.download_shipping_slip') }}</BaseButton>
             </div>
           </div>

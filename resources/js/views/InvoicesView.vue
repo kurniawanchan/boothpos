@@ -257,20 +257,20 @@ function cancelImportPreview() {
         </select>
       </label>
       <template v-if="isOwnerOrAdmin">
-        <BaseButton variant="secondary" :loading="exporting" @click="doExportInvoices">
+        <BaseButton v-if="auth.canDo('invoices', 'export')" variant="secondary" :loading="exporting" @click="doExportInvoices">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('invoices.export_action') }}
         </BaseButton>
-        <BaseButton variant="secondary" :loading="importing" @click="triggerImportFile">
+        <BaseButton v-if="auth.canDo('invoices', 'import')" variant="secondary" :loading="importing" @click="triggerImportFile">
           <i class="ph-duotone ph-upload-simple text-[16px]" aria-hidden="true"></i>
           {{ t('invoices.import_action') }}
         </BaseButton>
-        <button type="button" class="text-[12px] font-semibold text-muted-4 underline hover:text-brand-active" @click="doDownloadImportTemplate">
+        <button v-if="auth.canDo('invoices', 'import')" type="button" class="text-[12px] font-semibold text-muted-4 underline hover:text-brand-active" @click="doDownloadImportTemplate">
           {{ t('invoices.download_template_action') }}
         </button>
         <input ref="importFileInput" type="file" accept=".xlsx" class="hidden" @change="onImportFileSelected" />
       </template>
-      <BaseButton @click="openCreate">
+      <BaseButton v-if="auth.canDo('invoices', 'create')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('invoices.new_invoice_btn') }}
       </BaseButton>

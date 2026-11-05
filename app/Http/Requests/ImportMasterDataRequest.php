@@ -41,10 +41,13 @@ class ImportMasterDataRequest extends FormRequest
         // supaya siapa pun yang bisa mengelola SALAH SATU entitas master
         // data tetap bisa mengimpornya secara massal, konsisten dengan
         // owner/admin/inventory hari ini.
-        return $this->user()?->canAccessAnyMenu([
+        $may = $this->user()?->canAccessAnyMenu([
             'artists', 'categories', 'products', 'stock', 'vendors', 'materials',
             'roles', 'users',
         ]) ?? false;
+
+        // 057 — plus aksi `import` pada setiap menu master data yang dipegang (dicek SEBELUM validasi berkas).
+        return $may && \App\Support\MenuActions::userMayImportMasterData($this->user());
     }
 
     /**
@@ -60,6 +63,14 @@ class ImportMasterDataRequest extends FormRequest
      */
     protected function failedAuthorization(): void
     {
+        // 057 — penolakan karena aksi `import` peran membawa kode yang dikenali klien (muatan sama dengan middleware).
+        if ($this->user()?->canAccessAnyMenu(['artists', 'categories', 'products', 'stock', 'vendors', 'materials', 'roles', 'users'])) {
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(response()->json([
+                'message' => __('permissions.action_not_allowed', ['action' => __('permissions.actions.import'), 'menu' => 'master data']),
+                'code' => 'action_not_allowed', 'action' => 'import',
+            ], 403));
+        }
+
         throw new AuthorizationException(
             'Hanya owner/admin/inventory yang dapat mengimpor data master.'
         );

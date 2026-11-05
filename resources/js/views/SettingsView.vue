@@ -14,9 +14,11 @@ import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 import ThemeColorPicker from '../components/settings/ThemeColorPicker.vue';
 import BackupRestoreSection from '../components/settings/BackupRestoreSection.vue';
+import { useAuthStore } from '../stores/auth';
 
 const settings = useSettingsStore();
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 const toast = useToastStore();
 
 const changingTier = ref(false);
@@ -416,13 +418,13 @@ onMounted(async () => {
       <span class="text-[15px] font-bold tracking-tight">{{ t('settings.app_name_section_title') }}</span>
       <BaseInput v-model="appNameInput" :label="t('settings.app_name_label')" :maxlength="APP_NAME_MAX_LENGTH" />
       <p class="text-[12px] leading-relaxed text-muted-3">{{ t('settings.app_name_hint') }}</p>
-      <BaseButton size="sm" class="self-start" :loading="savingAppName" @click="saveAppName">{{ t('settings.save_app_name') }}</BaseButton>
+      <BaseButton v-if="auth.canDo('settings', 'branding')" size="sm" class="self-start" :loading="savingAppName" @click="saveAppName">{{ t('settings.save_app_name') }}</BaseButton>
     </div>
 
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
       <span class="text-[15px] font-bold tracking-tight">{{ t('settings.theme_section_title') }}</span>
       <ThemeColorPicker v-model="themeColor" />
-      <BaseButton size="sm" class="self-start" :loading="savingTheme" @click="saveTheme">{{ t('settings.save_theme') }}</BaseButton>
+      <BaseButton v-if="auth.canDo('settings', 'branding')" size="sm" class="self-start" :loading="savingTheme" @click="saveTheme">{{ t('settings.save_theme') }}</BaseButton>
     </div>
 
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
@@ -432,13 +434,13 @@ onMounted(async () => {
         <input v-model="receiptShowLogo" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
         {{ t('settings.receipt_show_logo_label') }}
       </label>
-      <BaseButton size="sm" class="self-start" :loading="savingReceiptDisplay" @click="saveReceiptDisplay">{{ t('settings.save_receipt_display') }}</BaseButton>
+      <BaseButton v-if="auth.canDo('settings', 'edit')" size="sm" class="self-start" :loading="savingReceiptDisplay" @click="saveReceiptDisplay">{{ t('settings.save_receipt_display') }}</BaseButton>
     </div>
 
     <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
       <div class="flex items-center justify-between">
         <span class="text-[15px] font-bold tracking-tight">{{ t('settings.payment_channels') }}</span>
-        <BaseButton variant="secondary" size="sm" @click="openChannelForm">{{ t('settings.add') }}</BaseButton>
+        <BaseButton v-if="auth.canDo('settings', 'edit')" variant="secondary" size="sm" @click="openChannelForm">{{ t('settings.add') }}</BaseButton>
       </div>
       <div v-for="c in channels" :key="c.id" class="flex items-center gap-3 rounded-lg border border-line-3 bg-surface-subtle px-3.5 py-3">
         <img v-if="c.qr_image_url" :src="c.qr_image_url" :alt="t('pos.qr_code_for', { provider: c.provider })" class="h-10 w-10 flex-none rounded-md border border-line-2 object-contain" />
@@ -448,8 +450,8 @@ onMounted(async () => {
           <span class="font-mono text-[12px] text-muted-2">{{ t('settings.channel_account_number', { number: c.account_number || '—', name: c.account_name }) }}</span>
         </div>
         <StatusPill :variant="c.is_active ? 'mint' : 'neutral'">{{ c.is_active ? t('common.active') : t('common.inactive') }}</StatusPill>
-        <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-danger-text" @click="askDeleteChannel(c)">{{ t('common.delete') }}</button>
-        <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openChannelEdit(c)">{{ t('common.edit') }}</button>
+        <button v-if="auth.canDo('settings', 'edit')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-danger-text" @click="askDeleteChannel(c)">{{ t('common.delete') }}</button>
+        <button v-if="auth.canDo('settings', 'edit')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openChannelEdit(c)">{{ t('common.edit') }}</button>
       </div>
       <p class="border-t border-line-3 pt-3.5 text-[11.5px] leading-relaxed text-muted-3">
         {{ t('settings.cashier_masked_number_note') }}
@@ -478,7 +480,7 @@ onMounted(async () => {
               @change="onLogoChange"
             />
             <p v-if="logoError" class="text-[12px] font-semibold text-danger-text">{{ logoError }}</p>
-            <BaseButton v-if="logoFile" size="sm" class="self-start" :loading="uploadingLogo" @click="saveLogo">{{ t('settings.upload_logo') }}</BaseButton>
+            <BaseButton v-if="(logoFile) && auth.canDo('settings', 'branding')" size="sm" class="self-start" :loading="uploadingLogo" @click="saveLogo">{{ t('settings.upload_logo') }}</BaseButton>
           </div>
         </div>
       </div>
@@ -498,7 +500,7 @@ onMounted(async () => {
       <BaseInput v-model="storeForm.store_contact_person" :label="t('settings.contact_person_name')" :error="storeErrors.store_contact_person" />
       <BaseInput v-model="storeForm.store_contact_phone" :label="t('settings.phone')" :error="storeErrors.store_contact_phone" />
       <BaseInput v-model="storeForm.store_contact_email" :label="t('settings.email')" type="email" :error="storeErrors.store_contact_email" />
-      <BaseButton class="self-start" :loading="savingStore" @click="saveStoreIdentity">{{ t('common.save') }}</BaseButton>
+      <BaseButton v-if="auth.canDo('settings', 'branding')" class="self-start" :loading="savingStore" @click="saveStoreIdentity">{{ t('common.save') }}</BaseButton>
     </div>
 
     <!-- Cadangan & pemulihan database — halaman ini sudah digerbang menu

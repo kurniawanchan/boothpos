@@ -41,7 +41,11 @@ const props = defineProps({
   showProof: { type: Boolean, default: true },
   showPrint: { type: Boolean, default: true },
   proofThumbnails: { type: Boolean, default: false },
+  // 057 — izin AKSI peran penampil (kosmetik; server menegakkan). Komponen ini dipakai bersama Sales dan Pre-orders,
+  // jadi pemanggil memetakan aksinya sendiri (sales.* atau preorders.*); default semua boleh = perilaku lama.
+  allow: { type: Object, default: () => ({}) },
 });
+const may = (key) => props.allow[key] !== false;
 const emit = defineEmits(['view-proof', 'print', 'delete', 'edit-confirmation', 'verify', 'change-method']);
 
 // "Belum ada bukti" hanya bila server MENYATAKAN has_proof === false (non-tunai).
@@ -49,7 +53,7 @@ const lacksProof = (p) => p.method !== 'cash' && p.has_proof === false;
 // 032 — penanda verifikasi hanya untuk non-tunai yang statusnya diketahui (pending/verified).
 const verificationOf = (p) => (p.method !== 'cash' && ['pending', 'verified'].includes(p.verification) ? p.verification : null);
 // Aksi verifikasi hanya untuk entri yang MASIH pending, apa pun flag server (pertahanan berlapis: final, tanpa jalan kembali).
-const canVerify = (p) => !!p.can_verify && verificationOf(p) === 'pending';
+const canVerify = (p) => !!p.can_verify && may('verify') && verificationOf(p) === 'pending';
 // 032 — baris "Diverifikasi oleh … · waktu"; hanya untuk entri non-tunai yang sudah terverifikasi.
 function verifiedLine(p) {
   if (verificationOf(p) !== 'verified') return '';
@@ -108,7 +112,7 @@ const { t } = useI18n();
           </StatusPill>
         </div>
       </div>
-      <div v-if="(showProof && canViewProof(p)) || p.can_edit_confirmation || p.can_change_method || canVerify(p) || showPrint || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
+      <div v-if="(showProof && canViewProof(p)) || (p.can_edit_confirmation && may('confirm')) || (p.can_change_method && may('method')) || canVerify(p) || showPrint || canDelete" class="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-dashed border-line-2 pt-2">
         <button
           v-if="showProof && canViewProof(p)"
           type="button"
@@ -123,7 +127,7 @@ const { t } = useI18n();
           @click="emit('verify', p)"
         >{{ t('payment_ledger.mark_verified') }}</button>
         <button
-          v-if="p.can_edit_confirmation"
+          v-if="p.can_edit_confirmation && may('confirm')"
           type="button"
           class="whitespace-nowrap text-[12px] font-semibold text-brand-active hover:underline"
           data-testid="edit-confirmation"
@@ -131,7 +135,7 @@ const { t } = useI18n();
         >{{ hasAnyConfirmation(p) ? t('payment_ledger.edit_confirmation') : t('payment_ledger.add_confirmation') }}</button>
         <!-- 054 (US7) — koreksi metode/kanal; izin dan keadaan (batal, tunai di shift tertutup, kembalian) dihitung SERVER. -->
         <button
-          v-if="p.can_change_method"
+          v-if="p.can_change_method && may('method')"
           type="button"
           class="whitespace-nowrap text-[12px] font-semibold text-brand-active hover:underline"
           data-testid="change-method"

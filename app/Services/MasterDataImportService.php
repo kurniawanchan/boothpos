@@ -1833,12 +1833,33 @@ class MasterDataImportService
                 continue;
             }
 
+            // 057 — menu_actions (opsional): diparse terhadap menu yang AKAN dimiliki peran (kolom menu_keys bila diisi,
+            // kalau tidak yang tersimpan). Kosong = tak diubah (peran lama) / akses penuh (peran baru).
+            $menuActions = null;
+            if ($this->filled($values, 'menu_actions')) {
+                $held = $menuKeys ?? ($existing?->menu_keys ?? []);
+                $menuActions = $this->parseMenuActions($sheet, $row, $values['menu_actions'], $held);
+                if ($menuActions === null) {
+                    continue;
+                }
+                // Owner bawaan selalu akses penuh (D7): pembatasan lewat impor ditolak per-baris.
+                if ($existing?->isOwner()) {
+                    $probe = new Role(['menu_keys' => $held, 'menu_actions' => $menuActions]);
+                    if (! $probe->hasFullAccessTo($held)) {
+                        $this->addError($sheet, $row, 'menu_actions', __('permissions.owner_locked'));
+
+                        continue;
+                    }
+                }
+            }
+
             $existing === null ? $created++ : $updated++;
 
             $plan[] = [
                 'row' => $row,
                 'name' => $name,
                 'menu_keys' => $menuKeys,
+                'menu_actions' => $menuActions,
                 'exists' => $existing !== null,
             ];
         }
@@ -1846,6 +1867,44 @@ class MasterDataImportService
         $this->counts[$sheet] = ['rows' => count($rows), 'created' => $created, 'updated' => $updated, 'unchanged' => 0];
 
         return $plan;
+    }
+
+    /**
+     * 057 — "sales=void+export;pos=" -> ['sales' => ['void','export'], 'pos' => []]. Menu harus ada pada menu peran,
+     * aksi harus ada di registri; format salah/aksi-menu tak dikenal = galat per-baris pada kolom menu_actions.
+     */
+    private function parseMenuActions(string $sheet, int $row, mixed $value, array $heldMenus): ?array
+    {
+        $out = [];
+        foreach (array_filter(array_map('trim', explode(';', (string) $value)), fn ($p) => $p !== '') as $part) {
+            if (! str_contains($part, '=')) {
+                $this->addError($sheet, $row, 'menu_actions', "Format menu_actions salah pada '{$part}'. Pakai menu=aksi+aksi;menu2= (kosong setelah = berarti hanya lihat).");
+
+                return null;
+            }
+            [$menu, $list] = array_map('trim', explode('=', $part, 2));
+            if (! MenuKeys::isValid($menu)) {
+                $this->addError($sheet, $row, 'menu_actions', "Menu tidak dikenal pada menu_actions: {$menu}.");
+
+                return null;
+            }
+            if (! in_array($menu, $heldMenus, true)) {
+                $this->addError($sheet, $row, 'menu_actions', "Menu {$menu} bukan bagian dari menu_keys peran ini.");
+
+                return null;
+            }
+            $actions = array_values(array_filter(array_map('trim', explode('+', $list)), fn ($a) => $a !== ''));
+            foreach ($actions as $action) {
+                if (! in_array($action, \App\Support\MenuActions::for($menu), true)) {
+                    $this->addError($sheet, $row, 'menu_actions', "Aksi '{$action}' tidak dikenal untuk menu {$menu}.");
+
+                    return null;
+                }
+            }
+            $out[$menu] = array_values(array_unique($actions));
+        }
+
+        return $out;
     }
 
     /**
@@ -2004,6 +2063,10 @@ class MasterDataImportService
                 // jaga-jaga saja supaya tidak pernah menyimpan peran baru
                 // tanpa akses menu sama sekali.
                 $role->menu_keys = [];
+            }
+
+            if (($entry['menu_actions'] ?? null) !== null) {
+                $role->menu_actions = $entry['menu_actions'];
             }
 
             $role->name = $entry['name'];

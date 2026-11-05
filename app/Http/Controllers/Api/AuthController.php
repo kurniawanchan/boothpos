@@ -143,6 +143,9 @@ class AuthController extends Controller
             // T009 — permukaan resolusi menu_keys sekali per sesi frontend
             // (bukan per-menu, lihat plan.md Performance Goals).
             'menu_keys' => $user->role?->menu_keys ?? [],
+            // 057 — izin aksi per menu, hasil Role::resolvedActions(): SATU sumber dengan penegakan di server,
+            // jadi layar tak pernah menampilkan tombol yang akan ditolak (dan sebaliknya).
+            'permissions' => $user->role?->resolvedActions() ?? [],
             'is_active' => $user->is_active,
             'language' => $user->language,
             'photo_url' => $this->imageUploadService->url($user->photo_path),
