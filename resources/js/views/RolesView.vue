@@ -35,20 +35,25 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editingRole = ref(null);
-const form = reactive({ name: '', menu_keys: [] });
+const form = reactive({ name: '', menu_keys: [], menu_actions: {} });
 const formErrors = reactive({});
 const saving = ref(false);
 
 function openCreate() {
   editingRole.value = null;
-  Object.assign(form, { name: '', menu_keys: [] });
+  Object.assign(form, { name: '', menu_keys: [], menu_actions: {} });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
 
 function openEdit(role) {
   editingRole.value = role;
-  Object.assign(form, { name: role.name, menu_keys: [...role.menu_keys] });
+  // 057 — `menu_actions` dari server selalu eksplisit per menu (RoleResource); salin dalam agar tak mengubah baris daftar.
+  Object.assign(form, {
+    name: role.name,
+    menu_keys: [...role.menu_keys],
+    menu_actions: Object.fromEntries(Object.entries(role.menu_actions ?? {}).map(([k, v]) => [k, [...v]])),
+  });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -56,7 +61,7 @@ function openEdit(role) {
 async function saveRole() {
   saving.value = true;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
-  const payload = { name: form.name, menu_keys: form.menu_keys };
+  const payload = { name: form.name, menu_keys: form.menu_keys, menu_actions: form.menu_actions };
   try {
     if (editingRole.value) {
       await updateRole(editingRole.value.id, payload);
@@ -132,6 +137,7 @@ async function performDelete() {
         <template #cell-name="{ row }"><span class="font-semibold">{{ row.name }}</span></template>
         <template #cell-menu_keys="{ row }">
           <span class="text-[12.5px] text-muted-4">{{ t('roles.menu_count', { count: row.menu_keys.length }) }}</span>
+          <span v-if="row.has_custom_actions" class="ml-1.5 text-[11.5px] font-semibold text-brand-active" data-testid="custom-actions">· {{ t('roles.custom_actions') }}</span>
         </template>
         <template #cell-user_count="{ row }">{{ t('roles.user_count', { count: row.user_count }) }}</template>
         <template #cell-is_system_default="{ row }">
@@ -147,10 +153,10 @@ async function performDelete() {
       <TablePagination :meta="meta" @change="setPage" />
     </div>
 
-    <BaseModal :open="showForm" :title="editingRole ? t('roles.edit_role') : t('roles.new_role')" max-width-class="max-w-[560px]" @close="showForm = false">
+    <BaseModal :open="showForm" :title="editingRole ? t('roles.edit_role') : t('roles.new_role')" max-width-class="max-w-[760px]" @close="showForm = false">
       <form class="flex flex-col gap-3.5 px-6 py-5" @submit.prevent="saveRole">
-        <BaseInput v-model="form.name" :label="t('roles.role_name')" required maxlength="50" :error="formErrors.name" />
-        <RoleMenuPicker v-model="form.menu_keys" :error="formErrors['menu_keys.0'] || formErrors.menu_keys" />
+        <BaseInput v-model="form.name" :label="t('roles.role_name')" required maxlength="50" :disabled="!!editingRole?.is_locked" :error="formErrors.name" />
+        <RoleMenuPicker v-model="form.menu_keys" v-model:actions="form.menu_actions" :locked="!!editingRole?.is_locked" :error="formErrors['menu_keys.0'] || formErrors.menu_keys" />
         <div class="mt-1 flex justify-end gap-2">
           <BaseButton type="button" variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
           <BaseButton type="submit" :loading="saving">{{ t('common.save') }}</BaseButton>

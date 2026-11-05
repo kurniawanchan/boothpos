@@ -131,8 +131,10 @@ final class MasterDataSheets
             // ini satu-satunya cara mewakili daftar di dalam satu sel
             // tanpa membuat satu baris per kombinasi role+menu). Divalidasi
             // terhadap App\Support\MenuKeys::keys() saat apply.
+            // 057 — menu_actions (OPSIONAL): `menu=aksi+aksi;menu2=` (kosong setelah `=` = hanya lihat). Sel kosong/kolom
+            // tak ada = baris lama: peran baru akses penuh, peran yang sudah ada tak diubah.
             self::ROLES => [
-                'name', 'menu_keys',
+                'name', 'menu_keys', 'menu_actions',
             ],
             // role_name menunjuk Role.name (kolom unik peran) — BUKAN kode,
             // karena Role tidak punya kolom code. Sengaja tidak ada kolom
@@ -260,6 +262,7 @@ final class MasterDataSheets
             self::ROLES => [
                 'name' => 'Kasir Cabang Contoh',
                 'menu_keys' => 'pos,session',
+                'menu_actions' => 'pos=create+draft;session=create+edit',
             ],
             self::USERS => [
                 // role_name PERSIS SAMA dengan baris contoh sheet 'roles'

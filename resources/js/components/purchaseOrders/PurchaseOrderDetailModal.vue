@@ -12,6 +12,7 @@ import { formatIDR } from '../../utils/money';
 import { formatDateTime } from '../../utils/date';
 import { downloadElementAsPdf } from '../../utils/pdfCapture';
 import { useToastStore } from '../../stores/toast';
+import { useAuthStore } from '../../stores/auth';
 
 /**
  * 006-purchase-order-and-ops (US1) — cetak faktur memakai pola yang sama
@@ -25,6 +26,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'changed']);
 
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 const toast = useToastStore();
 
 const po = ref(null);
@@ -159,7 +161,7 @@ async function submitPayment() {
           <div class="flex-1">
             <BaseSelect v-model="assignArtistId" :options="artistOptions" :placeholder="t('purchase_orders.seller_placeholder')" />
           </div>
-          <BaseButton size="sm" :loading="assigningSeller" :disabled="!assignArtistId" @click="assignSeller">{{ t('purchase_orders.assign_seller') }}</BaseButton>
+          <BaseButton v-if="auth.canDo('purchase_orders', 'edit')" size="sm" :loading="assigningSeller" :disabled="!assignArtistId" @click="assignSeller">{{ t('purchase_orders.assign_seller') }}</BaseButton>
         </form>
       </div>
 
@@ -196,7 +198,7 @@ async function submitPayment() {
         </div>
       </div>
 
-      <BaseButton v-if="po.status === 'received' || po.status === 'paid'" variant="secondary" @click="openPaymentForm">
+      <BaseButton v-if="(po.status === 'received' || po.status === 'paid') && auth.canDo('purchase_orders', 'payment')" variant="secondary" @click="openPaymentForm">
         <i class="ph-duotone ph-wallet text-[15px]" aria-hidden="true"></i>
         {{ t('purchase_orders.record_payment') }}
       </BaseButton>

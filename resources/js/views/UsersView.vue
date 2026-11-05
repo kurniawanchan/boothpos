@@ -213,7 +213,7 @@ async function performDelete() {
       <div class="w-[160px]">
         <BaseSelect :model-value="statusFilter" :options="statusFilterOptions" :placeholder="t('users.all_status')" @update:model-value="onStatusFilterChange" />
       </div>
-      <BaseButton @click="openCreate">
+      <BaseButton v-if="auth.canDo('users', 'create')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('users.add_user') }}
       </BaseButton>
@@ -239,9 +239,9 @@ async function performDelete() {
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button v-if="auth.canDo('users', 'edit')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
             <button
-              v-if="!isSelf(row)"
+              v-if="!isSelf(row) && auth.canDo('users', 'delete')"
               type="button"
               class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text"
               @click="confirmDelete(row)"

@@ -21,6 +21,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // ditolak sedini mungkin, sebelum middleware lain (mis. auth)
         // sempat memproses apa pun.
         $middleware->api(prepend: [EnsureInstallationIsActivated::class]);
+
+        // 057 — izin aksi per menu pada rute: `ability:sales,void` (lihat EnsureMenuAction).
+        $middleware->alias(['ability' => \App\Http\Middleware\EnsureMenuAction::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

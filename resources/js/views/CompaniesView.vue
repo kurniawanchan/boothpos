@@ -12,8 +12,10 @@ import BaseButton from '../components/ui/BaseButton.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import CompanyOnboardingModal from '../components/companies/CompanyOnboardingModal.vue';
 import CompanyEditModal from '../components/companies/CompanyEditModal.vue';
+import { useAuthStore } from '../stores/auth';
 
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listCompanies);
@@ -137,7 +139,7 @@ async function afterUpdated() {
           @input="debouncedSearch"
         />
       </div>
-      <BaseButton @click="showOnboarding = true">
+      <BaseButton v-if="auth.canDo('companies', 'create')" @click="showOnboarding = true">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('companies.onboard_company') }}
       </BaseButton>
@@ -179,10 +181,10 @@ async function afterUpdated() {
             >
               {{ t('companies.deactivate_btn') }}
             </button>
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">
+            <button v-if="auth.canDo('companies', 'edit')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">
               {{ t('common.edit') }}
             </button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">
+            <button v-if="auth.canDo('companies', 'delete')" type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">
               {{ t('common.delete') }}
             </button>
           </div>

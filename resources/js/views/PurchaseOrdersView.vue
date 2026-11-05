@@ -22,8 +22,10 @@ import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import PurchaseOrderDetailModal from '../components/purchaseOrders/PurchaseOrderDetailModal.vue';
 import PreorderRowActions from '../components/preorder/PreorderRowActions.vue';
+import { useAuthStore } from '../stores/auth';
 
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage, setFilter } = usePaginatedList(listPurchaseOrders);
@@ -236,16 +238,17 @@ async function performDelete() {
 function rowActions(row) {
   const isDraft = row.status === 'draft';
 
+  // 057 — izin aksi peran penampil: Edit/Delete tak muncul bila tak diizinkan (server tetap menolak).
   return [
     { key: 'detail', label: t('common.detail') },
-    { key: 'edit', label: t('common.edit') },
-    {
+    ...(auth.canDo('purchase_orders', 'edit') ? [{ key: 'edit', label: t('common.edit') }] : []),
+    ...(auth.canDo('purchase_orders', 'delete') ? [{
       key: 'delete',
       label: t('common.delete'),
       danger: true,
       disabled: !isDraft,
       title: isDraft ? '' : t('purchase_orders.delete_draft_only'),
-    },
+    }] : []),
   ];
 }
 
@@ -290,7 +293,7 @@ function openDetail(po) {
       <div class="w-[190px]">
         <BaseSelect :model-value="artistFilter" :options="artistFilterOptions" :aria-label="t('purchase_orders.col_seller')" @update:model-value="applyArtistFilter" />
       </div>
-      <BaseButton @click="openCreate">
+      <BaseButton v-if="auth.canDo('purchase_orders', 'create')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('purchase_orders.new_po') }}
       </BaseButton>

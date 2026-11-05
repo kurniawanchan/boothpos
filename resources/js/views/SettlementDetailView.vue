@@ -18,6 +18,7 @@ import SettlementStatusPill from '../components/settlement/SettlementStatusPill.
 import ReconciliationCard from '../components/settlement/ReconciliationCard.vue';
 import SettlementSourcesTable from '../components/settlement/SettlementSourcesTable.vue';
 import SettlementAdjustmentModal from '../components/settlement/SettlementAdjustmentModal.vue';
+import { useAuthStore } from '../stores/auth';
 
 // Dialog yang berat/jarang dipakai dimuat sesuai kebutuhan, bukan di bundel awal (Constitution V).
 const SettlementAcknowledgeModal = defineAsyncComponent(() => import('../components/settlement/SettlementAcknowledgeModal.vue'));
@@ -28,6 +29,7 @@ const SettlementDocumentModal = defineAsyncComponent(() => import('../components
 // Layar ini TIDAK menghitung uang: setiap angka, status, dan hak aksi (`can`)
 // datang dari server, dan setiap aksi tulis mengembalikan detail terbaru.
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 const route = useRoute();
 const router = useRouter();
 const toast = useToastStore();
@@ -265,16 +267,16 @@ function adjustmentKindLabel(kind) {
 
         <div class="flex flex-wrap items-center gap-2">
           <template v-if="isDraft">
-            <BaseButton variant="secondary" size="sm" :disabled="busy" @click="refreshDraft">
+            <BaseButton v-if="auth.canDo('settlements', 'refresh')" variant="secondary" size="sm" :disabled="busy" @click="refreshDraft">
               <i class="ph-duotone ph-arrows-clockwise text-[14px]" aria-hidden="true"></i>
               {{ t('settlements.action_refresh') }}
             </BaseButton>
-            <BaseButton size="sm" :disabled="busy || !s.can.finalize" @click="ask('finalize')">
+            <BaseButton v-if="auth.canDo('settlements', 'finalize')" size="sm" :disabled="busy || !s.can.finalize" @click="ask('finalize')">
               <i class="ph-duotone ph-seal-check text-[14px]" aria-hidden="true"></i>
               {{ t('settlements.action_finalize') }}
             </BaseButton>
             <BaseTooltip :text="s.can.delete ? '' : t('settlements.reason_was_finalized')">
-              <BaseButton variant="danger" size="sm" :disabled="busy || !s.can.delete" @click="ask('delete')">
+              <BaseButton v-if="auth.canDo('settlements', 'delete')" variant="danger" size="sm" :disabled="busy || !s.can.delete" @click="ask('delete')">
                 <i class="ph-duotone ph-trash text-[14px]" aria-hidden="true"></i>
                 {{ t('settlements.action_delete') }}
               </BaseButton>
@@ -286,7 +288,7 @@ function adjustmentKindLabel(kind) {
             {{ t('settlements.doc_open_proof') }}
           </BaseButton>
           <BaseTooltip :text="s.can.reopen ? '' : t('settlements.reason_has_payments')">
-            <BaseButton variant="secondary" size="sm" :disabled="busy || !s.can.reopen" @click="ask('reopen')">
+            <BaseButton v-if="auth.canDo('settlements', 'reopen')" variant="secondary" size="sm" :disabled="busy || !s.can.reopen" @click="ask('reopen')">
               <i class="ph-duotone ph-arrow-counter-clockwise text-[14px]" aria-hidden="true"></i>
               {{ t('settlements.action_reopen') }}
             </BaseButton>
@@ -329,11 +331,11 @@ function adjustmentKindLabel(kind) {
             <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2">
               <h3 class="text-[12.5px] font-bold uppercase tracking-wider text-muted-3">{{ t('settlements.adjustments_title') }}</h3>
               <div class="flex gap-2">
-                <BaseButton v-if="isDraft" variant="secondary" size="sm" :disabled="busy" @click="openAdjustment('deduction')">
+                <BaseButton v-if="(isDraft) && auth.canDo('settlements', 'adjust')" variant="secondary" size="sm" :disabled="busy" @click="openAdjustment('deduction')">
                   <i class="ph-duotone ph-minus-circle text-[14px]" aria-hidden="true"></i>
                   {{ t('settlements.add_deduction') }}
                 </BaseButton>
-                <BaseButton v-if="s.can.adjust" variant="secondary" size="sm" :disabled="busy" @click="openAdjustment('adjustment')">
+                <BaseButton v-if="(s.can.adjust) && auth.canDo('settlements', 'adjust')" variant="secondary" size="sm" :disabled="busy" @click="openAdjustment('adjustment')">
                   <i class="ph-duotone ph-plus-minus text-[14px]" aria-hidden="true"></i>
                   {{ t('settlements.add_adjustment') }}
                 </BaseButton>
@@ -355,10 +357,10 @@ function adjustmentKindLabel(kind) {
                 <div class="flex flex-none items-center gap-2">
                   <span class="text-[13.5px] font-semibold tabular-nums" :class="Number(adj.amount) < 0 ? 'text-danger-text' : ''">{{ formatIDRExact(adj.amount) }}</span>
                   <template v-if="isDraft">
-                    <button type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-muted-4 hover:border-brand hover:text-brand-active" :aria-label="t('common.edit')" @click="openAdjustment(adj.kind, adj)">
+                    <button v-if="auth.canDo('settlements', 'adjust')" type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-muted-4 hover:border-brand hover:text-brand-active" :aria-label="t('common.edit')" @click="openAdjustment(adj.kind, adj)">
                       <i class="ph-duotone ph-pencil-simple text-[14px]" aria-hidden="true"></i>
                     </button>
-                    <button type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('common.delete')" @click="ask('remove-adjustment', adj)">
+                    <button v-if="auth.canDo('settlements', 'adjust')" type="button" class="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-line-2 text-danger-text hover:bg-danger-bg" :aria-label="t('common.delete')" @click="ask('remove-adjustment', adj)">
                       <i class="ph-duotone ph-trash text-[14px]" aria-hidden="true"></i>
                     </button>
                   </template>
@@ -390,7 +392,7 @@ function adjustmentKindLabel(kind) {
           <section v-if="!isDraft" class="rounded-card border border-line-2 bg-white p-4" :aria-label="t('settlements.ack_title')" data-testid="ack-section">
             <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2">
               <h3 class="text-[12.5px] font-bold uppercase tracking-wider text-muted-3">{{ t('settlements.ack_title') }}</h3>
-              <BaseButton v-if="s.can.acknowledge" variant="secondary" size="sm" :disabled="busy" data-testid="open-ack" @click="ackModal.open = true">
+              <BaseButton v-if="(s.can.acknowledge) && auth.canDo('settlements', 'acknowledge')" variant="secondary" size="sm" :disabled="busy" data-testid="open-ack" @click="ackModal.open = true">
                 <i class="ph-duotone ph-signature text-[14px]" aria-hidden="true"></i>
                 {{ s.acknowledgement ? t('settlements.ack_replace') : t('settlements.ack_add') }}
               </BaseButton>
@@ -422,7 +424,7 @@ function adjustmentKindLabel(kind) {
           <section v-if="!isDraft" class="rounded-card border border-line-2 bg-white p-4" :aria-label="t('settlements.pay_title')" data-testid="payments-section">
             <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2">
               <h3 class="text-[12.5px] font-bold uppercase tracking-wider text-muted-3">{{ t('settlements.pay_title') }}</h3>
-              <BaseButton v-if="s.can.add_payment" variant="secondary" size="sm" :disabled="busy" data-testid="open-payment" @click="payModal.open = true">
+              <BaseButton v-if="(s.can.add_payment) && auth.canDo('settlements', 'payout')" variant="secondary" size="sm" :disabled="busy" data-testid="open-payment" @click="payModal.open = true">
                 <i class="ph-duotone ph-plus text-[14px]" aria-hidden="true"></i>
                 {{ t('settlements.pay_add') }}
               </BaseButton>

@@ -11,8 +11,10 @@ import BaseButton from '../components/ui/BaseButton.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
 import BaseInput from '../components/ui/BaseInput.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
+import { useAuthStore } from '../stores/auth';
 
 const { t } = useI18n();
+const auth = useAuthStore(); // 057 — izin aksi peran (kosmetik; server menegakkan)
 const toast = useToastStore();
 
 const { items, meta, loading, load, setPage } = usePaginatedList(listBusinessTypes);
@@ -95,7 +97,7 @@ async function performDelete() {
 <template>
   <div class="flex flex-col gap-3.5 px-[26px] pb-10 pt-5">
     <div class="flex flex-wrap items-center justify-end gap-2.5">
-      <BaseButton @click="openCreate">
+      <BaseButton v-if="auth.canDo('companies', 'create')" @click="openCreate">
         <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
         {{ t('companies.new_business_type_btn') }}
       </BaseButton>
@@ -110,8 +112,8 @@ async function performDelete() {
         </template>
         <template #cell-actions="{ row }">
           <div class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
+            <button v-if="auth.canDo('companies', 'edit')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button v-if="auth.canDo('companies', 'delete')" type="button" class="text-[12.5px] font-semibold text-danger-text hover:text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>

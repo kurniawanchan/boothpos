@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import BackupRestoreSection from '../../resources/js/components/settings/BackupRestoreSection.vue';
 import { listBackups, createBackup, downloadBackup, restoreBackup, restoreFromUpload, deleteBackup } from '../../resources/js/api/backups';
 import { reloadApp } from '../../resources/js/utils/reloadApp';
+import { createPinia, setActivePinia } from 'pinia';
 
 vi.mock('../../resources/js/api/backups', () => ({
   listBackups: vi.fn(),
@@ -25,7 +26,10 @@ const BACKUPS = [
 async function setup() {
   const { default: userEvent } = await import('@testing-library/user-event');
   const user = userEvent.setup();
-  render(BackupRestoreSection);
+  // 057 — o componente lê as permissões de ação do store auth (cosmético), então precisa do Pinia.
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  render(BackupRestoreSection, { global: { plugins: [pinia] } });
   return user;
 }
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/vue';
 import OrderReferenceModal from '../../resources/js/components/sales/OrderReferenceModal.vue';
 import { getReference, getReferenceImageUrl, saveReference, deleteReference } from '../../resources/js/api/orders';
+import { createPinia, setActivePinia } from 'pinia';
 
 vi.mock('../../resources/js/api/orders', () => ({
   getReference: vi.fn(), getReferenceImageUrl: vi.fn(), saveReference: vi.fn(), deleteReference: vi.fn(),
@@ -32,7 +33,10 @@ describe('OrderReferenceModal', () => {
   async function open(props = {}, setup = {}) {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup(setup);
-    const utils = render(OrderReferenceModal, { props: { open: true, orderId: 9, ...props } });
+    // 057 — OrderReferenceModal membaca izin aksi dari store auth (kosmetik), jadi butuh Pinia.
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const utils = render(OrderReferenceModal, { props: { open: true, orderId: 9, ...props }, global: { plugins: [pinia] } });
     await waitFor(() => expect(getReference).toHaveBeenCalledWith(9));
     return { user, ...utils };
   }

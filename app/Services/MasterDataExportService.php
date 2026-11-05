@@ -79,6 +79,10 @@ class MasterDataExportService
         return Role::query()->orderBy('name')->get()->map(fn (Role $r) => [
             'name' => $r->name,
             'menu_keys' => implode(',', $r->menu_keys ?? []),
+            // 057 — `menu=aksi+aksi;menu2=` dari izin yang berlaku (selalu eksplisit; kosong setelah `=` = hanya lihat).
+            'menu_actions' => collect($r->resolvedActions())
+                ->map(fn (array $a, string $menu) => $menu.'='.implode('+', array_values(array_filter($a, fn ($x) => $x !== 'view'))))
+                ->implode(';'),
         ])->all();
     }
 

@@ -210,15 +210,15 @@ async function performDelete() {
         />
       </div>
       <template v-if="auth.canAccessMenu('categories')">
-        <BaseButton variant="secondary" :loading="exporting" @click="doExport">
+        <BaseButton v-if="auth.canDo('categories', 'export')" variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('common.export_xlsx') }}
         </BaseButton>
-        <BaseButton variant="secondary" @click="showImportModal = true">
+        <BaseButton v-if="auth.canDo('categories', 'import')" variant="secondary" @click="showImportModal = true">
           <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
           {{ t('common.bulk_import') }}
         </BaseButton>
-        <BaseButton @click="openCreate">
+        <BaseButton v-if="auth.canDo('categories', 'create')" @click="openCreate">
           <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
           {{ t('master_data.new_category') }}
         </BaseButton>
@@ -235,8 +235,8 @@ async function performDelete() {
         </template>
         <template #cell-actions="{ row }">
           <div v-if="auth.canAccessMenu('categories')" class="flex justify-end gap-2">
-            <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
-            <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
+            <button v-if="auth.canDo('categories', 'edit')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+            <button v-if="auth.canDo('categories', 'delete')" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
           </div>
         </template>
       </DataTable>

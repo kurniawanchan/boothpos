@@ -196,6 +196,10 @@ class RoleTest extends TestCase
 
         $response->assertOk();
         $this->assertCount(count(MenuKeys::keys()), $response->json('data'));
-        $this->assertSame(['key' => 'roles', 'label' => 'Peran'], collect($response->json('data'))->firstWhere('key', 'roles'));
+        // 057 — tiap menu kini juga membawa `actions` (aditif); key + label tetap sama.
+        $roles = collect($response->json('data'))->firstWhere('key', 'roles');
+        $this->assertSame('roles', $roles['key']);
+        $this->assertSame('Peran', $roles['label']);
+        $this->assertSame(['create', 'edit', 'delete', 'import', 'export'], array_column($roles['actions'], 'key'));
     }
 }

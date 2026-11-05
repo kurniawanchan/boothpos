@@ -9,6 +9,7 @@ import ReferenceThumbnails from './ReferenceThumbnails.vue';
 import { getReference, saveReference, deleteReference } from '../../api/orders';
 import { formatDateTime } from '../../utils/date';
 import { triageReferenceFiles, REFERENCE_IMAGE_TYPES } from '../../utils/referenceFiles';
+import { useAuthStore } from '../../stores/auth';
 
 /**
  * 054 (US8) — referensi transaksi: catatan teks dan/atau gambar pada sebuah penjualan, untuk
@@ -87,7 +88,9 @@ watch(
 );
 onBeforeUnmount(() => picked.value.forEach((p) => revoke(p.url)));
 
-const editable = computed(() => !!data.value?.can_edit);
+// 057 — `can_edit` dari server DAN aksi `reference` peran penampil (Sales = View saja ⇒ hanya melihat).
+const auth = useAuthStore();
+const editable = computed(() => !!data.value?.can_edit && auth.canDo('sales', 'reference'));
 const storedImages = computed(() => data.value?.images ?? []);
 const maxImages = computed(() => data.value?.max_images ?? 10);
 const hasReference = computed(() => !!(data.value && (data.value.note || storedImages.value.length)));

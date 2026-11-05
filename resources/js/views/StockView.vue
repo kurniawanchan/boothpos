@@ -214,15 +214,15 @@ async function submitAdjustment() {
         />
       </div>
       <template v-if="auth.canAccessMenu('stock')">
-        <BaseButton variant="secondary" :loading="exporting" @click="doExport">
+        <BaseButton v-if="auth.canDo('stock', 'export')" variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('common.export_xlsx') }}
         </BaseButton>
-        <BaseButton variant="secondary" @click="showImportModal = true">
+        <BaseButton v-if="auth.canDo('stock', 'import')" variant="secondary" @click="showImportModal = true">
           <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
           {{ t('common.bulk_import') }}
         </BaseButton>
-        <BaseButton @click="openAdjust">
+        <BaseButton v-if="auth.canDo('stock', 'adjust')" @click="openAdjust">
           <i class="ph-duotone ph-sliders-horizontal text-[16px]" aria-hidden="true"></i>
           {{ t('master_data.stock_adjustment') }}
         </BaseButton>

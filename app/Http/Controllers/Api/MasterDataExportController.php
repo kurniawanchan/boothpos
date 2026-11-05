@@ -44,6 +44,12 @@ class MasterDataExportController extends Controller
             return response()->json(['message' => __('master_data_import.not_authorized_export')], 403);
         }
 
+        // 057 — aksi `export` pada menu pemilik entitas (vendor_prices ikut materials, bom ikut products).
+        $menu = \App\Support\MenuActions::MASTER_DATA_MENU[$entity] ?? null;
+        if ($menu === null || ! $request->user()->canDo($menu, 'export')) {
+            return response()->json(['message' => __('permissions.action_not_allowed', ['action' => __('permissions.actions.export'), 'menu' => $menu ?? $entity]), 'code' => 'action_not_allowed', 'menu' => $menu, 'action' => 'export'], 403);
+        }
+
         $sheet = new SheetArrayExport(
             $entity,
             MasterDataSheets::exportHeadings($entity),

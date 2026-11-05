@@ -257,20 +257,22 @@ class StockMovementsTest extends TestCase
     {
         $order = $this->sell(1);
         $pre = $this->preorder();
-        for ($i = 0; $i < 4; $i++) {
-            $this->movement(['type' => 'sale', 'qty_change' => -1, 'reference_type' => 'order_item', 'reference_id' => $order->id]);
-        }
-        DB::flushQueryLog();
-        DB::enableQueryLog();
-        $this->movements('per_page=2')->assertOk();
-        $small = count(DB::getQueryLog());
-
         for ($i = 0; $i < 12; $i++) {
             $this->movement(['type' => 'sale', 'qty_change' => -1, 'reference_type' => 'order_item', 'reference_id' => $order->id]);
             $this->movement(['type' => 'purchase', 'reference_type' => 'preorder_item', 'reference_id' => $pre['items'][0]['id']]);
         }
+        // 057 — SATU himpunan data, dua ukuran halaman dengan campuran jenis yang sama: yang dihitung hanya apakah
+        // kueri bertambah per BARIS. Permintaan pemanasan mengisi cache (lisensi, peran pengguna) lebih dulu; dulu tes
+        // ini lolos karena kueri peran yang dimuat malas pada permintaan pertama kebetulan menutupi kueri jenis lain.
+        $this->movements('per_page=4')->assertOk();
+
         DB::flushQueryLog();
-        $this->movements('per_page=25')->assertOk();
+        DB::enableQueryLog();
+        $this->movements('per_page=4')->assertOk();
+        $small = count(DB::getQueryLog());
+
+        DB::flushQueryLog();
+        $this->movements('per_page=24')->assertOk();
         $large = count(DB::getQueryLog());
         DB::disableQueryLog();
 

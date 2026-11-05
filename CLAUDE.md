@@ -455,6 +455,18 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **Toggle (US7)**: `showAttachments` in `SalesView` (default off, `localStorage` key `sales.attachments.expanded`, try/catch). On = `RowAttachments.vue` under the transaction number ONLY for rows with `has_reference` or `payment_proof_count > 0`; it loads via the existing `GET /orders/{id}/reference` and `GET /orders/{id}` through ONE shared limiter (`utils/limitedRunner.js`, ≤ 4 in flight) once the row is visible (IntersectionObserver; immediate where unavailable). No image data in the list payload.
 - **Not verified in a real browser** (Playwright / Chrome DevTools MCP were unavailable in the session that built this): the visual form of the link/thumbnail was never compared with the requester's screenshots.
 
+## Per-menu action permissions (feature 057, 2026-11-05)
+
+- **Model**: `roles.menu_keys` still says WHICH menus; the new nullable JSON `roles.menu_actions` says WHAT a role may do in each (`{"sales": ["void","export"], "pos": []}`; View is implicit for a held menu, `[]` = view only). **NULL, or a held menu with no entry, = full access (legacy)** — so no data migration and no behaviour change for existing roles. Unknown stored actions are ignored, never granted.
+- **One registry, one primitive, one gate.** `App\Support\MenuActions` lists every menu's actions (add a button/route ⇒ add its action there); `User::canDo(menu, action)` → `Role::allows()` answers everything (`canAccessMenu` stays the View primitive; an unknown pair THROWS so typos can't silently grant/deny); route middleware alias `ability` — `ability:sales,void` (named) or `ability:preorders` (POST=create, PUT/PATCH=edit, DELETE=delete). Denial = `403 {code:'action_not_allowed', menu, action, message}`, nothing changes, not audit-logged. **`MenuActionsRouteCoverageTest` fails when a non-GET `api/v1` route has no `ability` middleware** (exemptions are listed with reasons in the test) — keep it green when adding routes.
+- **Additive, never widens**: the gate runs first and the existing FormRequest/Policy/inline rules (owner/admin = has `settings`, recorder-only, cost/margin by `reports`) still run after it. A role holding the menu is required (`allows()` is false for a menu not in `menu_keys`).
+- **apiResource routes are split**: `index/show` stay ungated (view behaviour deliberately unchanged — shared endpoints like `GET /reports/sales` also feed the Dashboard and have NO `sales` menu check: known gap, research D5/D11); `store/update/destroy` carry `ability:<menu>`.
+- **Master data**: `GET /exports/{entity}` needs `export` on the entity's menu; the combined import needs `import` on every master-data menu the user holds (`MenuActions::userMayImportMasterData`) — checked in `ImportMasterDataRequest::authorize()` before validation. Roles sheet has an optional `menu_actions` cell `sales=void+export;pos=` (absent = full; Owner can't be restricted).
+- **Owner is always full** (`Role::isOwner()` = system default named Owner; edits that restrict it → 422). The lock-out guard now needs a role with FULL actions on `users` AND `roles` (409 otherwise).
+- **SPA**: `GET /auth/me` returns `permissions` (`Role::resolvedActions()`); `auth.canDo(menu, action)` / `useAbility().can('sales.void')` hide controls with `v-if` (cosmetic); **no `permissions` payload ⇒ shows everything**. A 403 `action_not_allowed` refreshes permissions (`api/client.js`). Shared `PaymentHistoryList` takes an `allow` prop so Sales (`sales.*`) and Pre-orders (`preorders.*`) map their own actions. Role editor = menu × action grid (`RoleMenuPicker`, `v-model` + `v-model:actions`; ticking a menu defaults to full access).
+- **Test traps**: MySQL JSON does not keep object key order (compare with `assertEquals`); two `artisan test` runs at once corrupt `boothpos_test`; the Code128 reference-library tests fail on the clean base (`picqer` is `require-dev`).
+- **Not verified in a real browser** (T051 open).
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -462,7 +474,18 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/056-sales-payment-proof-column/plan.md`
+Active feature plan: `specs/057-menu-action-permissions/plan.md`
+(branch `093-menu-action-permissions`, from `develop`; spec dir number ≠ branch number) — one additive nullable JSON
+column `roles.menu_actions` (NULL = legacy = full access, so no data migration and no behaviour change). Per menu a role
+stores permitted ACTIONS (View implicit; Create/Edit/Delete + named ones such as Void/Verify/Export) from ONE registry
+`App\Support\MenuActions`; ONE primitive `User::canDo(menu, action)` (`canAccessMenu` stays the View primitive); route
+middleware `ability:menu[,action]` on every mutating/export route with a ROUTE-COVERAGE TEST that fails when one is
+missing; additive to existing owner/admin/recorder rules (never widens; Owner role always full; lock-out guard extended);
+`/auth/me` returns resolved `permissions`; SPA hides controls via one composable/directive; role editor becomes an
+actions grid; role import/export gets an optional `menu_actions` cell. GET (view) behaviour is deliberately unchanged
+(shared endpoints). See research.md D1–D10.
+
+Previous feature: `specs/056-sales-payment-proof-column/plan.md`
 (branch `092-sales-payment-proof-column`, from `develop`; spec dir number ≠ branch number) — no migration, one additive
 list field (+ US7–US9 of 2026-11-05: show/hide toggle, Excel export with embedded images, seller-scoped statistics fix — see the 056 section). Sales page: the detail shows a thumbnail of each non-cash payment's CURRENT proof (opt-in
 `proofThumbnails` prop on the shared `PaymentHistoryList`, new `PaymentProofThumbnail.vue`, click = existing viewer);

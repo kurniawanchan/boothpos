@@ -68,6 +68,11 @@ client.interceptors.response.use(
     // for the unpredictable cases the brief calls out.
     if (apiError.isForbidden) {
       useToastStore().error(apiError.message || 'Anda tidak memiliki akses untuk tindakan ini.');
+      // 057 (FR-012) — aksi ditolak karena izin peran (layar basi / peran diubah): segarkan izin supaya
+      // tombolnya hilang. Import dinamis menghindari siklus (store auth → api/auth → client).
+      if (apiError.code === 'action_not_allowed') {
+        import('../stores/auth').then(({ useAuthStore }) => useAuthStore().refreshPermissions());
+      }
     }
 
     return Promise.reject(apiError);

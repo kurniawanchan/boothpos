@@ -103,9 +103,31 @@ class SettingsController extends Controller
      * sesuai kebutuhan layar pengaturan yang menyimpan banyak field dalam
      * satu submit.
      */
+    /** 057 — kunci identitas/tampilan toko: butuh aksi `branding`, bukan sekadar `edit` pada Pengaturan. */
+    private const BRANDING_KEYS = ['app_name', 'receipt_show_logo'];
+
+    /** Awalan kunci branding: seluruh `store_*` (nama, kontak, alamat, `store_logo_path`) dan `theme_*`. */
+    private const BRANDING_PREFIXES = ['store_', 'theme_'];
+
+    private function isBrandingKey(string $key): bool
+    {
+        $key = strtolower(trim($key));
+
+        return in_array($key, self::BRANDING_KEYS, true) || collect(self::BRANDING_PREFIXES)->contains(fn ($p) => str_starts_with($key, $p));
+    }
+
     public function update(UpdateSettingsRequest $request): JsonResponse
     {
         $items = $request->validated('settings');
+
+        // 057 — PUT /settings menulis kunci apa pun; rute hanya menggerbang `settings.edit`. Kunci branding memerlukan
+        // aksi `branding` juga (sejajar POST /settings/store-logo), supaya peran dengan edit-saja tak bisa mengubah identitas toko.
+        if (collect($items)->contains(fn ($i) => $this->isBrandingKey((string) $i['key'])) && ! $request->user()->canDo('settings', 'branding')) {
+            return response()->json([
+                'message' => __('permissions.action_not_allowed', ['action' => __('permissions.actions.branding'), 'menu' => \App\Support\MenuKeys::ALL['settings']]),
+                'code' => 'action_not_allowed', 'menu' => 'settings', 'action' => 'branding',
+            ], 403);
+        }
 
         $updated = DB::transaction(function () use ($items, $request) {
             $results = [];

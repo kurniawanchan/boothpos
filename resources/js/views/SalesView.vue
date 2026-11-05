@@ -6,6 +6,7 @@ import { listEvents } from '../api/events';
 import { salesReport, exportSalesTransactions } from '../api/reports';
 import { verifyOrderPayments } from '../api/payments';
 import { useToastStore } from '../stores/toast';
+import { useAuthStore } from '../stores/auth';
 import { useSalesFilters } from '../composables/useSalesFilters';
 import { useBulkReceipts, MAX_BULK_RECEIPTS } from '../composables/useBulkReceipts';
 import { formatIDR } from '../utils/money';
@@ -234,6 +235,8 @@ function toggleAllVisible() {
 // --- unduh semua struk (054 US9) --------------------------------------------------------------
 // Mencakup SEMUA baris yang lolos filter (semua halaman), bukan hanya halaman yang tampil. Voided ikut hanya
 // bila daftar sedang menampilkannya (sama dengan yang terlihat). Dibatasi 200 per unduhan (server juga menolak).
+// 057 — izin aksi peran penampil (kosmetik; server menegakkan).
+const auth = useAuthStore();
 const bulk = useBulkReceipts();
 const bulkIds = computed(() => sorted.value.map((tx) => tx.id));
 
@@ -396,15 +399,15 @@ function showCustomerDetail(row) {
            mengembalikan semua event bila event_id tak dikirim). -->
       <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="eventOptions" />
       <span class="flex-1"></span>
-      <BaseButton v-if="chosenOrderIds.length > 0" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
+      <BaseButton v-if="chosenOrderIds.length > 0 && auth.canDo('sales', 'verify')" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
         <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
         {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
       </BaseButton>
-      <BaseButton variant="secondary" data-testid="bulk-receipts" :loading="bulk.running.value" :disabled="bulkIds.length === 0" @click="doBulkReceipts">
+      <BaseButton v-if="auth.canDo('sales', 'receipts')" variant="secondary" data-testid="bulk-receipts" :loading="bulk.running.value" :disabled="bulkIds.length === 0" @click="doBulkReceipts">
         <i class="ph-duotone ph-files text-[16px]" aria-hidden="true"></i>
         {{ bulk.running.value ? t('reports.bulk_receipts_progress', { done: bulk.progress.value.done, total: bulk.progress.value.total }) : t('reports.bulk_receipts', { count: bulkIds.length }) }}
       </BaseButton>
-      <BaseButton variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
+      <BaseButton v-if="auth.canDo('sales', 'export')" variant="secondary" :loading="exporting" :disabled="exportKeys.length === 0" @click="doExport">
         <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
         {{ exportLabel }}
       </BaseButton>

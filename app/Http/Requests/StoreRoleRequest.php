@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\Role;
+use App\Support\MenuActions;
 use App\Support\MenuKeys;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
@@ -11,6 +12,18 @@ use Illuminate\Validation\Rule;
 
 class StoreRoleRequest extends FormRequest
 {
+    use \App\Http\Requests\Concerns\ValidatesMenuActions;
+
+    protected function effectiveMenuKeys(): array
+    {
+        return (array) $this->input('menu_keys', []);
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(fn ($v) => $this->validateMenuActions($v));
+    }
+
     public function authorize(): bool
     {
         return $this->user()?->can('create', Role::class) ?? false;
@@ -36,6 +49,10 @@ class StoreRoleRequest extends FormRequest
             // juga, bukan menemukan izin yang tidak pernah berfungsi.
             'menu_keys' => ['required', 'array'],
             'menu_keys.*' => [Rule::in(MenuKeys::keys())],
+            // 057 — aksi TAMBAHAN per menu; diperiksa terhadap registri dan terhadap menu yang dimiliki peran.
+            'menu_actions' => ['sometimes', 'nullable', 'array'],
+            'menu_actions.*' => ['array'],
+            'menu_actions.*.*' => ['string'],
         ];
     }
 

@@ -611,19 +611,19 @@ async function performDelete() {
         />
       </div>
       <template v-if="auth.canAccessMenu('products')">
-        <BaseButton variant="secondary" @click="showCatalog = true">
+        <BaseButton v-if="auth.canDo('products', 'catalog')" variant="secondary" @click="showCatalog = true">
           <i class="ph-duotone ph-book-open-text text-[16px]" aria-hidden="true"></i>
           {{ t('catalog.button') }}
         </BaseButton>
-        <BaseButton variant="secondary" :loading="exporting" @click="doExport">
+        <BaseButton v-if="auth.canDo('products', 'export')" variant="secondary" :loading="exporting" @click="doExport">
           <i class="ph-duotone ph-microsoft-excel-logo text-[16px]" aria-hidden="true"></i>
           {{ t('common.export_xlsx') }}
         </BaseButton>
-        <BaseButton variant="secondary" @click="showImportModal = true">
+        <BaseButton v-if="auth.canDo('products', 'import')" variant="secondary" @click="showImportModal = true">
           <i class="ph-duotone ph-file-arrow-up text-[16px]" aria-hidden="true"></i>
           {{ t('common.bulk_import') }}
         </BaseButton>
-        <BaseButton @click="openCreate">
+        <BaseButton v-if="auth.canDo('products', 'create')" @click="openCreate">
           <i class="ph-duotone ph-plus text-[16px]" aria-hidden="true"></i>
           {{ t('master_data.new_product') }}
         </BaseButton>
@@ -728,8 +728,8 @@ async function performDelete() {
           <div class="flex justify-end gap-2">
             <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openDetail(row)">{{ t('master_data.detail') }}</button>
             <template v-if="auth.canAccessMenu('products')">
-              <button type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
-              <button type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
+              <button v-if="auth.canDo('products', 'edit')" type="button" class="text-[12.5px] font-semibold text-muted-4 hover:text-brand-active" @click="openEdit(row)">{{ t('common.edit') }}</button>
+              <button v-if="auth.canDo('products', 'delete')" type="button" class="text-[12.5px] font-semibold text-danger-text" @click="confirmDelete(row)">{{ t('common.delete') }}</button>
             </template>
           </div>
         </template>
@@ -854,7 +854,7 @@ async function performDelete() {
               <span class="flex-1"></span>
               <!-- Urutan aksi sesuai permintaan: Buka BOM · Terapkan markup · hapus. -->
               <BaseTooltip v-if="row.id" :text="t('master_data.bom_open_tip')" align="right">
-                <BaseButton variant="secondary" size="sm" @click="openBomFor(row)">
+                <BaseButton v-if="auth.canDo('products', 'bom')" variant="secondary" size="sm" @click="openBomFor(row)">
                   <i class="ph-duotone ph-stack text-[14px]" aria-hidden="true"></i>
                   {{ t('master_data.bom_open') }}
                 </BaseButton>

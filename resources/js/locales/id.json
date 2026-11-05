@@ -1351,7 +1351,14 @@
     "role_created": "Peran dibuat.",
     "role_deleted": "Peran dihapus.",
     "delete_role": "Hapus peran?",
-    "delete_role_confirm": "Peran '{name}' akan dihapus. Tindakan ini tidak bisa dibatalkan."
+    "delete_role_confirm": "Peran '{name}' akan dihapus. Tindakan ini tidak bisa dibatalkan.",
+    "locked_owner": "Peran Owner selalu punya akses penuh dan tidak bisa dibatasi.",
+    "view_only": "Hanya lihat",
+    "full_access": "Akses penuh",
+    "view_only_for": "{menu}: hanya lihat",
+    "full_access_for": "{menu}: akses penuh",
+    "action_view": "Lihat",
+    "custom_actions": "aksi khusus"
   },
   "activity_log": {
     "col_when": "Waktu",
