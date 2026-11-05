@@ -54,7 +54,7 @@ const {
   page, pageSize, paged, pageMeta, PAGE_SIZES,
   activeCount, hasFilterOtherThanSearch,
   filterBySeller, reset, sortBy, toQuery, applyQuery,
-} = useSalesFilters({ transactions, sessions });
+} = useSalesFilters({ transactions, sessions, lockedSeller: computed(() => { const u = useAuthStore().user; return u?.seller_scoped ? u?.artist?.name ?? '' : ''; }) });
 
 // --- muat data --------------------------------------------------------------
 let restored = false; // false selama query URL dipulihkan → jangan muat ganda

@@ -14,6 +14,10 @@ function syncLocale(user) {
   }
 }
 
+// 058 — menu yang rute servernya menolak pengguna ber-seller (seller.forbidden); satu daftar, cermin server.
+// 'reports' TIDAK di sini (laporan di-scope, bukan ditolak); Log Aktivitas disembunyikan lewat flag item sidebar.
+export const SELLER_SCOPED_HIDDEN_MENUS = ['users', 'roles', 'settings', 'companies', 'licenses', 'invoices', 'artists', 'events', 'categories', 'vendors', 'materials'];
+
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
@@ -30,7 +34,13 @@ export const useAuthStore = defineStore('auth', {
      * re-derived from a hardcoded role list (that's the whole point of
      * this feature — see specs/001-user-store-settings).
      */
-    canAccessMenu: (state) => (menuKey) => (state.user?.menu_keys ?? []).includes(menuKey),
+    canAccessMenu: (state) => (menuKey) => (state.user?.menu_keys ?? []).includes(menuKey)
+      // 058 — pengguna ber-seller: menu administratif/lintas-seller disembunyikan (kosmetik; server menolak 403).
+      && !(state.user?.seller_scoped && SELLER_SCOPED_HIDDEN_MENUS.includes(menuKey)),
+    /** 058 — pengguna terikat ke satu seller (Owner selalu false; ditentukan server). */
+    isSellerScoped: (state) => !!state.user?.seller_scoped,
+    /** 058 — seller pengguna dinonaktifkan: layar kosong + pemberitahuan, bukan tampilan penuh. */
+    sellerInactive: (state) => !!state.user?.seller_scoped && state.user?.seller_active === false,
     /**
      * 057 — izin AKSI per menu (kosmetik; server menegakkan). Dibaca dari `permissions` hasil GET /auth/me.
      * Payload tanpa `permissions` (server lama / sebelum fitur ini) = tak ada informasi pembatasan ⇒ tampilkan

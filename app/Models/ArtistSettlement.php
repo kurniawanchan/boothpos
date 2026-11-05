@@ -3,12 +3,13 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\HasSellerScope;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ArtistSettlement extends Model
 {
-    use HasDataMode;
+    use HasDataMode, HasSellerScope;
 
     protected $fillable = [
         'event_id', 'artist_id', 'total_sales', 'total_units', 'deduction',

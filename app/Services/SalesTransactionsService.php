@@ -99,6 +99,8 @@ class SalesTransactionsService
         $cash = (float) $payments->where('method', 'cash')->sum('amount');
         $noncash = (float) $payments->where('method', '!=', 'cash')->sum('amount');
         $top = $items->sortByDesc(fn ($i) => (float) $i->line_total)->values();
+        $sellerId = \App\Support\SellerGate::current();
+        $statItems = $sellerId === null ? $items : $items->where('artist_id', $sellerId);
 
         // 056 (US8) — HANYA untuk ekspor: catatan referensi dan path gambar (kunci berawalan `_` = bukan kolom).
         // Bukti bayar disaring dengan Payment::proofViewableBy() — definisi izin yang sama dengan daftar & detail —
@@ -161,8 +163,10 @@ class SalesTransactionsService
                     && ($current = $p->currentProof()) !== null
                     && $p->proofViewableBy($user, $current)
             )->count(),
-            'items_gross' => $this->money($items->sum(fn ($i) => (float) $i->line_total + (float) $i->discount_amount)),
-            'items_net' => $this->money($items->sum(fn ($i) => (float) $i->line_total)),
+            // 058 — pengguna ber-seller melihat order UTUH (Q1:B), tetapi angka statistik (kartu ringkasan) hanya
+            // porsi baris seller-nya; `seller_items` tetap lengkap supaya filter penjual di layar bekerja sama.
+            'items_gross' => $this->money($statItems->sum(fn ($i) => (float) $i->line_total + (float) $i->discount_amount)),
+            'items_net' => $this->money($statItems->sum(fn ($i) => (float) $i->line_total)),
             // Rincian per penjual (kunci = nama, sama dengan filter penjual di Sales). Saat filter penjual
             // aktif, kartu ringkasan hanya menghitung item milik penjual terpilih — tanpa ini sebuah order
             // campuran ikut dihitung utuh dan angkanya lebih besar dari laporan Seller Cost.

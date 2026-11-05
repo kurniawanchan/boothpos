@@ -95,12 +95,13 @@ class MasterDataExportService
      */
     private function userRows(): array
     {
-        return User::query()->with('role')->orderBy('username')->get()->map(fn (User $u) => [
+        return User::query()->with(['role', 'artist'])->orderBy('username')->get()->map(fn (User $u) => [
             'name' => $u->name,
             'username' => $u->username,
             'role_name' => $u->role?->name,
             'is_active' => $u->is_active ? 1 : 0,
             'photo_path' => $u->photo_path,
+            'artist_code' => $u->artist?->code,
         ])->all();
     }
 

@@ -88,7 +88,7 @@ const NAV_DEFS = [
   // 076 — settlement seller; terpisah dari Laporan karena memuat angka yang
   // dicetak untuk seller dan punya menu key sendiri (Owner/Admin).
   { name: 'settlements', label: 'nav.settlements', icon: 'ph-handshake', menuKey: 'settlements' },
-  { name: 'activity-log', label: 'nav.activity_log', icon: 'ph-clock-clockwise', menuKey: 'reports' },
+  { name: 'activity-log', label: 'nav.activity_log', icon: 'ph-clock-clockwise', menuKey: 'reports', hideForSeller: true },
   {
     key: 'settings-group',
     label: 'nav.settings_group',
@@ -113,6 +113,8 @@ const navItems = computed(() =>
       const children = item.children.filter((c) => auth.canAccessMenu(c.menuKey));
       return children.length ? { ...item, children } : null;
     }
+    // 058 — Log Aktivitas memuat tindakan semua pengguna: ditolak server untuk pengguna ber-seller, jadi disembunyikan.
+    if (item.hideForSeller && auth.isSellerScoped) return null;
     return auth.canAccessMenu(item.menuKey)
       ? { ...item, badge: item.name === 'pos' ? cartCount.value : item.name === 'preorders' ? props.preorderAlertCount : 0 }
       : null;

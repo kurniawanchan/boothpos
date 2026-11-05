@@ -1308,6 +1308,12 @@
     "col_name": "Nama",
     "col_username": "Username",
     "col_role": "Peran",
+    "col_seller": "Seller",
+    "seller": "Seller",
+    "no_seller": "Tanpa seller (melihat semuanya)",
+    "all_sellers": "Semua seller",
+    "seller_hint": "Pengguna ini hanya melihat data seller yang dipilih.",
+    "owner_sees_all_sellers": "Peran Owner selalu melihat semua seller dan tidak dapat dikaitkan ke satu seller.",
     "col_last_access": "Terakhir Akses",
     "col_status": "Status",
     "never_accessed": "Belum pernah",
@@ -1652,6 +1658,10 @@
     "delete_confirm_order": "Hapus pembayaran {amount} dari {number}? Jumlah terbayar dan sisa tagihan dihitung ulang dari pembayaran yang tersisa. Tindakan ini tidak bisa dibatalkan.",
     "filter_all": "Semua status pembayaran",
     "summary_outstanding": "sisa tagihan {amount}"
+  },
+  "seller_scope": {
+    "inactive_title": "Seller Anda nonaktif",
+    "inactive_body": "Akun Anda terikat ke seller yang sudah tidak aktif, sehingga tidak ada data yang tampil. Minta pemilik mengaktifkan kembali seller atau mengubah akun Anda."
   },
   "schema": {
     "update_title": "Database perlu diperbarui",

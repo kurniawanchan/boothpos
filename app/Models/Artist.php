@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
+use App\Models\Concerns\HasSellerScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Artist extends Model
 {
-    use HasDataMode, HasFactory, SoftDeletes;
+    use HasDataMode, HasSellerScope, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'code',
@@ -20,6 +21,12 @@ class Artist extends Model
         'notes',
         'is_active',
     ];
+
+    /** 058 — pengguna yang terikat ke seller ini (guard hapus). */
+    public function users(): HasMany
+    {
+        return $this->hasMany(User::class);
+    }
 
     protected function casts(): array
     {

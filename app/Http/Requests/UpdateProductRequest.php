@@ -3,10 +3,13 @@
 namespace App\Http\Requests;
 
 use App\Support\ProductSegment;
+use App\Http\Requests\Concerns\ForcesOwnSeller;
 use Illuminate\Foundation\Http\FormRequest;
 
 class UpdateProductRequest extends FormRequest
 {
+    use ForcesOwnSeller;
+
     public function authorize(): bool
     {
         return $this->user()?->can('update', $this->route('product')) ?? false;
@@ -19,6 +22,7 @@ class UpdateProductRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        $this->defaultOwnSeller(false);
         if ($this->has('product_segment')) {
             $this->merge(['product_segment' => ProductSegment::normalise($this->input('product_segment'))]);
         }
@@ -51,5 +55,10 @@ class UpdateProductRequest extends FormRequest
             'preorder_eta' => ['nullable', 'date'],
             'is_active' => ['sometimes', 'boolean'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $this->refuseForeignSeller($validator);
     }
 }

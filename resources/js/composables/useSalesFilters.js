@@ -50,7 +50,9 @@ function compareValues(a, b) {
 /**
  * @param {{transactions: import('vue').Ref<Array>, sessions: import('vue').Ref<Array>}} source
  */
-export function useSalesFilters({ transactions, sessions }) {
+// 058 — `lockedSeller` (nama seller, ref/string): pengguna ber-seller melihat order UTUH, tetapi kartu & ringkasan
+// hanya menghitung porsi seller-nya — sama dengan filter penjual, tanpa bisa dilepas pengguna.
+export function useSalesFilters({ transactions, sessions, lockedSeller = '' }) {
   const search = ref('');
   const includeVoided = ref(false);
   const filters = reactive({
@@ -177,7 +179,8 @@ export function useSalesFilters({ transactions, sessions }) {
   // Bagian transaksi yang dihitung ke kartu/ringkasan: saat filter penjual aktif hanya item milik
   // penjual terpilih (order campuran tidak lagi dihitung utuh); baris lama tanpa `seller_items` utuh.
   const part = (tx) => {
-    const sel = filters.sellers;
+    const locked = typeof lockedSeller === 'object' && lockedSeller !== null ? lockedSeller.value : lockedSeller;
+    const sel = locked ? [locked] : filters.sellers;
     const si = tx.seller_items;
     if (!sel.length || !si) return null;
     const p = { units: 0, gross: 0, net: 0 };

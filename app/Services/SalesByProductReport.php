@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Support\ModeGate;
 use App\Support\PreorderRecognizedRevenue;
+use App\Support\SellerGate;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -310,7 +311,9 @@ class SalesByProductReport
             ->where('orders.data_mode', ModeGate::current())
             ->when(! empty($filters['event_id']), fn ($q) => $q->where('orders.event_id', (int) $filters['event_id']))
             ->when(! empty($filters['date_from']), fn ($q) => $q->whereDate('orders.created_at', '>=', $filters['date_from']))
-            ->when(! empty($filters['date_to']), fn ($q) => $q->whereDate('orders.created_at', '<=', $filters['date_to']));
+            ->when(! empty($filters['date_to']), fn ($q) => $q->whereDate('orders.created_at', '<=', $filters['date_to']))
+            // 058 — query mentah melewati scope Eloquent; laporan ini mengelompokkan menurut penjual PRODUK.
+            ->tap(fn ($q) => SellerGate::applyToItems($q, 'products.artist_id'));
     }
 
     /** Baris pre-order yang diakui (definisi bersama); `artists` di sini = penjual produk, sama dengan POS. */
@@ -326,7 +329,12 @@ class SalesByProductReport
         // mengelompokkan menurut penjual PRODUK (sama dengan POS), jadi gabungan itu diganti.
         $q->joins = collect($q->joins)->reject(fn ($j) => $j->table === 'artists')->values()->all();
 
-        return $q->join('artists', 'artists.id', '=', 'products.artist_id');
+        $q->join('artists', 'artists.id', '=', 'products.artist_id');
+
+        // 058 — sama dengan posLines(): penjual produk (definisi bersama sudah menyaring preorder_items.artist_id).
+        SellerGate::applyToItems($q, 'products.artist_id');
+
+        return $q;
     }
 
     /** Urutan (unit terbanyak dulu; seri → nilai, lalu nama), peringkat kompetisi (1,2,2,4) dan penanda Terlaris. */

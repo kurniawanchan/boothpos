@@ -4148,6 +4148,7 @@ paths:
         - { name: search, in: query, schema: { type: string }, description: "Mencocokkan name atau username (FR-004)." }
         - { name: role_id, in: query, schema: { type: integer } }
         - { name: is_active, in: query, schema: { type: boolean } }
+        - { name: artist_id, in: query, schema: { type: integer }, description: "058 — saring menurut seller yang membatasi pengguna." }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
       responses:
@@ -6213,7 +6214,10 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
       description: |
-        Peran tidak memiliki izin. 057 — bila penyebabnya izin AKSI per menu, badan membawa
+        Peran tidak memiliki izin. 058 — pengguna yang terikat ke satu seller (`seller_scoped`) ditolak dari permukaan
+        administratif/lintas-seller (pengguna, peran, pengaturan, cadangan, log aktivitas, impor/ekspor master data,
+        laporan metode bayar, penagihan, tulis vendor/bahan/event/kategori/artist) dengan `code: seller_scope_forbidden`.
+        057 — bila penyebabnya izin AKSI per menu, badan membawa
         `code: action_not_allowed`, `menu` dan `action` (middleware `ability` pada rute mutasi/ekspor);
         tak ada data yang berubah dan penolakan tidak dicatat di activity log.
       content:
@@ -6371,6 +6375,26 @@ components:
           type: array
           items: { type: string }
           example: [dashboard, pos, session, products, reports, settings]
+        seller_scoped:
+          type: boolean
+          description: |
+            058 — akun terikat ke satu seller sehingga SEMUA data dibatasi ke seller itu di server. Selalu false untuk
+            peran Owner (selalu melihat semua seller) walau ada ikatan basi. Kosmetik di frontend (menyembunyikan menu
+            administratif); penegakan di server: rekaman seller lain = 404, permukaan administratif = 403
+            `seller_scope_forbidden`. Order/pre-order tampil UTUH bila ada ≥1 baris milik seller itu; statistik dan
+            laporan per seller hanya menghitung baris miliknya.
+        artist:
+          type: object
+          nullable: true
+          description: 058 — seller pengguna (null bila tidak dibatasi).
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            code: { type: string }
+            is_active: { type: boolean }
+        seller_active:
+          type: boolean
+          description: "058 — false bila seller pengguna dinonaktifkan; tampilan kosong + pemberitahuan, bukan tampilan penuh."
         permissions:
           type: object
           additionalProperties:
@@ -6435,6 +6459,15 @@ components:
             id: { type: integer }
             name: { type: string }
         is_active: { type: boolean }
+        artist_id: { type: integer, nullable: true, description: "058 — seller yang membatasi data pengguna ini; null = tanpa batasan." }
+        artist:
+          type: object
+          nullable: true
+          readOnly: true
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            code: { type: string }
         photo_url: { type: string, nullable: true, readOnly: true }
         last_login_at: { type: string, format: date-time, nullable: true }
       description: password TIDAK PERNAH disertakan (FR-007), termasuk pada ekspor massal.
@@ -6493,6 +6526,13 @@ components:
         password: { type: string, minLength: 8, description: Wajib saat membuat; opsional saat memperbarui (kosong = tidak diubah). }
         role_id: { type: integer, description: Harus merujuk Role yang belum dihapus. }
         is_active: { type: boolean, default: true }
+        artist_id:
+          type: integer
+          nullable: true
+          description: |
+            058 — mengikat pengguna ke SATU seller (aktif, belum dihapus, mode data aktif); null/kosong = tanpa batasan.
+            Peran Owner TIDAK boleh punya seller: nilai terisi untuk Owner → 422, dan menjadikan pengguna Owner
+            melepas ikatannya. Perubahan dicatat (`user_seller_changed`) dalam transaksi yang sama.
 
     # -------------------------------------------------------------
     # Vendor, bahan baku, dan BOM (ditambahkan pasca-MVP, 2026-09-01)

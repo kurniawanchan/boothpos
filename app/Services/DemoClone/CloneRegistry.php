@@ -40,7 +40,7 @@ final class CloneRegistry
             'categories' => ['deferred' => ['parent_id' => 'categories'], 'files' => ['image_path' => 'public']],
             'vendors' => ['suffix' => ['code' => 20]],
             'materials' => ['suffix' => ['code' => 20]],
-            'customers' => [],
+            'customers' => ['fks' => ['artist_id' => 'artists']],
             'products' => [
                 'fks' => ['artist_id' => 'artists', 'category_id' => 'categories'],
                 'files' => ['image_path' => 'public'],

@@ -4,10 +4,13 @@ namespace App\Http\Requests;
 
 use App\Models\Product;
 use App\Support\ProductSegment;
+use App\Http\Requests\Concerns\ForcesOwnSeller;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreProductRequest extends FormRequest
 {
+    use ForcesOwnSeller;
+
     public function authorize(): bool
     {
         return $this->user()?->can('create', Product::class) ?? false;
@@ -20,6 +23,7 @@ class StoreProductRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        $this->defaultOwnSeller(true);
         if ($this->has('product_segment')) {
             $this->merge(['product_segment' => ProductSegment::normalise($this->input('product_segment'))]);
         }
@@ -49,5 +53,10 @@ class StoreProductRequest extends FormRequest
             'variants.*.sell_price' => ['required', 'numeric', 'min:0'],
             'variants.*.low_stock_alert' => ['nullable', 'integer', 'min:0'],
         ];
+    }
+
+    public function withValidator($validator): void
+    {
+        $this->refuseForeignSeller($validator);
     }
 }

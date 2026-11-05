@@ -119,7 +119,11 @@ class CustomerController extends Controller
 
     public function store(StoreCustomerRequest $request): JsonResponse
     {
-        return response()->json(new CustomerResource(Customer::create($request->validated())), 201);
+        // 058 — pelanggan yang dibuat pengguna ber-seller dicap seller asalnya supaya tetap terlihat olehnya
+        // sebelum punya order (kasir tak bisa memasang pelanggan baru ke penjualan parsial tanpa ini).
+        $data = $request->validated() + ['artist_id' => \App\Support\SellerGate::current()];
+
+        return response()->json(new CustomerResource(Customer::create($data)), 201);
     }
 
     public function update(UpdateCustomerRequest $request, Customer $customer): JsonResponse

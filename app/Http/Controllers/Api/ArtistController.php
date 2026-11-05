@@ -95,6 +95,14 @@ class ArtistController extends Controller
             ], 409);
         }
 
+        // 058 — seller yang masih dipakai pengguna tidak boleh hilang diam-diam: pengguna itu akan kehilangan
+        // batasannya (atau melihat tampilan kosong tanpa penjelasan). Lepas/ganti seller pengguna dulu.
+        if (\App\Models\User::where('artist_id', $artist->id)->exists()) {
+            return response()->json([
+                'message' => __('master_data.artist_delete_has_users'),
+            ], 409);
+        }
+
         // F13.4 — hapus data adalah tindakan sensitif; log ditulis DI DALAM
         // transaksi yang sama dengan delete-nya (atomik, ikut rollback bersama).
         DB::transaction(function () use ($artist, $request) {

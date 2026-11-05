@@ -270,7 +270,8 @@ function openEditingImageLightbox() {
 function openCreate() {
   editingProduct.value = null;
   Object.assign(productForm, {
-    artist_id: artists.value[0]?.id ?? '',
+    // 058 — pengguna ber-seller: seller-nya sendiri (server memaksa dan menolak seller lain).
+    artist_id: auth.user?.artist?.id ?? artists.value[0]?.id ?? '',
     category_id: categories.value[0]?.id ?? '',
     product_segment: '',
     name: '',
@@ -750,7 +751,7 @@ async function performDelete() {
         <div class="flex flex-col gap-4 rounded-card border border-line-2 bg-white p-5">
           <span class="text-[14.5px] font-bold">{{ t('master_data.product_identity') }}</span>
           <div class="grid grid-cols-2 gap-3.5">
-            <BaseSelect v-model="productForm.artist_id" :label="t('master_data.owner_artist')" required :options="artists.map((a) => ({ value: a.id, label: a.name }))" :error="formErrors.artist_id" />
+            <BaseSelect v-if="!auth.isSellerScoped" v-model="productForm.artist_id" :label="t('master_data.owner_artist')" required :options="artists.map((a) => ({ value: a.id, label: a.name }))" :error="formErrors.artist_id" />
             <BaseSelect v-model="productForm.category_id" :label="t('master_data.category')" required :options="categories.map((c) => ({ value: c.id, label: c.name }))" :error="formErrors.category_id" />
           </div>
           <div class="grid grid-cols-[2fr_1fr] gap-3.5">

@@ -1308,6 +1308,12 @@
     "col_name": "Name",
     "col_username": "Username",
     "col_role": "Role",
+    "col_seller": "Seller",
+    "seller": "Seller",
+    "no_seller": "No seller (sees everything)",
+    "all_sellers": "All sellers",
+    "seller_hint": "This user will only see data of the selected seller.",
+    "owner_sees_all_sellers": "The Owner role always sees every seller and cannot be linked to one.",
     "col_last_access": "Last Access",
     "col_status": "Status",
     "never_accessed": "Never",
@@ -1652,6 +1658,10 @@
     "delete_confirm_order": "Delete the {amount} payment from {number}? The paid amount and remaining balance are recalculated from the remaining payments. This cannot be undone.",
     "filter_all": "All payment statuses",
     "summary_outstanding": "outstanding {amount}"
+  },
+  "seller_scope": {
+    "inactive_title": "Your seller is inactive",
+    "inactive_body": "Your account is linked to a seller that is no longer active, so no data is shown. Ask the owner to reactivate the seller or change your account."
   },
   "schema": {
     "update_title": "The database needs an update",

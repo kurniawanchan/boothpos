@@ -93,7 +93,7 @@ const creating = ref(false);
 
 function openNew() {
   newEvent.value = '';
-  newSeller.value = '';
+  newSeller.value = auth.user?.artist?.id ?? ''; // 058 — pengguna ber-seller: seller sendiri
   preview.value = null;
   showNew.value = true;
 }
@@ -191,7 +191,7 @@ async function createDraft() {
       <div class="flex flex-col gap-4 px-6 py-5">
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <BaseSelect v-model="newEvent" :label="t('settlements.event')" :options="newEventOptions" :placeholder="t('settlements.select_event')" searchable />
-          <BaseSelect v-model="newSeller" :label="t('settlements.seller')" :options="newSellerOptions" :placeholder="t('settlements.select_seller')" searchable />
+          <BaseSelect v-if="!auth.isSellerScoped" v-model="newSeller" :label="t('settlements.seller')" :options="newSellerOptions" :placeholder="t('settlements.select_seller')" searchable />
         </div>
 
         <p v-if="previewLoading" class="text-[13px] text-muted-3">{{ t('common.loading_data') }}</p>

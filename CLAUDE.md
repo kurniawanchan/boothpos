@@ -467,6 +467,21 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - **Test traps**: MySQL JSON does not keep object key order (compare with `assertEquals`); two `artisan test` runs at once corrupt `boothpos_test`; the Code128 reference-library tests fail on the clean base (`picqer` is `require-dev`).
 - **Not verified in a real browser** (T051 open).
 
+## Seller-scoped users (feature 058, 2026-11-05)
+
+A user can be linked to ONE seller (`users.artist_id`, NULL = today's behaviour). When linked, every read AND write is narrowed to that seller. Rules a future change must not break:
+
+- **One gate: `App\Support\SellerGate`.** `current()` / `forUser()` is the only place that decides "which seller limits this user". It is NULL for users without a seller, for the **Owner role** (never scoped, cannot be assigned a seller; product-owner decision — a stale `artist_id` on an Owner is ignored), and in CLI/queue/seeder/cloner (no authenticated user). A deactivated or soft-deleted seller still returns its id → empty view, never a fallback to everything.
+- **Eloquent models are scoped by `SellerScope`** (named scope + `HasSellerScope` trait; the per-table rules live in ONE `match` in `SellerScope`). New seller-attributable model ⇒ add it there. Variants/stock/BOM go through `product_id IN (products of the seller)` INCLUDING soft-deleted products so history stays visible.
+- **Orders/pre-orders: header visible when ≥1 line is the seller's, and then shown WHOLE (Q1:B)** — `OrderItem`/`PreorderItem` relations are deliberately NOT scoped. Statistics, reports and settlements count only own lines. This knowingly exposes other sellers' lines/prices/customer inside shared orders.
+- **Hand-rolled `DB::table` report queries bypass scopes** (same trap as `data_mode`): every one needs `SellerGate::applyToItems($q, 'order_items.artist_id')` (or `applyToOrderHeaders/applyToPreorderHeaders`) next to its `data_mode` filter. Done for `ReportController` (`sales`, `profit`, `artistProfit`, export detail), `SalesByProductReport`, `PreorderRecognizedRevenue` (shared base). `SettlementService::recalculateForEvent()` and `SellerSettlementBuilder` stay system-level / explicit-seller on purpose. `ReportsReadTest` fails when a report leaks another seller's name.
+- **Pre-order report for a scoped user** is computed from the seller's item share (the `breakdown=artist` path); that path INNER JOINs `events`, so event-less pre-orders are absent (inherited quirk, research D12).
+- **Foreign record ⇒ 404** (route-model binding through scoped models). **Admin/cross-seller surfaces ⇒ 403 `seller_scope_forbidden`** via the `seller.forbidden` route middleware (users, roles, settings, backups, activity log, master-data import/export, customer/pre-order import, billing, vendor/material/event/category/artist WRITES, payment-method report). `ForbiddenSurfacesTest::test_every_api_route_is_classified_for_seller_scope` fails when a new route is neither scope-aware nor forbidden. **`apiResource(...)->middleware()` OVERWRITES** an earlier call — pass one array (`['ability:x', 'seller.forbidden']`), as the 057 coverage test caught.
+- **Writes:** `artist_id` is defaulted to the user's seller and a different value is refused (422) by `ForcesOwnSeller` (products, purchase orders, settlements); customers created by a scoped user get `customers.artist_id` (origin seller) so they stay visible before having an order.
+- **Users:** `artist_id` validated by `ValidatesUserSeller` (active, not deleted, current mode, not for the Owner role); changes write `user_seller_changed` in the same transaction; a seller linked to users cannot be deleted (409); the demo clone aborts with a clear message if a user points at a DEMO seller (`users.artist_id` is RESTRICT).
+- **SPA is cosmetic:** `auth.user.seller_scoped/artist/seller_active` from `/auth/me`; `canAccessMenu` hides the forbidden menus; Sales cards lock to the seller's share through `useSalesFilters({ lockedSeller })`.
+- **Not verified in a real browser** (browser tooling unavailable in the build session). The API side was checked against the dev database with a throwaway scoped user (counts only): own products/orders/pre-orders/customers narrowed, admin surfaces 403, foreign record 404.
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -474,7 +489,16 @@ Reports → Pre-order → By Seller shows a **Subtotal row after each seller's l
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/057-menu-action-permissions/plan.md`
+Active feature plan: `specs/058-seller-scoped-user-access/plan.md`
+(branch `094-seller-scoped-user-access`, from `develop`; spec dir number ≠ branch number) — nullable `users.artist_id`
+(NULL = today's behaviour) links a user to ONE seller; ONE gate `App\Support\SellerGate` narrows reads/writes through
+Eloquent scopes AND an explicit helper on the hand-rolled `DB::table` report queries (they bypass scopes, like `data_mode`).
+Order/pre-order HEADERS are visible when ≥1 line is the seller's and then show the WHOLE order (product-owner decision
+Q1:B); statistics/seller reports count only own lines. Foreign records answer 404; admin-only surfaces answer 403
+`seller_scope_forbidden`; scope only narrows (057 role/action rules still run). Operate-within-seller (Q3:A), not a
+portal, so PRD §10.2 stays cut. See research.md D1–D10.
+
+Previous feature: `specs/057-menu-action-permissions/plan.md`
 (branch `093-menu-action-permissions`, from `develop`; spec dir number ≠ branch number) — one additive nullable JSON
 column `roles.menu_actions` (NULL = legacy = full access, so no data migration and no behaviour change). Per menu a role
 stores permitted ACTIONS (View implicit; Create/Edit/Delete + named ones such as Void/Verify/Export) from ONE registry
