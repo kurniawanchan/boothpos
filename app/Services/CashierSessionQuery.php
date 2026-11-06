@@ -49,6 +49,8 @@ class CashierSessionQuery
     {
         $query = CashierSession::query()
             ->with(['user:id,name', 'event:id,name'])
+            // 063 — jumlah pembukaan-kembali per shift dari SATU subquery (tanpa N+1).
+            ->withCount('reopens')
             // Selain owner/admin dipaksa ke shift miliknya, APA PUN yang dikirim di query.
             ->when(! $viewer->isOwnerOrAdmin(), fn ($q) => $q->where('user_id', $viewer->id))
             ->when($viewer->isOwnerOrAdmin() && ! empty($filters['user_id']), fn ($q) => $q->where('user_id', (int) $filters['user_id']))
@@ -70,6 +72,7 @@ class CashierSessionQuery
                 'closed_at' => $s->closed_at?->toIso8601String(),
                 'status' => $s->status,
                 'opening_cash' => $this->money($s->opening_cash),
+                'reopen_count' => (int) $s->reopens_count,
             ])->all();
 
         return [
@@ -78,10 +81,14 @@ class CashierSessionQuery
         ];
     }
 
-    /** Rincian satu shift: angka kas awal/penutupan + ringkasan penjualan (sudah diotorisasi pemanggil). */
-    public function detail(CashierSession $session): array
+    /**
+     * Rincian satu shift: angka kas awal/penutupan + ringkasan penjualan (sudah diotorisasi pemanggil).
+     * 063: `can_reopen` dihitung SERVER (Owner + shift tertutup) agar SPA tak menurunkan izin dari peran,
+     * dan `reopens` selalu array (kosong bila tak pernah dibuka kembali), terlama dulu.
+     */
+    public function detail(CashierSession $session, User $viewer): array
     {
-        $session->loadMissing(['user:id,name', 'event:id,name', 'openingCashEntries.artist:id,name']);
+        $session->loadMissing(['user:id,name', 'event:id,name', 'openingCashEntries.artist:id,name', 'reopens.reopenedBy:id,name']);
 
         $closed = $session->status === 'closed';
         $expected = $closed && $session->expected_cash !== null ? (float) $session->expected_cash : $this->expectedCash($session);
@@ -114,6 +121,18 @@ class CashierSessionQuery
             'opening_cash_entries' => $session->openingCashEntries->map(fn ($e) => [
                 'artist_id' => $e->artist_id, 'artist_name' => $e->artist?->name, 'amount' => $this->money($e->amount),
             ])->all(),
+            'can_reopen' => $closed && (bool) $viewer->role?->isOwner(),
+            'reopens' => $session->reopens->map(fn ($r) => [
+                'id' => $r->id,
+                'reopened_by_id' => $r->reopened_by,
+                'reopened_by_name' => $r->reopenedBy?->name,
+                'reopened_at' => $r->reopened_at?->toIso8601String(),
+                'reason' => $r->reason,
+                'previous_closed_at' => $r->previous_closed_at?->toIso8601String(),
+                'previous_closing_cash' => $r->previous_closing_cash === null ? null : $this->money($r->previous_closing_cash),
+                'previous_expected_cash' => $r->previous_expected_cash === null ? null : $this->money($r->previous_expected_cash),
+                'previous_cash_difference' => $r->previous_cash_difference === null ? null : $this->money($r->previous_cash_difference),
+            ])->values()->all(),
         ];
     }
 

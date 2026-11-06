@@ -243,6 +243,7 @@ Atas permintaan pemilik produk, pembayaran menjadi buku besar (ledger) yang disi
 - **Perubahan perilaku yang disengaja:** kelebihan bayar pada pre-order kini **ditolak** (dulu diterima); jumlah tidak boleh melebihi sisa tagihan. Klik ganda/coba-ulang tidak pernah menggandakan pembayaran (kunci idempotensi), dan dua staf yang membayar bersamaan tak bisa melebihi tagihan.
 - **POS:** penjualan boleh selesai dibayar sebagian **bila ada pelanggan** (tetap berstatus selesai, stok berkurang, laporan menghitungnya saat selesai) dan dilunasi nanti dari halaman Sales. Uang tunai dihitung di **shift tempat uang itu diterima**, bukan shift penjualannya, supaya rekonsiliasi shift yang sudah ditutup tidak rusak.
 - Entri pembayaran tidak bisa diubah; satu-satunya koreksi adalah hapus (owner/admin) yang diaudit dan menghitung ulang status.
+- **Catatan 2026-11-06 (fitur 063):** shift kasir yang sudah ditutup kini bisa **dibuka kembali oleh peran Owner** (alasan wajib) untuk dikoreksi lalu ditutup ulang. Ini pengecualian yang disengaja dan tercatat dari aturan "shift tertutup final": angka penutupan sebelumnya disimpan permanen di riwayat, penutupan ulang menghitung ulang kas diharapkan dan selisih, dan pembukaan kembali tidak menyentuh order, pembayaran, stok, rekap, laporan, maupun settlement. Teks lama di atas tidak diubah.
 
 Tidak ada nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/028-partial-split-payment/`.
 

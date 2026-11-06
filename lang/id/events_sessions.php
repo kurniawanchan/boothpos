@@ -18,4 +18,10 @@ return [
     'available_on_label' => 'Hari tersedia',
     'available_on_day_1' => 'Hari 1 ({date})',
     'available_on_day_2' => 'Hari 2 ({date})',
+
+    // 063-reopen-closed-shift
+    'not_authorized_reopen_session' => 'Hanya Owner yang dapat membuka kembali shift yang sudah ditutup.',
+    'session_not_closed' => 'Shift ini belum ditutup, jadi tidak perlu dibuka kembali.',
+    'cashier_has_open_session' => 'Kasir shift ini masih memiliki shift lain yang terbuka. Tutup shift tersebut terlebih dahulu.',
+    'reopen_reason_required' => 'Alasan membuka kembali shift wajib diisi (3–500 karakter).',
 ];

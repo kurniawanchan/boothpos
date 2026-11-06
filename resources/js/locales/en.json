@@ -33,6 +33,9 @@
     "restore_failed": "Failed to restore the database."
   },
   "common": {
+    "copy": "Copy",
+    "copied": "Copied: {text}",
+    "copy_failed": "Could not copy. Select the text and copy it manually.",
     "powered_by": "Powered by {name}",
     "confirm_title": "Confirm",
     "cancel": "Cancel",
@@ -1986,7 +1989,20 @@
     "empty": "No cashier sessions yet.",
     "loading": "Loading…",
     "load_failed": "Could not load the sessions.",
-    "link": "Session history"
+    "link": "Session history",
+    "reopen_action": "Reopen shift",
+    "reopened_marker": "Reopened",
+    "reopen_title": "Reopen this shift",
+    "reopen_warning": "The shift becomes open again so it can be corrected. Its closing figures are cleared and saved in the history below. Until it is closed again, new sales and payments by {name} are recorded in this shift.",
+    "reopen_reason_label": "Reason",
+    "reopen_reason_hint": "3–500 characters",
+    "reopen_confirm": "Reopen shift",
+    "reopen_back": "Cancel",
+    "reopen_success": "The shift has been reopened.",
+    "reopen_failed": "Could not reopen the shift.",
+    "reopen_history": "Reopen history",
+    "reopen_entry": "{name} · {date}",
+    "reopen_previous": "Before reopening: counted {counted}, expected {expected}, difference {difference}"
   },
   "payment_proof": {
     "link": "Payment Proof",

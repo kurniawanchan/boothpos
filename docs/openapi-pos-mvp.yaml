@@ -1441,7 +1441,7 @@ paths:
         - { name: per_page, in: query, schema: { type: integer, maximum: 100 } }
       responses:
         '200':
-          description: "`{ data: [{ id, cashier_id, cashier_name, event_id, event_name, opened_at, closed_at, status, opening_cash }], meta }`"
+          description: "`{ data: [{ id, cashier_id, cashier_name, event_id, event_name, opened_at, closed_at, status, opening_cash, reopen_count }], meta }`; `reopen_count` = berapa kali shift dibuka kembali (063)."
     post:
       tags: [Event & Session]
       summary: Buka sesi kasir
@@ -1493,7 +1493,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
-        '200': { description: "Rincian sesi + `order_count`, `total_sales`, `by_method[]`, `opening_cash_entries[]`." }
+        '200': { description: "Rincian sesi + `order_count`, `total_sales`, `by_method[]`, `opening_cash_entries[]`; 063: `can_reopen` (dihitung server: peran Owner DAN sesi tertutup) dan `reopens[]` (terlama dulu; selalu array; tiap entri `{ id, reopened_by_id, reopened_by_name, reopened_at, reason, previous_closed_at, previous_closing_cash, previous_expected_cash, previous_cash_difference }`, uang berupa string dua desimal)." }
         '403': { description: "Sesi milik kasir lain." }
 
   /sessions/{id}/transactions:
@@ -1545,6 +1545,37 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/CashierSession' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /sessions/{id}/reopen:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Event & Session]
+      summary: Buka kembali sesi kasir yang sudah ditutup (063, hanya Owner)
+      description: |
+        Hanya peran **Owner** (aturan tetap, bukan aksi yang bisa didelegasikan lewat peran). Shift kembali ke bentuk
+        terbuka biasa: `status = open`, `closed_at`, `closing_cash`, `expected_cash`, `cash_difference` dikosongkan;
+        angka penutupan sebelumnya disimpan permanen di riwayat (`reopens[]` pada `GET /sessions/{id}`, tabel
+        append-only). Menutup ulang lewat `POST /sessions/{id}/close` menghitung ulang `expected_cash` dan selisih.
+        Boleh walau event sudah selesai. TIDAK menyentuh order, pembayaran, stok, rekap, laporan, atau settlement.
+        Selama terbuka, penjualan/pembayaran baru kasir itu tercatat di shift ini (satu shift terbuka per kasir).
+        Dicatat di activity log (`session_reopened`) dalam transaksi yang sama.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 3, maxLength: 500, example: "Hitungan kas salah ketik" }
+      responses:
+        '200':
+          description: "Rincian sesi (bentuk sama dengan `GET /sessions/{id}`), kini terbuka, dengan `reopens[]` terbaru."
+        '403': { description: "Pemanggil bukan peran Owner (termasuk kasir pemilik shift)." }
+        '404': { description: "Sesi tidak ada pada mode DEMO/LIVE aktif." }
+        '409':
+          description: "`code: session_not_closed` (shift belum ditutup) atau `code: cashier_has_open_session` (kasir shift ini masih punya shift terbuka lain)."
+        '422': { description: "`reason` kosong, kurang dari 3, atau lebih dari 500 karakter." }
 
   /sessions/{id}/summary:
     parameters: [{ $ref: '#/components/parameters/Id' }]

@@ -48,4 +48,10 @@ class CashierSession extends Model
     {
         return $this->hasMany(SessionOpeningCashEntry::class, 'session_id');
     }
+
+    /** 063 — riwayat pembukaan-kembali, terlama dulu. */
+    public function reopens(): HasMany
+    {
+        return $this->hasMany(CashierSessionReopen::class, 'session_id')->orderBy('id');
+    }
 }

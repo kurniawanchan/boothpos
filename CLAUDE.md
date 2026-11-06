@@ -498,6 +498,16 @@ One required approval per UNIQUE seller among a POS sale's lines (`order_items.a
 - **Not built, on purpose:** pre-order approval, withdraw/undo, per-store custom stamp, approval columns in the Sales Excel export, reminders, and gating settlement/finalize on approval status.
 - **Not verified in a real browser** (Constitution II, task T043 open): drawing on desktop (mouse/touchpad) and on an Android touch device, popover keyboard behaviour, phone-width layout.
 
+## Reopening a closed shift (feature 063, 2026-11-06)
+
+- **Owner role only, as a FIXED rule.** `POST /sessions/{session}/reopen` checks `$request->user()->role?->isOwner()` inline in `CashierSessionController::reopen()` (403 before any state is revealed). It is deliberately NOT a `MenuActions` action — a role-editor checkbox would imply it can be delegated — so the route sits in `MenuActionsRouteCoverageTest::EXEMPT` with that reason. Do not "fix" the exemption by adding `ability:session,...`.
+- **One writer.** `CashierSessionReopenService` is the only code that moves a shift closed → open and the only writer of `cashier_session_reopens`. It locks the shift row, re-checks `closed`, locks the cashier's `users` row (no DB unique on "one open shift per user") and refuses (409 `cashier_has_open_session`) if the cashier has another open shift; shift update + reopen row + `activity_logs` row `session_reopened` are ONE transaction.
+- **Reopen restores the plain OPEN shape** (status `open`; `closed_at`, `closing_cash`, `expected_cash`, `cash_difference` NULL). That is why `close()`, `CashierSessionQuery::expectedCash()` and the cash attribution need NO change and re-closing recomputes everything. The cleared figures live in the append-only history (`previous_*`); there is no edit/delete route for it (a test asserts it). Do not keep the old closing figures on the shift row while it is open.
+- **Side effects are zero by design (FR-008/FR-009):** no order, payment, stock, recap, report or settlement is touched, and the event's status is irrelevant (allowed for ended events; `test_reopening_changes_no_money_stock_recap_or_settlement_data_even_for_an_ended_event` fingerprints the tables). Consequence to remember: while reopened, THAT cashier's new sales and payments attach to this shift (`PaymentService::receivingSessionId()` uses their only open shift) — the dialog warns about it.
+- **Read model is server-computed:** `GET /sessions/{id}` returns `can_reopen` (Owner AND closed) and `reopens[]` (always an array); `GET /sessions` rows carry `reopen_count` via one `withCount` (query-count test). `CashierSessionQuery::detail()` now takes the viewer. The SPA never derives the permission from the role.
+- `cashier_session_reopens` has no `data_mode`; it rides `cashier_sessions` in `CloneRegistry` (`via cashier_sessions.session_id`; `reopened_by` → shared `users`). A deliberate, logged exception to "a closed shift's stored figures are never rewritten" (028/054) — PRD carries a dated note.
+- Not verified in a real browser in the build session (T029).
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -505,7 +515,21 @@ One required approval per UNIQUE seller among a POS sale's lines (`order_items.a
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/062-sales-export-columns/plan.md`
+Active feature plan: `specs/063-reopen-closed-shift/plan.md`
+(branch `085-reopen-closed-shift`, from `develop`; spec dir number ≠ branch number) — one additive migration, one route.
+The **Owner role only** (`$user->role?->isOwner()`, inline in the controller; deliberately NOT a `MenuActions` action, so no
+role can be granted it — the route is in `MenuActionsRouteCoverageTest::EXEMPT`) can reopen a CLOSED cashier shift with a
+mandatory reason: `POST /sessions/{session}/reopen` → `CashierSessionReopenService` (the only writer; shift row + cashier
+user row locked, 409 when the shift is not closed or the cashier already has another open shift, one transaction with an
+`activity_logs` row `session_reopened`). Reopen restores the plain OPEN shape (status `open`, `closed_at`/`closing_cash`/
+`expected_cash`/`cash_difference` NULL) so `close()`, the live expected-cash formula and cash attribution work unchanged and
+re-closing recomputes the figures; the figures cleared are kept in the append-only `cashier_session_reopens` table
+(who/when/why + previous closing figures; no `data_mode`, rides `cashier_sessions` in `CloneRegistry` via
+`cashier_sessions.session_id`). Allowed whatever the event's status (spec FR-009); never touches orders, payments, stock,
+recaps, reports or settlements. `GET /sessions/{id}` gains `can_reopen` + `reopens[]`, `GET /sessions` rows `reopen_count`.
+A deliberate, logged exception to "a closed shift's stored figures are never rewritten". See research.md D1–D10.
+
+Previous feature: `specs/062-sales-export-columns/plan.md`
 (branch `087-sales-export-columns`, from `develop`; spec dir number ≠ branch number) — no migration, no route, no
 frontend change; the on-screen Sales list and its JSON are untouched. The Sales Excel export
 (`POST /reports/sales/transactions/export`) drops `customer`, `gross_sales`, `discount`, `cost`, `margin`, `paid` (for every

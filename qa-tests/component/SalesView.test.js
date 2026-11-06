@@ -342,7 +342,9 @@ describe('SalesView — filters', () => {
     const user = await setupFilters();
 
     await user.type(screen.getByLabelText('Total minimum'), '30000');
+    await user.tab(); // nominal berlaku saat selesai diketik (blur)
     await user.type(screen.getByLabelText('Total maksimum'), '60000');
+    await user.tab(); // nominal berlaku saat selesai diketik (blur)
 
     expect(rowOrder()).toEqual(['ORD-202', 'ORD-201']);
   });
@@ -402,6 +404,7 @@ describe('SalesView — filters', () => {
     const user = await setupFilters();
 
     await user.type(screen.getByLabelText('Total maksimum'), '1000');
+    await user.tab(); // nominal berlaku saat selesai diketik (blur)
 
     expect(screen.getByText('Tidak ada transaksi yang cocok dengan filter.')).toBeInTheDocument();
   });

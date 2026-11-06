@@ -224,6 +224,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/sessions/current', [CashierSessionController::class, 'current']);
         Route::post('/sessions', [CashierSessionController::class, 'store'])->middleware('ability:session,create');
         Route::post('/sessions/{session}/close', [CashierSessionController::class, 'close'])->middleware('ability:session,edit');
+        // 063 — hanya peran Owner (diperiksa di controller); sengaja tanpa middleware `ability`, lihat EXEMPT di MenuActionsRouteCoverageTest.
+        Route::post('/sessions/{session}/reopen', [CashierSessionController::class, 'reopen'])->whereNumber('session');
         Route::get('/sessions/{session}/summary', [CashierSessionController::class, 'summary']);
         Route::get('/sessions/{session}', [CashierSessionController::class, 'show'])->whereNumber('session');
         Route::get('/sessions/{session}/transactions', [CashierSessionController::class, 'transactions']);

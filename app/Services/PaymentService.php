@@ -373,7 +373,13 @@ class PaymentService
             $update = ['method' => $method, 'channel_id' => $channelId];
             if ($method === 'cash') {
                 // Tunai masuk ke shift terbuka pengubah; belum ada → 409 (sama seperti pembayaran tunai susulan).
+                // 063: Owner yang mengoreksi lewat shift yang DIBUKA KEMBALI (milik kasir lain) memasukkan
+                // tunainya ke shift penjualan itu bila masih terbuka — kalau tidak, koreksi pasca-reopen mustahil
+                // kecuali Owner membuka shiftnya sendiri. Selain Owner, aturan lama tetap.
                 $shift = CashierSession::where('user_id', $user->id)->where('status', 'open')->first();
+                if (! $shift && $user->role?->isOwner() && $locked->session_id) {
+                    $shift = CashierSession::where('id', $locked->session_id)->where('status', 'open')->first();
+                }
                 if (! $shift) {
                     throw new PaymentMethodChangeException(__('orders_payments.payment_session_required'), 'no_open_shift');
                 }

@@ -17,6 +17,7 @@ import OrderReferenceModal from './OrderReferenceModal.vue';
 import OrderApprovalSection from './OrderApprovalSection.vue';
 import ReferenceThumbnails from './ReferenceThumbnails.vue';
 import ImageLightbox from '../ui/ImageLightbox.vue';
+import CopyTextButton from '../ui/CopyTextButton.vue';
 import { getOrder, voidOrder, addOrderPayment, deleteOrderPayment } from '../../api/orders';
 import { getPaymentProofBlobUrl, verifyPayment } from '../../api/payments';
 import { formatIDR, parseMoney } from '../../utils/money';
@@ -249,7 +250,10 @@ async function performVoid() {
         </div>
 
         <div class="flex flex-wrap items-baseline justify-between gap-2">
-          <span class="font-mono text-[16px] font-extrabold tracking-tight">{{ order.order_number }}</span>
+          <span class="flex items-center gap-1">
+            <span class="font-mono text-[16px] font-extrabold tracking-tight">{{ order.order_number }}</span>
+            <CopyTextButton :text="order.order_number" />
+          </span>
           <span class="text-[12.5px] font-semibold text-muted-3">{{ t('reports.order_items_summary', { items: items.length, units: unitCount }) }}</span>
         </div>
 
