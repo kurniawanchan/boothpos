@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { createPinia, setActivePinia } from 'pinia';
 import ModifierGroupsAdmin from '../../resources/js/components/restaurant/ModifierGroupsAdmin.vue';
 import { listModifierGroups, createModifierGroup, updateModifierGroup, deleteModifierGroup, setModifierGroupAttachments } from '../../resources/js/api/modifierGroups';
+import { listProducts } from '../../resources/js/api/products';
+import { listCategories } from '../../resources/js/api/categories';
 
 vi.mock('../../resources/js/api/modifierGroups', () => ({
   listModifierGroups: vi.fn(), createModifierGroup: vi.fn(), updateModifierGroup: vi.fn(), deleteModifierGroup: vi.fn(), setModifierGroupAttachments: vi.fn(),
@@ -32,6 +34,9 @@ describe('ModifierGroupsAdmin', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     listModifierGroups.mockResolvedValue({ data: [group()] });
+    // clearAllMocks tidak mengembalikan implementasi: tes 091 menimpa daftar ini, jadi pulihkan bawaannya.
+    listProducts.mockResolvedValue({ data: [{ id: 5, name: 'Es Kopi' }] });
+    listCategories.mockResolvedValue({ data: [{ id: 3, name: 'Minuman' }] });
   });
 
   it('lists groups with their rule, active options and attachment counts', async () => {
@@ -130,6 +135,147 @@ describe('ModifierGroupsAdmin', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Simpan' }));
 
     await waitFor(() => expect(setModifierGroupAttachments).toHaveBeenCalledWith(1, { product_ids: [5], category_ids: [] }));
+  });
+
+  // 091 — kosong di dialog Attach berarti "tidak melampirkan apa pun", bukan "Semua".
+  it('shows "Tidak ada" (not "Semua") for empty category and product selections', async () => {
+    listModifierGroups.mockResolvedValue({ data: [group({ product_ids: [], category_ids: [] })] });
+    const user = userEvent.setup();
+    renderAdmin();
+    await screen.findByText('Size');
+
+    await user.click(screen.getByRole('button', { name: 'Lampirkan' }));
+    const dialog = await screen.findByRole('dialog');
+
+    expect(within(dialog).getAllByText('Tidak ada')).toHaveLength(2);
+    expect(within(dialog).queryByText(/^semua$/i)).toBeNull();
+
+    // Baris pertama daftar juga "Tidak ada" (memilihnya mengosongkan pilihan).
+    await user.click(within(dialog).getAllByRole('button', { name: 'Tidak ada' })[1]); // pemicu kedua = Produk
+    expect(within(await screen.findByRole('listbox')).getAllByRole('option')[0]).toHaveTextContent('Tidak ada');
+  });
+
+  it('saves an empty attachment set unchanged when nothing is selected', async () => {
+    listModifierGroups.mockResolvedValue({ data: [group({ product_ids: [], category_ids: [] })] });
+    setModifierGroupAttachments.mockResolvedValue(group());
+    const user = userEvent.setup();
+    renderAdmin();
+    await screen.findByText('Size');
+
+    await user.click(screen.getByRole('button', { name: 'Lampirkan' }));
+    const dialog = await screen.findByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Simpan' }));
+
+    await waitFor(() => expect(setModifierGroupAttachments).toHaveBeenCalledWith(1, { product_ids: [], category_ids: [] }));
+  });
+
+  // 091 — nama pilihan tampil DI BAWAH isian bila ≥ 2 dipilih.
+  describe('attach dialog selection names', () => {
+    const catalog = () => {
+      listProducts.mockResolvedValue({ data: [{ id: 5, name: 'Es Kopi' }, { id: 6, name: 'Kopi Susu' }, { id: 7, name: 'Teh Tarik' }] });
+      listCategories.mockResolvedValue({ data: [{ id: 3, name: 'Minuman' }, { id: 4, name: 'Makanan' }] });
+    };
+    async function openAttach(over) {
+      catalog();
+      listModifierGroups.mockResolvedValue({ data: [group(over)] });
+      const user = userEvent.setup();
+      renderAdmin();
+      await screen.findByText('Size');
+      await user.click(screen.getByRole('button', { name: 'Lampirkan' }));
+      const dialog = await screen.findByRole('dialog');
+      return { user, dialog };
+    }
+
+    it('lists every selected product name below the field, in catalog order', async () => {
+      const { dialog } = await openAttach({ product_ids: [7, 5], category_ids: [] });
+
+      expect(within(dialog).getByTestId('attach-products-names')).toHaveTextContent('Es Kopi, Teh Tarik');
+      expect(within(dialog).queryByTestId('attach-categories-names')).toBeNull();
+    });
+
+    it('lists selected category names below the categories field', async () => {
+      const { dialog } = await openAttach({ product_ids: [], category_ids: [3, 4] });
+
+      expect(within(dialog).getByTestId('attach-categories-names')).toHaveTextContent('Minuman, Makanan');
+    });
+
+    it('adds no extra list for exactly one selection (the field already shows the name)', async () => {
+      const { dialog } = await openAttach({ product_ids: [6], category_ids: [3] });
+
+      expect(within(dialog).queryByTestId('attach-products-names')).toBeNull();
+      expect(within(dialog).queryByTestId('attach-categories-names')).toBeNull();
+    });
+
+    it('follows checking and unchecking, and returns to "Tidak ada" when emptied', async () => {
+      const { user, dialog } = await openAttach({ product_ids: [5], category_ids: [] });
+      expect(within(dialog).queryByTestId('attach-products-names')).toBeNull();
+
+      await user.click(within(dialog).getAllByRole('button', { name: /Es Kopi|Tidak ada/ }).at(-1));
+      await user.click(within(await screen.findByRole('listbox')).getByRole('option', { name: /Teh Tarik/ }));
+      expect(within(dialog).getByTestId('attach-products-names')).toHaveTextContent('Es Kopi, Teh Tarik');
+
+      await user.click(within(screen.getByRole('listbox')).getByRole('option', { name: /Teh Tarik/ }));
+      expect(within(dialog).queryByTestId('attach-products-names')).toBeNull();
+    });
+
+    it('skips ids that have no matching name and never prints "undefined"', async () => {
+      const { dialog } = await openAttach({ product_ids: [5, 6, 999], category_ids: [] });
+
+      const names = within(dialog).getByTestId('attach-products-names');
+      expect(names).toHaveTextContent('Es Kopi, Kopi Susu');
+      expect(names).not.toHaveTextContent(/undefined/);
+      expect(within(dialog).getByText('3 dipilih')).toBeInTheDocument(); // hitungan tetap dari pilihan sebenarnya
+    });
+
+    it('keeps the names list height-limited and scrollable for large selections, with Save/Cancel still present', async () => {
+      const many = Array.from({ length: 40 }, (_, i) => ({ id: 100 + i, name: `Produk ${i + 1}` }));
+      listProducts.mockResolvedValue({ data: many });
+      listCategories.mockResolvedValue({ data: [] });
+      listModifierGroups.mockResolvedValue({ data: [group({ product_ids: many.map((m) => m.id), category_ids: [] })] });
+      const user = userEvent.setup();
+      renderAdmin();
+      await screen.findByText('Size');
+      await user.click(screen.getByRole('button', { name: 'Lampirkan' }));
+      const dialog = await screen.findByRole('dialog');
+
+      const names = within(dialog).getByTestId('attach-products-names');
+      expect(names).toHaveTextContent('Produk 40');
+      expect(names.className).toMatch(/max-h-/);
+      expect(names.className).toMatch(/overflow-y-auto/);
+      expect(within(dialog).getByRole('button', { name: 'Simpan' })).toBeInTheDocument();
+      expect(within(dialog).getByRole('button', { name: 'Batal' })).toBeInTheDocument();
+    });
+
+    // BUG YANG DITEMUKAN (091): dialog hanya memuat halaman pertama (per_page 100 = batas server), jadi produk di urutan
+    // alfabet akhir tak punya nama ("7 dipilih" tetapi hanya 4 nama) dan juga tak bisa dipilih dari daftar.
+    it('loads every page of products and categories, so ids beyond the first 100 resolve to names', async () => {
+      const page1 = Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, name: `A-${i}` }));
+      listProducts.mockImplementation(async ({ page = 1 } = {}) => (page === 1
+        ? { data: page1, meta: { current_page: 1, last_page: 2 } }
+        : { data: [{ id: 5, name: 'Susu Jahe' }, { id: 6, name: 'Milo' }], meta: { current_page: 2, last_page: 2 } }));
+      listCategories.mockImplementation(async ({ page = 1 } = {}) => (page === 1
+        ? { data: [{ id: 3, name: 'Minuman' }], meta: { current_page: 1, last_page: 2 } }
+        : { data: [{ id: 4, name: 'Makanan' }], meta: { current_page: 2, last_page: 2 } }));
+      listModifierGroups.mockResolvedValue({ data: [group({ product_ids: [5, 6, 1000], category_ids: [3, 4] })] });
+      const user = userEvent.setup();
+      renderAdmin();
+      await screen.findByText('Size');
+      await user.click(screen.getByRole('button', { name: 'Lampirkan' }));
+      const dialog = await screen.findByRole('dialog');
+
+      // Tiga id terpilih = tiga nama (tidak ada yang hilang); urutan mengikuti daftar sumber.
+      expect(within(dialog).getByTestId('attach-products-names')).toHaveTextContent('A-0, Susu Jahe, Milo');
+      expect(within(dialog).getByTestId('attach-categories-names')).toHaveTextContent('Minuman, Makanan');
+      expect(listProducts).toHaveBeenCalledWith(expect.objectContaining({ page: 2 }));
+    });
+
+    it('saves the same payload as before for the same selection', async () => {
+      setModifierGroupAttachments.mockResolvedValue(group());
+      const { user, dialog } = await openAttach({ product_ids: [5, 6], category_ids: [3, 4] });
+      await user.click(within(dialog).getByRole('button', { name: 'Simpan' }));
+
+      await waitFor(() => expect(setModifierGroupAttachments).toHaveBeenCalledWith(1, { product_ids: [5, 6], category_ids: [3, 4] }));
+    });
   });
 
   it('deletes a group after confirmation', async () => {

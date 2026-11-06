@@ -35,14 +35,22 @@ const categories = ref([]);
 // 087 — bahan aktif yang bisa dipetakan ke pilihan; dimuat sekali (semua halaman, maks 100 per halaman).
 const materials = ref([]);
 
-async function loadMaterials() {
+// BUG YANG DITEMUKAN & DIPERBAIKI (091): daftar produk/kategori dulu hanya halaman pertama (`per_page: 100` = batas
+// server), jadi pada katalog > 100 produk di dialog Attach "7 dipilih" hanya punya 4 nama (sisanya di urutan alfabet
+// akhir) dan produk itu pun tak bisa dipilih dari daftar. Semua halaman dimuat dengan satu pembaca halaman.
+async function fetchAllPages(fetchPage, params = {}) {
   const all = [];
   for (let page = 1; ; page++) {
-    const res = await listMaterials({ is_active: 1, per_page: 100, page });
-    all.push(...res.data.map((m) => ({ id: m.id, name: m.name, unit: m.unit })));
+    const res = await fetchPage({ ...params, per_page: 100, page });
+    all.push(...res.data);
     if (page >= (res.meta?.last_page ?? 1)) break;
   }
-  materials.value = all;
+  return all;
+}
+
+async function loadMaterials() {
+  const all = await fetchAllPages(listMaterials, { is_active: 1 });
+  materials.value = all.map((m) => ({ id: m.id, name: m.name, unit: m.unit }));
 }
 
 async function load() {
@@ -56,8 +64,8 @@ async function load() {
 onMounted(async () => {
   await load();
   // Pilihan untuk dialog lampiran; dimuat sekali.
-  products.value = (await listProducts({ per_page: 100 })).data;
-  categories.value = (await listCategories({ per_page: 100 })).data;
+  products.value = await fetchAllPages(listProducts);
+  categories.value = await fetchAllPages(listCategories);
   await loadMaterials();
 });
 
@@ -182,6 +190,16 @@ const attachGroup = ref(null);
 const attachProducts = ref([]);
 const attachCategories = ref([]);
 const attaching = ref(false);
+
+// 091: nama pilihan tampil di bawah isian bila ≥ 2 dipilih (satu pilihan sudah terbaca di isiannya). Urutan mengikuti
+// daftar sumber; id tanpa padanan (item dihapus/nonaktif) dilewati supaya tak muncul "undefined". `==` karena id bisa
+// string/angka, sama seperti BaseMultiSelect.
+function selectedNames(ids, items) {
+  if (ids.length < 2) return '';
+  return items.filter((i) => ids.some((id) => id == i.id)).map((i) => i.name).join(', ');
+}
+const attachCategoryNames = computed(() => selectedNames(attachCategories.value, categories.value));
+const attachProductNames = computed(() => selectedNames(attachProducts.value, products.value));
 
 function openAttach(group) {
   attachGroup.value = group;
@@ -325,8 +343,12 @@ async function performDelete() {
     <BaseModal :open="!!attachGroup" :title="t('dining_setup.mod_attach_title', { name: attachGroup?.name })" max-width-class="max-w-[520px]" @close="attachGroup = null">
       <div class="flex flex-col gap-4 px-6 py-5">
         <p class="text-[12.5px] text-muted-3">{{ t('dining_setup.mod_attach_hint') }}</p>
-        <BaseMultiSelect v-model="attachCategories" :label="t('dining_setup.mod_attach_categories')" :options="categories.map((c) => ({ value: c.id, label: c.name }))" :placeholder="t('dining_setup.mod_attach_none')" />
-        <BaseMultiSelect v-model="attachProducts" :label="t('dining_setup.mod_attach_products')" :options="products.map((p) => ({ value: p.id, label: p.name }))" :placeholder="t('dining_setup.mod_attach_none')" />
+        <!-- 091: BaseMultiSelect menulis `allLabel` (bawaan "Semua") saat kosong; `placeholder` hanya dipakai untuk id
+             basi, jadi "Tidak ada" dulu tak pernah tampil. Di dialog ini kosong = tidak melampirkan apa pun. -->
+        <BaseMultiSelect v-model="attachCategories" :label="t('dining_setup.mod_attach_categories')" :options="categories.map((c) => ({ value: c.id, label: c.name }))" :all-label="t('dining_setup.mod_attach_none')" />
+        <p v-if="attachCategoryNames" data-testid="attach-categories-names" class="-mt-2.5 max-h-[120px] overflow-y-auto break-words text-[12.5px] text-muted-3">{{ t('dining_setup.mod_attach_selected_names', { names: attachCategoryNames }) }}</p>
+        <BaseMultiSelect v-model="attachProducts" :label="t('dining_setup.mod_attach_products')" :options="products.map((p) => ({ value: p.id, label: p.name }))" :all-label="t('dining_setup.mod_attach_none')" />
+        <p v-if="attachProductNames" data-testid="attach-products-names" class="-mt-2.5 max-h-[120px] overflow-y-auto break-words text-[12.5px] text-muted-3">{{ t('dining_setup.mod_attach_selected_names', { names: attachProductNames }) }}</p>
       </div>
       <template #footer>
         <div class="flex justify-end gap-2.5">

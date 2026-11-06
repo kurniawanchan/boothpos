@@ -1854,6 +1854,7 @@
     "mod_attach_categories": "Categories",
     "mod_attach_products": "Products",
     "mod_attach_none": "None",
+    "mod_attach_selected_names": "Selected: {names}",
     "mod_delete": "Delete modifier group",
     "mod_delete_confirm": "Delete group {name}? A group that has been used on orders cannot be deleted — deactivate it instead.",
     "tab_stations": "Stations",

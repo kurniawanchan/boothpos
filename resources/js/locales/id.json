@@ -1854,6 +1854,7 @@
     "mod_attach_categories": "Kategori",
     "mod_attach_products": "Produk",
     "mod_attach_none": "Tidak ada",
+    "mod_attach_selected_names": "Dipilih: {names}",
     "mod_delete": "Hapus grup modifier",
     "mod_delete_confirm": "Hapus grup {name}? Grup yang pernah dipakai pada order tidak bisa dihapus — nonaktifkan saja.",
     "tab_stations": "Stasiun",
