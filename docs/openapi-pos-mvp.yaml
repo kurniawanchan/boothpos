@@ -1493,7 +1493,7 @@ paths:
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
-        '200': { description: "Rincian sesi + `order_count`, `total_sales`, `by_method[]`, `opening_cash_entries[]`; 063: `can_reopen` (dihitung server: peran Owner DAN sesi tertutup) dan `reopens[]` (terlama dulu; selalu array; tiap entri `{ id, reopened_by_id, reopened_by_name, reopened_at, reason, previous_closed_at, previous_closing_cash, previous_expected_cash, previous_cash_difference }`, uang berupa string dua desimal)." }
+        '200': { description: "Rincian sesi + `order_count`, `total_sales`, `by_method[]`, `opening_cash_entries[]`; 063: `can_reopen` (dihitung server: peran Owner DAN sesi tertutup), `can_close` (sesi masih terbuka DAN pemilik shift atau owner/admin, plus izin session.edit) dan `reopens[]` (terlama dulu; selalu array; tiap entri `{ id, reopened_by_id, reopened_by_name, reopened_at, reason, previous_closed_at, previous_closing_cash, previous_expected_cash, previous_cash_difference }`, uang berupa string dua desimal)." }
         '403': { description: "Sesi milik kasir lain." }
 
   /sessions/{id}/transactions:

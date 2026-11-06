@@ -2,18 +2,19 @@
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
-import { listSessions, getSession, sessionTransactions, reopenSession } from '../api/sessions';
+import { listSessions, getSession, sessionTransactions, reopenSession, closeSession } from '../api/sessions';
 import { useToastStore } from '../stores/toast';
 import { listEvents } from '../api/events';
 import { listUsers } from '../api/users';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { formatIDR } from '../utils/money';
+import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDateTime } from '../utils/date';
 import { paymentMethodLabel } from '../utils/paymentMethods';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseDrawer from '../components/ui/BaseDrawer.vue';
 import BaseModal from '../components/ui/BaseModal.vue';
+import BaseInput from '../components/ui/BaseInput.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 import DataTable from '../components/ui/DataTable.vue';
@@ -101,6 +102,41 @@ async function loadTransactions(page) {
 }
 
 const isClosed = computed(() => detail.value?.status === 'closed');
+
+// --- tutup shift dari riwayat (mis. shift kasir lain yang dibuka kembali) ----------------------------------------
+// Tombol muncul dari `can_close` yang dihitung SERVER; penutupan memakai endpoint yang sama dengan layar Sesi Kasir.
+const showClose = ref(false);
+const closingCash = ref(0);
+const closeNotes = ref('');
+const closing = ref(false);
+const closeError = ref('');
+const closeDifference = computed(() => (Number(closingCash.value) || 0) - parseMoney(detail.value?.expected_cash ?? 0));
+const closeNotesMissing = computed(() => closeDifference.value !== 0 && !closeNotes.value.trim());
+
+function askClose() {
+  closingCash.value = 0;
+  closeNotes.value = '';
+  closeError.value = '';
+  showClose.value = true;
+}
+
+async function performClose() {
+  if (closeNotesMissing.value || closing.value) return;
+  closing.value = true;
+  closeError.value = '';
+  try {
+    await closeSession(detail.value.id, { closing_cash: toMoneyString(closingCash.value), notes: closeNotes.value.trim() || null });
+    toast.success(t('sessions_history.close_success'));
+    showClose.value = false;
+    detail.value = await getSession(detail.value.id);
+    load();
+    loadTransactions(1).catch(() => {});
+  } catch (err) {
+    closeError.value = err.message || t('sessions_history.close_failed');
+  } finally {
+    closing.value = false;
+  }
+}
 
 // --- 063 buka kembali shift (hanya Owner) ---------------------------------------------------------
 // Tombol muncul dari `can_reopen` yang dihitung SERVER (Owner + shift tertutup); SPA tak menurunkan izin
@@ -195,6 +231,9 @@ const txColumns = computed(() => [
             </template>
             <div v-else class="col-span-2 flex items-center rounded-card bg-line-7 p-3 text-[12.5px] text-muted-4">{{ t('sessions_history.not_closed_yet') }}</div>
           </div>
+          <div v-if="detail.can_close" class="flex justify-end">
+            <BaseButton size="sm" data-testid="close-shift" @click="askClose">{{ t('sessions_history.close_action') }}</BaseButton>
+          </div>
           <div v-if="detail.can_reopen" class="flex justify-end">
             <BaseButton variant="secondary" size="sm" data-testid="reopen-shift" @click="askReopen">{{ t('sessions_history.reopen_action') }}</BaseButton>
           </div>
@@ -230,6 +269,22 @@ const txColumns = computed(() => [
         </template>
       </div>
     </BaseDrawer>
+
+    <BaseModal :open="showClose" :title="t('sessions_history.close_title')" max-width-class="max-w-[460px]" @close="showClose = false">
+      <div class="flex flex-col gap-3.5 px-6 py-5" data-testid="close-dialog">
+        <p class="text-[12.5px] text-muted-2">{{ t('sessions_history.close_expected', { amount: formatIDR(detail?.expected_cash ?? 0) }) }}</p>
+        <BaseInput v-model="closingCash" :label="t('sessions_history.close_counted_label')" type="number" min="0" data-autofocus />
+        <p class="text-[12.5px] font-semibold" :class="closeDifference === 0 ? 'text-muted-3' : 'text-danger-text'">{{ t('sessions_history.close_difference', { amount: formatIDR(closeDifference) }) }}</p>
+        <BaseTextarea v-model="closeNotes" :label="t('sessions_history.close_notes_label')" :hint="closeNotesMissing ? t('sessions_history.close_notes_required') : ''" :rows="3" />
+        <p v-if="closeError" role="alert" class="text-[12.5px] text-danger-text">{{ closeError }}</p>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2.5">
+          <BaseButton variant="secondary" :disabled="closing" @click="showClose = false">{{ t('sessions_history.reopen_back') }}</BaseButton>
+          <BaseButton :disabled="closeNotesMissing" :loading="closing" @click="performClose">{{ t('sessions_history.close_confirm') }}</BaseButton>
+        </div>
+      </template>
+    </BaseModal>
 
     <BaseModal :open="showReopen" :title="t('sessions_history.reopen_title')" max-width-class="max-w-[460px]" @close="showReopen = false">
       <div class="flex flex-col gap-3.5 px-6 py-5">

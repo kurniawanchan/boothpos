@@ -121,6 +121,9 @@ class CashierSessionQuery
             'opening_cash_entries' => $session->openingCashEntries->map(fn ($e) => [
                 'artist_id' => $e->artist_id, 'artist_name' => $e->artist?->name, 'amount' => $this->money($e->amount),
             ])->all(),
+            // Menutup shift yang masih terbuka dari riwayat (mis. shift milik kasir lain yang dibuka kembali): aturan
+            // yang sama dengan close() — pemilik shift atau owner/admin — plus izin aksi session.edit dari gerbang rute.
+            'can_close' => ! $closed && ($session->user_id === $viewer->id || $viewer->isOwnerOrAdmin()) && $viewer->canDo('session', 'edit'),
             'can_reopen' => $closed && (bool) $viewer->role?->isOwner(),
             'reopens' => $session->reopens->map(fn ($r) => [
                 'id' => $r->id,

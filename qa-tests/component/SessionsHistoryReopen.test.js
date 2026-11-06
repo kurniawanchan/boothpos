@@ -3,11 +3,11 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import SessionsHistoryView from '../../resources/js/views/SessionsHistoryView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listSessions, getSession, sessionTransactions, reopenSession } from '../../resources/js/api/sessions';
+import { listSessions, getSession, sessionTransactions, reopenSession, closeSession } from '../../resources/js/api/sessions';
 import { listEvents } from '../../resources/js/api/events';
 import { listUsers } from '../../resources/js/api/users';
 
-vi.mock('../../resources/js/api/sessions', () => ({ listSessions: vi.fn(), getSession: vi.fn(), sessionTransactions: vi.fn(), reopenSession: vi.fn() }));
+vi.mock('../../resources/js/api/sessions', () => ({ listSessions: vi.fn(), getSession: vi.fn(), sessionTransactions: vi.fn(), reopenSession: vi.fn(), closeSession: vi.fn() }));
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/users', () => ({ listUsers: vi.fn() }));
 vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn(), getReceipt: vi.fn() }));
@@ -110,5 +110,29 @@ describe('SessionsHistoryView reopen (063)', () => {
     // Drawer rincian juga memuat tabel (transaksi), jadi marker dicari di tabel daftar yang pertama.
     expect(within(screen.getAllByRole('table')[0]).getByText('Dibuka kembali')).toBeInTheDocument();
     expect(await screen.findByTestId('reopen-history')).toBeInTheDocument();
+  });
+
+  describe('close from history', () => {
+    it('shows Close shift only when can_close, and closes with counted cash', async () => {
+      closeSession.mockResolvedValue({});
+      const opened = { ...REOPENED, can_close: true };
+      getSession.mockReset();
+      getSession.mockResolvedValueOnce(opened).mockResolvedValue(CLOSED());
+      const user = await openDetail();
+
+      await user.click(await screen.findByTestId('close-shift'));
+      const dialog = await screen.findByTestId('close-dialog');
+      const input = within(dialog).getByRole('spinbutton');
+      await user.clear(input);
+      await user.type(input, '150000');
+      await user.click(within(dialog.parentElement.parentElement).getByRole('button', { name: /^tutup shift$/i }));
+
+      await waitFor(() => expect(closeSession).toHaveBeenCalledWith(1, { closing_cash: '150000.00', notes: null }));
+    });
+
+    it('hides Close shift without can_close', async () => {
+      await openDetail();
+      expect(screen.queryByTestId('close-shift')).not.toBeInTheDocument();
+    });
   });
 });
