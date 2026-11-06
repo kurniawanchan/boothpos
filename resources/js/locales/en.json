@@ -72,6 +72,7 @@
     "pos": "POS",
     "session": "Cashier Session",
     "sessions_history": "Session History",
+    "sessions_history_subtitle": "Past cashier shifts: who opened them, cash counted and the difference",
     "events": "Events",
     "products": "Products",
     "artists": "Sellers",
