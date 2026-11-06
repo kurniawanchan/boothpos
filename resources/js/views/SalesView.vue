@@ -27,6 +27,7 @@ import OrderReferenceModal from '../components/sales/OrderReferenceModal.vue';
 import PaymentProofsModal from '../components/sales/PaymentProofsModal.vue';
 import RowAttachments from '../components/sales/RowAttachments.vue';
 import ApprovalStatusIcon from '../components/sales/ApprovalStatusIcon.vue';
+import CopyTextButton from '../components/ui/CopyTextButton.vue';
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
@@ -474,8 +475,8 @@ function showCustomerDetail(row) {
           <BaseSelect v-model="filters.reference" data-testid="filter-reference" :placeholder="t('sales_reference.filter_all')" :options="referenceOptions" />
           <BaseSelect v-model="filters.approval" data-testid="filter-approval" :placeholder="t('approvals.filter_label')" :options="approvalOptions" />
 
-          <input v-model="filters.minTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_min_total')" :placeholder="t('reports.filter_min_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
-          <input v-model="filters.maxTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_max_total')" :placeholder="t('reports.filter_max_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
+          <input v-model.lazy="filters.minTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_min_total')" :placeholder="t('reports.filter_min_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
+          <input v-model.lazy="filters.maxTotal" type="number" min="0" inputmode="numeric" :aria-label="t('reports.filter_max_total')" :placeholder="t('reports.filter_max_total')" class="h-10 rounded-lg border border-line-2 bg-white px-3 text-[12.5px] outline-none focus:border-brand-active" />
           <label class="flex h-10 items-center gap-2 text-[12.5px] font-semibold text-muted-4">
             <input v-model="includeVoided" type="checkbox" class="h-4 w-4 rounded border-line accent-brand" />
             {{ t('reports.filter_show_voided') }}
@@ -551,6 +552,7 @@ function showCustomerDetail(row) {
               <!-- 059 — ikon status persetujuan keseluruhan tepat di samping nomor (tanpa kolom baru, tanpa menggeser kolom lain). -->
               <div class="flex items-center gap-1">
                 <button type="button" class="whitespace-nowrap font-mono text-[12.5px] font-bold text-brand-active underline decoration-dotted" :class="{ 'line-through': isVoided(row) }" @click="openDetail(row)">{{ row.order_number }}</button>
+                <CopyTextButton :text="row.order_number" />
                 <ApprovalStatusIcon :approval="row.approval" />
               </div>
               <!-- 055 — tautan referensi tepat di bawah nomor transaksi (dulu di kolom aksi), hanya pada

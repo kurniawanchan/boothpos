@@ -63,6 +63,8 @@ final class CloneRegistry
             ],
             'cashier_sessions' => ['fks' => ['event_id' => 'events']],
             'session_opening_cash_entries' => ['fks' => ['session_id' => 'cashier_sessions', 'artist_id' => 'artists']],
+            // 063 — riwayat buka-kembali shift. Tanpa data_mode: ikut mode shift-nya. `reopened_by` -> users (induk bersama).
+            'cashier_session_reopens' => ['fks' => ['session_id' => 'cashier_sessions'], 'via' => 'cashier_sessions.session_id'],
             'orders' => [
                 'fks' => ['event_id' => 'events', 'session_id' => 'cashier_sessions', 'customer_id' => 'customers'],
                 'suffix' => ['order_number' => 30],

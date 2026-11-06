@@ -18,4 +18,10 @@ return [
     'available_on_label' => 'Available on',
     'available_on_day_1' => 'Day 1 ({date})',
     'available_on_day_2' => 'Day 2 ({date})',
+
+    // 063-reopen-closed-shift
+    'not_authorized_reopen_session' => 'Only the Owner can reopen a closed shift.',
+    'session_not_closed' => 'This shift is not closed, so there is nothing to reopen.',
+    'cashier_has_open_session' => "This shift's cashier still has another open shift. Close that shift first.",
+    'reopen_reason_required' => 'A reason of 3–500 characters is required to reopen a shift.',
 ];

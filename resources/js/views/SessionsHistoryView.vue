@@ -2,16 +2,20 @@
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '../stores/auth';
-import { listSessions, getSession, sessionTransactions } from '../api/sessions';
+import { listSessions, getSession, sessionTransactions, reopenSession, closeSession } from '../api/sessions';
+import { useToastStore } from '../stores/toast';
 import { listEvents } from '../api/events';
 import { listUsers } from '../api/users';
 import { usePaginatedList } from '../composables/usePaginatedList';
-import { formatIDR } from '../utils/money';
+import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDateTime } from '../utils/date';
 import { paymentMethodLabel } from '../utils/paymentMethods';
 import BaseSelect from '../components/ui/BaseSelect.vue';
 import BaseButton from '../components/ui/BaseButton.vue';
 import BaseDrawer from '../components/ui/BaseDrawer.vue';
+import BaseModal from '../components/ui/BaseModal.vue';
+import BaseInput from '../components/ui/BaseInput.vue';
+import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import StatusPill from '../components/ui/StatusPill.vue';
 import DataTable from '../components/ui/DataTable.vue';
 import TablePagination from '../components/ui/TablePagination.vue';
@@ -26,6 +30,7 @@ import TransactionItemsModal from '../components/sales/TransactionItemsModal.vue
  */
 const { t } = useI18n();
 const auth = useAuthStore();
+const toast = useToastStore();
 const canSeeAll = computed(() => auth.canAccessMenu('settings'));
 
 const filters = ref({ user_id: '', event_id: '', status: '', date_from: '', date_to: '' });
@@ -97,6 +102,73 @@ async function loadTransactions(page) {
 }
 
 const isClosed = computed(() => detail.value?.status === 'closed');
+
+// --- tutup shift dari riwayat (mis. shift kasir lain yang dibuka kembali) ----------------------------------------
+// Tombol muncul dari `can_close` yang dihitung SERVER; penutupan memakai endpoint yang sama dengan layar Sesi Kasir.
+const showClose = ref(false);
+const closingCash = ref(0);
+const closeNotes = ref('');
+const closing = ref(false);
+const closeError = ref('');
+const closeDifference = computed(() => (Number(closingCash.value) || 0) - parseMoney(detail.value?.expected_cash ?? 0));
+const closeNotesMissing = computed(() => closeDifference.value !== 0 && !closeNotes.value.trim());
+
+function askClose() {
+  closingCash.value = 0;
+  closeNotes.value = '';
+  closeError.value = '';
+  showClose.value = true;
+}
+
+async function performClose() {
+  if (closeNotesMissing.value || closing.value) return;
+  closing.value = true;
+  closeError.value = '';
+  try {
+    await closeSession(detail.value.id, { closing_cash: toMoneyString(closingCash.value), notes: closeNotes.value.trim() || null });
+    toast.success(t('sessions_history.close_success'));
+    showClose.value = false;
+    detail.value = await getSession(detail.value.id);
+    load();
+    loadTransactions(1).catch(() => {});
+  } catch (err) {
+    closeError.value = err.message || t('sessions_history.close_failed');
+  } finally {
+    closing.value = false;
+  }
+}
+
+// --- 063 buka kembali shift (hanya Owner) ---------------------------------------------------------
+// Tombol muncul dari `can_reopen` yang dihitung SERVER (Owner + shift tertutup); SPA tak menurunkan izin
+// dari peran. Server tetap yang menolak (403/409/422) — pesannya ditampilkan di dalam dialog.
+const showReopen = ref(false);
+const reopenReason = ref('');
+const reopening = ref(false);
+const reopenError = ref('');
+const reopenReasonValid = computed(() => reopenReason.value.trim().length >= 3);
+
+function askReopen() {
+  reopenReason.value = '';
+  reopenError.value = '';
+  showReopen.value = true;
+}
+
+async function performReopen() {
+  if (!reopenReasonValid.value || reopening.value) return;
+  reopening.value = true;
+  reopenError.value = '';
+  try {
+    detail.value = await reopenSession(detail.value.id, { reason: reopenReason.value.trim() });
+    toast.success(t('sessions_history.reopen_success'));
+    showReopen.value = false;
+    load(); // daftar di belakang perlu menampilkan status terbaru + penanda
+    loadTransactions(1).catch(() => {});
+  } catch (err) {
+    reopenError.value = err.message || t('sessions_history.reopen_failed');
+  } finally {
+    reopening.value = false;
+  }
+}
 const difference = computed(() => Number(detail.value?.cash_difference ?? 0));
 const txColumns = computed(() => [
   { key: 'order_number', label: t('sessions_history.col_transaction') },
@@ -130,7 +202,10 @@ const txColumns = computed(() => [
         </template>
         <template #cell-opening_cash="{ row }"><span class="whitespace-nowrap">{{ formatIDR(row.opening_cash) }}</span></template>
         <template #cell-status="{ row }">
-          <StatusPill :variant="row.status === 'open' ? 'mint' : 'neutral'">{{ row.status === 'open' ? t('sessions_history.status_open') : t('sessions_history.status_closed') }}</StatusPill>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <StatusPill :variant="row.status === 'open' ? 'mint' : 'neutral'">{{ row.status === 'open' ? t('sessions_history.status_open') : t('sessions_history.status_closed') }}</StatusPill>
+            <StatusPill v-if="row.reopen_count > 0" variant="warn">{{ t('sessions_history.reopened_marker') }}</StatusPill>
+          </div>
         </template>
         <template #cell-actions="{ row }">
           <button type="button" class="whitespace-nowrap text-[12.5px] font-semibold text-brand-active hover:underline" @click="openDetail(row)">{{ t('sessions_history.view_detail') }}</button>
@@ -156,6 +231,22 @@ const txColumns = computed(() => [
             </template>
             <div v-else class="col-span-2 flex items-center rounded-card bg-line-7 p-3 text-[12.5px] text-muted-4">{{ t('sessions_history.not_closed_yet') }}</div>
           </div>
+          <div v-if="detail.can_close" class="flex justify-end">
+            <BaseButton size="sm" data-testid="close-shift" @click="askClose">{{ t('sessions_history.close_action') }}</BaseButton>
+          </div>
+          <div v-if="detail.can_reopen" class="flex justify-end">
+            <BaseButton variant="secondary" size="sm" data-testid="reopen-shift" @click="askReopen">{{ t('sessions_history.reopen_action') }}</BaseButton>
+          </div>
+          <section v-if="detail.reopens?.length" class="flex flex-col gap-2 rounded-card border border-warn-border bg-warn-bg p-3" data-testid="reopen-history">
+            <h3 class="text-[12.5px] font-bold text-warn-text">{{ t('sessions_history.reopen_history') }}</h3>
+            <ul class="flex flex-col gap-2 text-[12.5px] text-muted-4">
+              <li v-for="r in detail.reopens" :key="r.id" class="flex flex-col gap-0.5">
+                <span class="font-semibold">{{ t('sessions_history.reopen_entry', { name: r.reopened_by_name ?? '—', date: formatDateTime(r.reopened_at) }) }}</span>
+                <span>{{ r.reason }}</span>
+                <span v-if="r.previous_closing_cash !== null" class="text-muted-3">{{ t('sessions_history.reopen_previous', { counted: formatIDR(r.previous_closing_cash), expected: formatIDR(r.previous_expected_cash), difference: formatIDR(r.previous_cash_difference) }) }}</span>
+              </li>
+            </ul>
+          </section>
           <p class="text-[12.5px] text-muted-4">{{ t('sessions_history.sales_summary', { count: detail.order_count, total: formatIDR(detail.total_sales) }) }}</p>
           <ul v-if="detail.by_method.length" class="flex flex-wrap gap-2 text-[12px]">
             <li v-for="m in detail.by_method" :key="m.method" class="rounded-full bg-line-7 px-2.5 py-1 font-semibold text-muted-4">{{ paymentMethodLabel(t, m.method) }} · {{ formatIDR(m.amount) }}</li>
@@ -178,6 +269,36 @@ const txColumns = computed(() => [
         </template>
       </div>
     </BaseDrawer>
+
+    <BaseModal :open="showClose" :title="t('sessions_history.close_title')" max-width-class="max-w-[460px]" @close="showClose = false">
+      <div class="flex flex-col gap-3.5 px-6 py-5" data-testid="close-dialog">
+        <p class="text-[12.5px] text-muted-2">{{ t('sessions_history.close_expected', { amount: formatIDR(detail?.expected_cash ?? 0) }) }}</p>
+        <BaseInput v-model="closingCash" :label="t('sessions_history.close_counted_label')" type="number" min="0" data-autofocus />
+        <p class="text-[12.5px] font-semibold" :class="closeDifference === 0 ? 'text-muted-3' : 'text-danger-text'">{{ t('sessions_history.close_difference', { amount: formatIDR(closeDifference) }) }}</p>
+        <BaseTextarea v-model="closeNotes" :label="t('sessions_history.close_notes_label')" :hint="closeNotesMissing ? t('sessions_history.close_notes_required') : ''" :rows="3" />
+        <p v-if="closeError" role="alert" class="text-[12.5px] text-danger-text">{{ closeError }}</p>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2.5">
+          <BaseButton variant="secondary" :disabled="closing" @click="showClose = false">{{ t('sessions_history.reopen_back') }}</BaseButton>
+          <BaseButton :disabled="closeNotesMissing" :loading="closing" @click="performClose">{{ t('sessions_history.close_confirm') }}</BaseButton>
+        </div>
+      </template>
+    </BaseModal>
+
+    <BaseModal :open="showReopen" :title="t('sessions_history.reopen_title')" max-width-class="max-w-[460px]" @close="showReopen = false">
+      <div class="flex flex-col gap-3.5 px-6 py-5">
+        <p class="rounded-lg border border-warn-border bg-warn-bg px-3 py-2.5 text-[12.5px] leading-relaxed text-warn-text">{{ t('sessions_history.reopen_warning', { name: selected?.cashier_name ?? '' }) }}</p>
+        <BaseTextarea v-model="reopenReason" :label="t('sessions_history.reopen_reason_label')" :hint="t('sessions_history.reopen_reason_hint')" :rows="3" required data-autofocus />
+        <p v-if="reopenError" role="alert" class="text-[12.5px] text-danger-text">{{ reopenError }}</p>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-2.5">
+          <BaseButton variant="secondary" :disabled="reopening" @click="showReopen = false">{{ t('sessions_history.reopen_back') }}</BaseButton>
+          <BaseButton :disabled="!reopenReasonValid" :loading="reopening" @click="performReopen">{{ t('sessions_history.reopen_confirm') }}</BaseButton>
+        </div>
+      </template>
+    </BaseModal>
 
     <TransactionItemsModal :open="orderId !== null" :order-id="orderId" @close="orderId = null" />
   </div>

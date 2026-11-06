@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Exceptions\SessionReopenException;
 use App\Models\CashierSession;
 use App\Models\Event;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Services\CashierSessionQuery;
+use App\Services\CashierSessionReopenService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -142,6 +144,35 @@ class CashierSessionController extends Controller
         return response()->json($session->fresh());
     }
 
+    /**
+     * 063 — Owner membuka kembali shift yang sudah ditutup. Aturan TETAP khusus peran Owner (bukan aksi
+     * yang bisa didelegasikan lewat editor peran, lihat MenuActionsRouteCoverageTest::EXEMPT): diperiksa
+     * SEBELUM keadaan apa pun diungkap, jadi non-Owner tak bisa membedakan shift terbuka/tertutup dari galat.
+     */
+    public function reopen(Request $request, CashierSession $session, CashierSessionReopenService $service, CashierSessionQuery $query): JsonResponse
+    {
+        if (! $request->user()->role?->isOwner()) {
+            return response()->json(['message' => __('events_sessions.not_authorized_reopen_session')], 403);
+        }
+
+        $request->merge(['reason' => is_string($request->input('reason')) ? trim($request->input('reason')) : $request->input('reason')]);
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'min:3', 'max:500'],
+        ], [
+            'reason.required' => __('events_sessions.reopen_reason_required'),
+            'reason.min' => __('events_sessions.reopen_reason_required'),
+            'reason.max' => __('events_sessions.reopen_reason_required'),
+        ]);
+
+        try {
+            $reopened = $service->reopen($session, $request->user(), $validated['reason']);
+        } catch (SessionReopenException $e) {
+            return response()->json(['message' => $e->getMessage(), 'code' => $e->reason], 409);
+        }
+
+        return response()->json($query->detail($reopened, $request->user()));
+    }
+
     // --- 054 (US12) riwayat shift kasir -----------------------------------------------------------
     // Owner/admin melihat semua shift; selain itu hanya miliknya sendiri (aturan yang sama dengan summary()).
 
@@ -166,7 +197,7 @@ class CashierSessionController extends Controller
             return response()->json(['message' => __('events_sessions.not_authorized_view_summary')], 403);
         }
 
-        return response()->json($query->detail($session));
+        return response()->json($query->detail($session, $request->user()));
     }
 
     public function transactions(Request $request, CashierSession $session, CashierSessionQuery $query): JsonResponse

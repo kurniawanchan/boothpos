@@ -19,6 +19,11 @@ export function closeSession(id, payload) {
   return client.post(`/sessions/${id}/close`, payload).then((r) => r.data);
 }
 
+/** 063 — hanya Owner (server menolak yang lain dengan 403). Membalas rincian shift yang sudah terbuka kembali. */
+export function reopenSession(id, payload) {
+  return client.post(`/sessions/${id}/reopen`, payload).then((r) => r.data);
+}
+
 export function sessionSummary(id) {
   return client.get(`/sessions/${id}/summary`).then((r) => r.data);
 }

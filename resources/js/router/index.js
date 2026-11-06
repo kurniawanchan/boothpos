@@ -53,7 +53,7 @@ const routes = [
         path: 'sessions-history',
         name: 'sessions-history',
         component: () => import('../views/SessionsHistoryView.vue'),
-        meta: { menuKey: 'session' },
+        meta: { titleKey: 'nav.sessions_history', subtitleKey: 'nav.sessions_history_subtitle', menuKey: 'session' },
       },
       {
         path: 'events',

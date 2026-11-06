@@ -576,3 +576,13 @@ Arti status: `akan_diubah` (stok dikurangi), `perlu_perhatian` (terjual melebihi
 
 Batas yang diketahui: varian yang diimpor dengan nilai SAMA dengan stok saat itu tidak punya pembaruan tercatat dan dilewati; varian yang stoknya diketik lebih dari sekali hanya dikoreksi untuk jendela terakhir (diberi catatan); kedatangan pre-order tidak ditambahkan kembali. Pemulihan bila perlu: `php artisan app:restore` pada cadangan pengaman yang dicetak perintah.
 
+## Membuka kembali shift kasir yang sudah ditutup (fitur 063)
+
+Hanya untuk peran **Owner** (admin dan kasir tidak bisa). Dipakai saat shift ditutup dengan hitungan kas yang salah atau ada pembayaran tunai yang terlewat.
+
+1. Menu **Riwayat Sesi** → buka rincian shift tertutup → **Buka kembali shift** → isi alasan (3–500 karakter).
+2. Shift menjadi terbuka lagi (angka penutupan lama disimpan di "Riwayat pembukaan kembali"). Kasir yang bersangkutan harus tidak punya shift terbuka lain, kalau tidak, pembukaan kembali ditolak.
+3. Lakukan koreksi dengan alat yang sudah ada (catat/ubah pembayaran tunai, lalu tutup shift dengan hitungan yang benar). Selama shift terbuka, penjualan dan pembayaran baru kasir itu tercatat di shift ini, jadi tutup kembali secepatnya.
+4. Menutup ulang menghitung ulang kas diharapkan dan selisih. Pembukaan kembali tidak mengubah order, stok, rekap, laporan, atau settlement.
+
+Setelah menarik kode fitur ini, jalankan migrasi (`php artisan migrate`, atau restart container) — tabel baru `cashier_session_reopens`. Tanpa itu halaman Riwayat Sesi menjawab 503 `schema_outdated` (lihat "Setelah menarik perubahan kode").

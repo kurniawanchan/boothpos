@@ -85,7 +85,7 @@ class CashierSessionListTest extends TestCase
         $this->assertSame(2, $res['meta']['last_page']);
         $this->assertCount(2, $res['data']);
         $this->assertGreaterThan($res['data'][1]['opened_at'], $res['data'][0]['opened_at']);
-        $this->assertEqualsCanonicalizing(['id', 'cashier_id', 'cashier_name', 'event_id', 'event_name', 'opened_at', 'closed_at', 'status', 'opening_cash'], array_keys($res['data'][0]));
+        $this->assertEqualsCanonicalizing(['id', 'cashier_id', 'cashier_name', 'event_id', 'event_name', 'opened_at', 'closed_at', 'status', 'opening_cash', 'reopen_count'], array_keys($res['data'][0]));
         $this->assertSame('Kasir A', $res['data'][0]['cashier_name']);
         $this->assertSame('Sakana Fest', $res['data'][0]['event_name']);
         $this->assertSame('100000.00', $res['data'][0]['opening_cash']);

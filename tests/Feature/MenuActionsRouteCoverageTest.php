@@ -28,6 +28,7 @@ class MenuActionsRouteCoverageTest extends TestCase
         'PUT api/v1/auth/password' => 'milik sendiri (profil)',
         'POST api/v1/auth/photo' => 'milik sendiri (profil)',
         'POST api/v1/payment-proofs' => 'unggah berkas bukti: pembayarannya sendiri digerbang per menu pada langkah berikutnya',
+        'POST api/v1/sessions/{session}/reopen' => '063: aturan TETAP khusus peran Owner, diperiksa di CashierSessionController — sengaja bukan aksi yang bisa didelegasikan lewat editor peran',
         'POST api/v1/imports/master-data' => 'berkas satu untuk banyak entitas: aksi `import` diperiksa per menu di MasterDataImportController (MenuActions::userMayImportMasterData)',
     ];
 

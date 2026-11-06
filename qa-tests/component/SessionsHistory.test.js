@@ -7,7 +7,7 @@ import { listSessions, getSession, sessionTransactions } from '../../resources/j
 import { listEvents } from '../../resources/js/api/events';
 import { listUsers } from '../../resources/js/api/users';
 
-vi.mock('../../resources/js/api/sessions', () => ({ listSessions: vi.fn(), getSession: vi.fn(), sessionTransactions: vi.fn() }));
+vi.mock('../../resources/js/api/sessions', () => ({ listSessions: vi.fn(), getSession: vi.fn(), sessionTransactions: vi.fn(), reopenSession: vi.fn() }));
 vi.mock('../../resources/js/api/events', () => ({ listEvents: vi.fn() }));
 vi.mock('../../resources/js/api/users', () => ({ listUsers: vi.fn() }));
 vi.mock('../../resources/js/api/orders', () => ({ getOrder: vi.fn(), getReceipt: vi.fn() }));

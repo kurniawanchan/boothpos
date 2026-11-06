@@ -156,10 +156,29 @@ class PaymentMethodChangeTest extends TestCase
     public function test_changing_to_cash_needs_an_open_shift_of_the_actor(): void
     {
         $order = $this->qrisSale(); // pemilik tidak punya shift terbuka
+        $this->session->update(['status' => 'closed', 'closed_at' => now()]); // shift penjualan pun tertutup
 
         $this->as($this->owner)->change($order, ['method' => 'cash'])->assertStatus(409);
 
         $this->assertSame('qr_ewallet', Payment::find($order['payments'][0]['id'])->method);
+    }
+
+    /** 063 — Owner tanpa shift sendiri mengoreksi ke tunai lewat shift penjualan yang (dibuka kembali) terbuka. */
+    public function test_an_owner_without_a_shift_can_correct_to_cash_into_the_sales_open_shift(): void
+    {
+        $order = $this->qrisSale();
+
+        $this->as($this->owner)->change($order, ['method' => 'cash'])->assertOk();
+
+        $this->assertSame($this->session->id, Payment::find($order['payments'][0]['id'])->session_id);
+    }
+
+    public function test_the_sales_open_shift_fallback_is_for_the_owner_only(): void
+    {
+        $order = $this->qrisSale();
+        $admin = User::factory()->create(['role' => 'admin']);
+
+        $this->as($admin)->change($order, ['method' => 'cash'])->assertStatus(409);
     }
 
     public function test_the_change_is_audited_with_before_and_after(): void
