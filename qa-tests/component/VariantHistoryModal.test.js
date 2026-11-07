@@ -117,4 +117,23 @@ describe('VariantHistoryModal (036)', () => {
     expect(await screen.findByText('TRX-20261004-0007')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+
+  // 093 — produk dipakai sebagai bahan: tipe berlabel dan baris menyebut menu + nomor pesanan penyebab.
+  it('labels the recipe-use types and names the menu and order that caused a movement', async () => {
+    listMovements.mockResolvedValue({
+      data: [
+        ROW(5, { type: 'recipe_sale', qty_change: -2, stock_before: 50, stock_after: 48, reference: { type: 'order', id: 61, number: 'TRX-20261107-0009', menu: 'Indomie Kuah' } }),
+        ROW(4, { type: 'recipe_return', qty_change: 2, stock_before: 48, stock_after: 50, reference: { type: 'order', id: 61, number: 'TRX-20261107-0009', menu: 'Indomie Kuah' } }),
+        ROW(3, { type: 'recipe_waste', qty_change: -1, stock_before: 50, stock_after: 49, reference: null }),
+      ],
+      meta: META({ total: 3 }),
+    });
+    renderModal();
+
+    expect((await screen.findAllByText('TRX-20261107-0009')).length).toBe(2);
+    expect(screen.getAllByTestId('history-recipe-menu')[0].textContent).toBe('untuk Indomie Kuah');
+    expect(screen.getByText('Dipakai sebagai bahan')).toBeInTheDocument();
+    expect(screen.getByText('Bahan kembali')).toBeInTheDocument();
+    expect(screen.getByText('Bahan terbuang')).toBeInTheDocument();
+  });
 });

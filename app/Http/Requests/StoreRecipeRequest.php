@@ -29,13 +29,16 @@ class StoreRecipeRequest extends FormRequest
             'blocks.*.variant_id' => ['required', 'integer'],
             'blocks.*.modifier_option_id' => ['nullable', 'integer'],
             'blocks.*.lines' => ['present', 'array', 'max:60'],
-            'blocks.*.lines.*.material_id' => ['required', 'integer'],
+            // 093 — tepat SATU dari material_id / variant_id; aturannya dijaga RecipeService (satu pesan galat, satu tempat).
+            'blocks.*.lines.*.material_id' => ['nullable', 'integer'],
+            'blocks.*.lines.*.variant_id' => ['nullable', 'integer'],
             'blocks.*.lines.*.quantity' => ['required', 'numeric', 'max:99999999.9999'],
             'blocks.*.lines.*.shrinkage_pct' => ['sometimes', 'nullable', 'numeric'],
             'variant_ids' => ['exclude_with:blocks', 'present', 'array'],
             'variant_ids.*' => ['integer'],
             'lines' => ['exclude_with:blocks', 'present', 'array', 'max:60'],
-            'lines.*.material_id' => ['required', 'integer'],
+            'lines.*.material_id' => ['nullable', 'integer'],
+            'lines.*.variant_id' => ['nullable', 'integer'],
             'lines.*.quantity' => ['required', 'numeric', 'max:99999999.9999'],
             'lines.*.shrinkage_pct' => ['sometimes', 'nullable', 'numeric'],
         ];

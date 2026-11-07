@@ -238,6 +238,9 @@ class TabService
                 ]);
             }
 
+            // 093 — kunci bahan lebih dulu (urutan global), termasuk varian yang akan dijual langsung di bawah.
+            app(MenuStockService::class)->lockIngredients($order, $order->items()->get(), [$variant->id]);
+
             // 092 FR-013 — tolak bila bahan RESEP seluruh isi tab ini melebihi saldo setelah tahanan tab lain (409).
             // Dijalankan sesudah baris tersimpan supaya kebutuhan memuat baris baru; penolakan menggulung transaksi.
             app(MenuStockService::class)->assertCanFulfil($order, $order->items()->get());
@@ -262,6 +265,10 @@ class TabService
             $order = $this->lockOpen($tab);
             $line = $order->items()->findOrFail($itemId);
             $this->assertUnsent($line);
+
+            // 093 — kunci bahan SEBELUM pergerakan stok di bawah (urutan global). Bahan dari pilihan modifier BARU belum
+            // diketahui di sini; yang tidak terkunci di awal diambil penjaga di akhir, dan percobaan ulang deadlock jadi jaring.
+            app(MenuStockService::class)->lockIngredients($order, $order->items()->get(), [(int) $line->variant_id]);
 
             $reprice = false;
             $mayNeedMore = false;   // 092: hanya kenaikan qty atau ganti pilihan yang bisa menambah kebutuhan bahan

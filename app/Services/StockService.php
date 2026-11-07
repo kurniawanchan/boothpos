@@ -138,6 +138,22 @@ class StockService
                     ]);
                 }
 
+                // 093 (FR-020) — penjualan langsung varian yang dirujuk resep tidak boleh menembus bahan yang sudah DITAHAN tab
+                // terbuka (kebutuhan resep yang belum dipotong, termasuk milik pesanan yang sama). Hanya tipe `sale` negatif:
+                // `recipe_*`, retur, koreksi, dan transfer tidak dijaga di sini. Varian di luar `IngredientVariants` tidak
+                // menyentuh perhitungan tahanan sama sekali (tanpa kueri tambahan). `MenuStockService` dipanggil malas supaya
+                // tidak ada ketergantungan melingkar (ia memakai penerjemah pesanan yang memakai service ini).
+                if ($type === 'sale' && $qtyChange < 0 && app(\App\Support\IngredientVariants::class)->has((int) $locked->id)) {
+                    $held = (int) (app(MenuStockService::class)->heldVariantsBy($outletId, null)[(int) $locked->id] ?? 0);
+                    if ($held > 0 && $stockAfter < $held) {
+                        $available = max(0, $stockBefore - $held);
+                        throw new \App\Exceptions\StockReservedException(
+                            __('orders_payments.insufficient_stock_reserved', ['sku' => $locked->sku, 'available' => $available, 'reserved' => $held]),
+                            variantId: (int) $locked->id, sku: (string) $locked->sku, available: $available, reserved: $held,
+                        );
+                    }
+                }
+
                 $movement = StockMovement::create([
                     'variant_id' => $locked->id,
                     'outlet_id' => $outletId,

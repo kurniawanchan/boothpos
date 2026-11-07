@@ -4139,6 +4139,25 @@ paths:
         '200': { description: "{data:[{id,name,options:[{id,name}]}]}" }
         '403': { description: Tanpa menu produk }
 
+  /recipe-ingredients:
+    get:
+      tags: [Menu]
+      summary: Pilihan bahan berupa PRODUK untuk resep baru
+      description: |
+        093 — menu `products`. Varian produk bertanda `use_as_ingredient` yang boleh dipilih di resep BARU: produk dan varian
+        aktif, melacak stok, bersumber stok `variant`, dan belum beresep (menu beresep tidak punya saldo sendiri).
+        Outlet HANYA dari konteks server (satu outlet yang berlaku), tidak dari parameter; tanpa satu outlet yang berlaku
+        `on_hand`/`held`/`available` bernilai null (tidak dijumlahkan lintas outlet). `available = on_hand − held`.
+        `held` = kebutuhan resep pesanan terbuka yang belum dipotong (SEMENTARA 0 sampai penghitung tahanan varian selesai).
+      parameters:
+        - { name: exclude_product_id, in: query, schema: { type: integer }, description: Produk resep yang sedang disunting }
+        - { name: search, in: query, schema: { type: string }, description: Nama produk, nama varian, atau SKU }
+        - { name: per_page, in: query, schema: { type: integer, default: 50, maximum: 100 } }
+      responses:
+        '200':
+          description: "{data:[{variant_id,product_id,product_name,variant_name,sku,unit,on_hand,held,available,is_active}],meta}"
+        '403': { description: Tanpa menu produk }
+
   /products/{id}/recipes/recalculate:
     post:
       tags: [Menu]
@@ -8787,6 +8806,13 @@ components:
             087 US6 — `variant`: stok di varian (bawaan). `modifier`: varian tidak punya stok (tidak pernah bergerak di
             jual/tab/void/refund/transfer/koreksi, tidak tercantum di laporan stok); yang berkurang hanya bahan pilihan
             modifier. Bahan pilihan modifier dipotong untuk KEDUA sumber.
+        use_as_ingredient:
+          type: boolean
+          description: >
+            093 — varian produk ini boleh dipilih sebagai bahan di resep produk lain, dengan SATU saldo bersama penjualan
+            langsung. Dinyalakan hanya bila semua varian melacak stok, sumber stok `variant`, dan tidak ada varian dengan
+            resep tidak-arsip (422 pada `use_as_ingredient`). Mematikannya selalu boleh: resep lama tetap utuh dan tetap memotong.
+        ingredient_unit: { type: string, nullable: true, maxLength: 20, description: "093 — label satuan tampilan produk bahan (tanpa konversi). Kosong → UI menampilkan `unit`." }
         warnings:
           type: array
           readOnly: true
@@ -8806,6 +8832,8 @@ components:
         description: { type: string, nullable: true }
         is_active: { type: boolean, default: true }
         stock_source: { type: string, enum: [variant, modifier], default: variant, description: "087 US6 — sumber stok produk; nilai lain → 422." }
+        use_as_ingredient: { type: boolean, default: false, description: "093 — lihat Product.use_as_ingredient; 422 bila syaratnya tak terpenuhi." }
+        ingredient_unit: { type: string, nullable: true, maxLength: 20 }
         outlet_ids:
           type: array
           minItems: 1

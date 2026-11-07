@@ -42,6 +42,27 @@ class RecipeController extends Controller
         return response()->json(['data' => $groups]);
     }
 
+    /**
+     * 093 — pilihan bahan berupa PRODUK untuk laci resep. Outlet hanya dari konteks server (`singleId`), tidak dari
+     * parameter (Konstitusi IV); `exclude_product_id` mengecualikan produk resep yang sedang disunting.
+     */
+    public function ingredients(Request $request): JsonResponse
+    {
+        abort_unless($request->user()->canAccessMenu('products'), 403, __('reports.not_authorized_generic'));
+
+        $page = app(\App\Services\IngredientProductService::class)->pickable(
+            app(\App\Support\OutletContext::class)->singleId(),
+            $request->filled('exclude_product_id') ? $request->integer('exclude_product_id') : null,
+            $request->input('search'),
+            min(max((int) $request->integer('per_page', 50), 1), 100),
+        );
+
+        return response()->json([
+            'data' => $page->items(),
+            'meta' => ['current_page' => $page->currentPage(), 'per_page' => $page->perPage(), 'total' => $page->total(), 'last_page' => $page->lastPage()],
+        ]);
+    }
+
     public function show(Request $request, Recipe $recipe): JsonResponse
     {
         abort_unless($request->user()->canAccessMenu('products'), 403, __('reports.not_authorized_generic'));

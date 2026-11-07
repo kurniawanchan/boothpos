@@ -343,6 +343,8 @@ async function submitAdjustment() {
         <template #cell-range="{ row }"><span class="font-mono text-[12.5px] text-muted-4">{{ row.stock_before }} → {{ row.stock_after }}</span></template>
         <template #cell-reason="{ row }">
           <span v-if="row.reference" class="font-mono text-[12px] font-bold text-brand-active">{{ row.reference.number }}</span>
+          <!-- 093: pemakaian sebagai BAHAN resep menyebut menu penyebabnya. -->
+          <span v-if="row.reference?.menu" class="block text-[12.5px] text-muted-4" data-testid="stock-recipe-menu">{{ t('master_data.recipe_use_for', { menu: row.reference.menu }) }}</span>
           <span v-if="row.reason" class="block text-[12.5px]">{{ row.reason }}</span>
           <span v-if="!row.reference && !row.reason" class="text-muted-3">—</span>
         </template>

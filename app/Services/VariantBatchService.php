@@ -70,6 +70,10 @@ class VariantBatchService
         }
         if (array_key_exists('is_active', $row) && (bool) $row['is_active'] !== (bool) $variant->is_active) {
             $changes['is_active'] = (bool) $row['is_active'];
+            // 093 (FR-011) — menonaktifkan varian yang dirujuk resep ditolak 409; mengaktifkan kembali selalu boleh.
+            if (! $changes['is_active']) {
+                app(IngredientProductService::class)->assertNotInUse($variant->product, [(int) $variant->id]);
+            }
         }
 
         if ($changes !== []) {

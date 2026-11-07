@@ -14,7 +14,7 @@ use RuntimeException;
 class RecipeStockException extends RuntimeException
 {
     /**
-     * @param  array{material_id: int, name: string, unit: string, on_hand: string, required: string}  $limiting
+     * @param  array{ingredient_type: string, material_id: int|null, variant_id: int|null, name: string, unit: string, on_hand: string, required: string}  $limiting  093: bahan baku (`material_id`) atau produk bahan (`variant_id`), salah satu null
      */
     public function __construct(
         string $message,

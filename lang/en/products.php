@@ -49,6 +49,18 @@ return [
     'recipe_quantity_invalid' => 'The quantity must be greater than 0.',
     'recipe_shrinkage_invalid' => 'Shrinkage must be between 0 and 99.99%.',
     'recipe_material_unknown' => 'Unknown material.',
+    // 093 — product as a recipe ingredient
+    'recipe_ingredient_required' => 'Choose exactly one ingredient: a raw material or a product.',
+    'recipe_ingredient_not_flagged' => 'Product ":product" is not marked "Use as ingredient".',
+    'recipe_ingredient_self' => 'A product cannot be an ingredient of its own recipe.',
+    'recipe_ingredient_recursive' => 'Product ":product" has its own recipe, so it has no stock of its own and cannot be used as an ingredient.',
+    'recipe_ingredient_untracked' => 'Product ":product" does not track variant stock, so it cannot be used as an ingredient.',
+    'recipe_ingredient_no_shrinkage' => 'A product ingredient does not use shrinkage; enter 0.',
+    'recipe_ingredient_whole_quantity' => 'A product ingredient must be a whole number per portion (quantity ÷ recipe portions). Use a raw material for fractional amounts.',
+    'recipe_product_is_ingredient' => 'This product is marked "Use as ingredient", so it keeps its own stock and cannot be given a recipe.',
+    'ingredient_flag_has_recipe' => 'Cannot mark as ingredient: a variant has a recipe, so its stock is derived from ingredients.',
+    'ingredient_flag_untracked' => 'Cannot mark as ingredient: variant stock must be tracked and sourced from the variant.',
+    'ingredient_in_use' => 'This product is used as an ingredient in: :recipes.',
     'recipe_conflict_bom' => 'Variant(s) :skus use a completed BOM as their cost source. Reopen the BOM before using a recipe.',
     'recipe_conflict_recipe' => 'This variant is driven by a recipe. Its cost cannot be marked complete through the BOM.',
     // 2026-10-31 — hapus varian permanen (VariantDeletionService).

@@ -211,6 +211,7 @@ class OrderService
                 'notes' => $data['notes'] ?? null,
             ]);
 
+            $created = [];
             foreach ($lineData as $line) {
                 $variant = $line['variant'];
 
@@ -228,6 +229,15 @@ class OrderService
                     'stock_source' => $this->stockService->sourceForNewLine($variant), // 087 US6
                 ]);
 
+                $created[] = [$item, $variant, $line];
+            }
+
+            // 093 (research D6) — kunci bahan SEBELUM pergerakan stok pertama, dalam urutan global bahan baku → varian: alur
+            // ini dulu memotong stok langsung baru menjaga, urutan kunci yang terbalik terhadap tab dan bisa saling
+            // menunggu. Semua baris sudah ada di sini, jadi kebutuhan resep seluruh pesanan diketahui.
+            app(MenuStockService::class)->lockIngredients($order, $order->items()->get(), array_map(fn ($c) => $c[1]->id, $created));
+
+            foreach ($created as [$item, $variant, $line]) {
                 $this->stockService->applyLineMovementIfTracked(
                     line: $item,
                     variant: $variant,

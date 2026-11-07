@@ -9,6 +9,12 @@ use Illuminate\Support\Facades\Storage;
 
 class ProductVariantResource extends JsonResource
 {
+    /** Saldo outlet pemesanan dikurangi tahanan varian (aturan tunggal di MenuStockService); null bila tak ada outlet pemesanan. */
+    private function ingredientAwareStock(Request $request): ?int
+    {
+        return app(\App\Services\MenuStockService::class)->availableStockForRequest($request, (int) $this->id);
+    }
+
     public function toArray(Request $request): array
     {
         // 092 — varian beresep: stok menu dari bahan (satu penghitung di server). Varian tanpa resep: `null` dan semua
@@ -34,7 +40,9 @@ class ProductVariantResource extends JsonResource
             'outlet_price' => ($p = app(\App\Support\OutletPriceBook::class)->forCurrentOutlet($this->id)) === null ? null : number_format($p, 2, '.', ''),
             'current_stock' => $this->current_stock,
             // 045 Stage 5 — saldo di outlet pemesanan (hanya untuk `pos=1`); `current_stock` tetap total.
-            'outlet_stock' => $recipeDriven ? ($menuStock['portions'] ?? null) : app(\App\Support\OutletPriceBook::class)->orderingStockOrNull($this->id),
+            // 093 — varian produk bahan: saldo dikurangi bahan yang DITAHAN tab terbuka (resep menu lain), supaya kasir tidak
+            // menjual langsung yang sudah dijanjikan. Varian di luar resep: persis seperti sebelumnya (held = 0).
+            'outlet_stock' => $recipeDriven ? ($menuStock['portions'] ?? null) : $this->ingredientAwareStock($request),
             'low_stock_alert' => $this->low_stock_alert,
             'is_low_stock' => $this->isLowStock(),
             'is_active' => $this->is_active,

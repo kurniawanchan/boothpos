@@ -134,4 +134,57 @@ class StockLedgerInvariantTest extends TestCase
 
         $this->assertSame(1, DB::table('variant_outlet_stock')->where('variant_id', $variant->id)->count());
     }
+
+    // 093 — pemakaian produk sebagai bahan resep memakai SALDO yang sama dan buku besar yang sama.
+    public function test_recipe_movement_types_keep_every_balance_equal_to_its_ledger(): void
+    {
+        $variant = $this->variant('INV-R');
+        $outlets = \App\Models\Outlet::pluck('id')->all();
+        $service = app(StockService::class);
+        mt_srand(93);
+        $types = ['purchase', 'sale', 'recipe_sale', 'recipe_return', 'recipe_waste', 'adjustment'];
+
+        for ($i = 0; $i < 80; $i++) {
+            $outlet = $outlets[mt_rand(0, 2)];
+            $type = $types[mt_rand(0, count($types) - 1)];
+            $qty = in_array($type, ['purchase', 'recipe_return'], true) ? mt_rand(1, 6) : -mt_rand(1, 4);
+            try {
+                $service->applyMovement($variant, $outlet, $type, $qty, 'order_item', $i + 1);
+            } catch (ValidationException) {
+                // saldo tidak cukup: ditolak tanpa efek samping
+            }
+        }
+
+        foreach ($outlets as $outlet) {
+            $rows = DB::table('stock_movements')->where(['variant_id' => $variant->id, 'outlet_id' => $outlet])->orderBy('id')->get();
+            $balance = (int) DB::table('variant_outlet_stock')->where(['variant_id' => $variant->id, 'outlet_id' => $outlet])->value('current_stock');
+            $this->assertSame((int) $rows->sum('qty_change'), $balance, 'I1 outlet '.$outlet);
+            $this->assertGreaterThanOrEqual(0, $balance);
+            $prev = 0;
+            foreach ($rows as $r) {
+                $this->assertSame($prev, (int) $r->stock_before, 'rantai stock_before/after tidak putus');
+                $this->assertSame($prev + (int) $r->qty_change, (int) $r->stock_after);
+                $prev = (int) $r->stock_after;
+            }
+        }
+        $this->assertGreaterThan(0, DB::table('stock_movements')->whereIn('type', ['recipe_sale', 'recipe_return', 'recipe_waste'])->count(), 'tipe resep ikut teracak');
+        $this->assertSame((int) DB::table('variant_outlet_stock')->where('variant_id', $variant->id)->sum('current_stock'), $variant->fresh()->current_stock, 'I2');
+    }
+
+    public function test_only_stock_service_writes_variant_stock_rows_and_movements(): void
+    {
+        $offenders = [];
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(base_path('app'))) as $file) {
+            if ($file->getExtension() !== 'php' || str_ends_with((string) $file, 'StockService.php')) {
+                continue;
+            }
+            $code = (string) file_get_contents((string) $file);
+            // MaterialStockService/MaterialStockMovement adalah buku besar BAHAN BAKU, bukan varian.
+            if (preg_match("/(?<!Material)StockMovement::(create|insert)\\(|DB::table\\('stock_movements'\\)->insert|VariantOutletStock::(create|query\\(\\)->(create|update))\\(/", $code)
+                && ! str_contains((string) $file, 'OutletStockSync') && ! str_contains((string) $file, 'MenuStockService')) {
+                $offenders[] = str_replace(base_path().'/', '', (string) $file);
+            }
+        }
+        $this->assertSame([], $offenders, 'satu-satunya penulis saldo & buku besar varian adalah StockService (termasuk pemakaian resep 093)');
+    }
 }

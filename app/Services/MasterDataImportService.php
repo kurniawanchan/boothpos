@@ -1256,6 +1256,7 @@ class MasterDataImportService
 
                 if ($entry['product_attributes'] !== [] || $entry['image_filename'] !== null) {
                     $variant->product->fill($entry['product_attributes']);
+                    $this->guardIngredientInUse($variant->product);
 
                     if ($entry['image_filename'] !== null) {
                         $this->applyImageFilename($variant->product, 'products', $entry['image_filename']);
@@ -1266,6 +1267,7 @@ class MasterDataImportService
 
                 if ($entry['variant_attributes'] !== [] || $entry['variant_image_filename'] !== null) {
                     $variant->fill($entry['variant_attributes']);
+                    $this->guardIngredientInUse($variant->product, $variant);
 
                     if ($entry['variant_image_filename'] !== null) {
                         $this->applyImageFilename($variant, 'variants', $entry['variant_image_filename']);
@@ -1302,6 +1304,7 @@ class MasterDataImportService
                 $product->save();
             } elseif ($entry['product_attributes'] !== [] || $entry['image_filename'] !== null) {
                 $product->fill($entry['product_attributes']);
+                $this->guardIngredientInUse($product);
 
                 if ($entry['image_filename'] !== null) {
                     $this->applyImageFilename($product, 'products', $entry['image_filename']);
@@ -1353,6 +1356,7 @@ class MasterDataImportService
                 unset($attributes['sell_price']);
 
                 $variant->fill($attributes);
+                $this->guardIngredientInUse($product, $variant);
 
                 if ($entry['variant_image_filename'] !== null) {
                     $this->applyImageFilename($variant, 'variants', $entry['variant_image_filename']);
@@ -1364,6 +1368,29 @@ class MasterDataImportService
                     app(\App\Services\PriceService::class)->setBasePrice($variant, $newPrice, $user, 'import');
                 }
             }
+        }
+    }
+
+    /**
+     * 093 (FR-011) — impor bukan jalan pintas: menonaktifkan produk/varian atau memindahkan produk ke sumber stok
+     * `modifier` yang masih dipakai resep ditolak seperti di layar (409 `ingredient_in_use`, seluruh impor dibatalkan).
+     * Hanya PERUBAHAN nilai yang dihitung (isDirty), jadi berkas hasil ekspor yang diimpor ulang tetap lolos.
+     */
+    private function guardIngredientInUse(Product $product, ?ProductVariant $variant = null): void
+    {
+        $service = app(\App\Services\IngredientProductService::class);
+
+        if ($variant === null) {
+            if (($product->isDirty('is_active') && ! $product->is_active)
+                || ($product->isDirty('stock_source') && $product->stock_source === Product::STOCK_MODIFIER)) {
+                $service->assertNotInUse($product);
+            }
+
+            return;
+        }
+
+        if ($variant->exists && (($variant->isDirty('is_active') && ! $variant->is_active) || ($variant->isDirty('track_stock') && ! $variant->track_stock))) {
+            $service->assertNotInUse($product, [(int) $variant->id]);
         }
     }
 

@@ -184,7 +184,9 @@ class MasterDataExportService
             // Sheet ini memuat resep DASAR saja (blok tanpa pilihan modifier); tabel bermodifier hanya di layar Resep.
             $base = $r->blocks->filter(fn ($b) => $b->modifier_option_id === null)->values();
             $skus = $base->map(fn ($b) => $b->variant?->sku)->filter()->unique()->values();
-            foreach (($base->first()?->lines ?? collect()) as $i => $l) {
+            // 093: baris berupa PRODUK tidak punya kode bahan baku dan tidak bisa dibaca lembar ini; dilewati supaya tidak
+            // tertulis baris dengan `material_code` kosong. Impor ulang tetap aman karena impor mempertahankan baris produk.
+            foreach (($base->first()?->lines ?? collect())->filter(fn ($l) => $l->material_id !== null)->values() as $i => $l) {
                 $rows[] = [
                     'recipe_name' => $r->name,
                     'product_code' => $r->product->code_prefix,

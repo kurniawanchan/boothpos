@@ -166,6 +166,8 @@ class ProductController extends Controller
                 'prep_minutes' => $data['prep_minutes'] ?? null,
                 'is_retail' => $data['is_retail'] ?? false,
                 'stock_source' => $data['stock_source'] ?? \App\Models\Product::STOCK_VARIANT, // 087 US6
+                'use_as_ingredient' => $data['use_as_ingredient'] ?? false, // 093
+                'ingredient_unit' => $data['ingredient_unit'] ?? null,
             ]);
 
             foreach ($data['variants'] as $variantInput) {
@@ -189,6 +191,11 @@ class ProductController extends Controller
                     }
                     app(\App\Services\PriceService::class)->writeOutletPrice($variant, (int) $row['outlet_id'], (float) $row['price'], request()->user(), 'created');
                 }
+            }
+
+            // 093 — produk baru yang langsung bertanda bahan harus memenuhi syarat yang sama dengan menyalakannya kemudian.
+            if ($product->use_as_ingredient) {
+                app(\App\Services\IngredientProductService::class)->assertCanFlag($product);
             }
 
             // 043 — dengan rilis AKTIF, penerbitan item baru menunggu rilis berikutnya (menu_change item_publish).
@@ -279,6 +286,22 @@ class ProductController extends Controller
         DB::transaction(function () use ($request, $product, &$warnings) {
             $before = $product->only($product->getFillable());
 
+            $validated = $request->validated();
+
+            // 093 (FR-011) — menonaktifkan produk atau memindahkannya ke sumber stok `modifier` menghentikan pemakaian resep
+            // yang merujuknya. Hanya PERUBAHAN yang ditolak: mengirim ulang nilai yang sama (SPA mengirim seluruh form) lolos.
+            if ((array_key_exists('is_active', $validated) && ! $validated['is_active'] && $product->is_active)
+                || (($validated['stock_source'] ?? $product->stock_source) === Product::STOCK_MODIFIER && $product->stock_source !== Product::STOCK_MODIFIER)) {
+                app(\App\Services\IngredientProductService::class)->assertNotInUse($product);
+            }
+
+            // 093 — hanya saat DINYALAKAN (false → true) atau saat sumber stok diubah pada produk yang sudah bertanda:
+            // mematikan penanda selalu boleh (resep lama tetap utuh, FR-004). Dicek SEBELUM menulis supaya 422 tidak
+            // meninggalkan produk setengah berubah.
+            if (($validated['use_as_ingredient'] ?? $product->use_as_ingredient) && (! $product->use_as_ingredient || isset($validated['stock_source']))) {
+                app(\App\Services\IngredientProductService::class)->assertCanFlag($product, $validated['stock_source'] ?? null);
+            }
+
             $product->update(collect($request->validated())->except('outlet_ids')->all());
             $this->applyCarried($product, $request->validated());
 
@@ -292,6 +315,18 @@ class ProductController extends Controller
                     description: "Mengubah sumber stok {$product->name} menjadi {$product->stock_source}.",
                     oldValues: ['stock_source' => $before['stock_source'] ?? \App\Models\Product::STOCK_VARIANT],
                     newValues: ['stock_source' => $product->stock_source],
+                );
+            }
+            // 093 — perubahan penanda dicatat tersendiri, di transaksi yang sama (Konstitusi IV).
+            if ($product->wasChanged('use_as_ingredient')) {
+                $this->activityLogger->log(
+                    userId: $request->user()?->id,
+                    action: 'ingredient_flag_changed',
+                    entityType: 'Product',
+                    entityId: $product->id,
+                    description: ($product->use_as_ingredient ? 'Menandai' : 'Melepas penanda bahan pada').' produk '.$product->name.'.',
+                    oldValues: ['use_as_ingredient' => (bool) ($before['use_as_ingredient'] ?? false)],
+                    newValues: ['use_as_ingredient' => (bool) $product->use_as_ingredient],
                 );
             }
             $warnings = $this->stockSourceWarnings($product);
@@ -438,6 +473,9 @@ class ProductController extends Controller
     {
         $this->authorize('update', $variant->product);
 
+        // 093 — resep yang merujuk varian ini ditolak 409 dengan daftarnya; tanpa ini kunci asing RESTRICT menjadi galat 500.
+        app(\App\Services\IngredientProductService::class)->assertNotInUse($variant->product, [(int) $variant->id]);
+
         $refused = app(\App\Services\VariantDeletionService::class)->deleteIfUnused($variant, $request->user());
         if ($refused !== null) {
             return response()->json(['message' => __("products.variant_delete_{$refused}"), 'code' => $refused], 409);
@@ -481,6 +519,12 @@ class ProductController extends Controller
         DB::transaction(function () use ($request, $variant, &$price) {
             $before = $variant->only($variant->getFillable());
             $data = $request->validated();
+
+            // 093 (FR-011) — mematikan pelacakan stok atau menonaktifkan varian yang dirujuk resep menghentikan pemakaiannya.
+            if ((array_key_exists('track_stock', $data) && ! $data['track_stock'] && $variant->track_stock)
+                || (array_key_exists('is_active', $data) && ! $data['is_active'] && $variant->is_active)) {
+                app(\App\Services\IngredientProductService::class)->assertNotInUse($variant->product, [(int) $variant->id]);
+            }
             $hasPrice = array_key_exists('sell_price', $data);
             $newPrice = $data['sell_price'] ?? null;
             unset($data['sell_price']);
@@ -631,7 +675,7 @@ class ProductController extends Controller
             'outlet_price' => ($op = app(\App\Support\OutletPriceBook::class)->forCurrentOutlet($v->id)) === null ? null : number_format($op, 2, '.', ''),
             'current_stock' => $v->current_stock,
             // 092 — varian beresep: angka dari bahan (`outlet_stock`/`track_stock` yang sama dibaca klien lama).
-            'outlet_stock' => $driven ? ($ms['portions'] ?? null) : app(\App\Support\OutletPriceBook::class)->orderingStockOrNull($v->id),
+            'outlet_stock' => $driven ? ($ms['portions'] ?? null) : $menuStock->availableStockForRequest($request, (int) $v->id), // 093: dikurangi tahanan bila varian bahan resep
             // 087 US6 — pelacakan EFEKTIF (sumber stok produk ikut): kartu hasil pencarian POS tidak menampilkan "habis"
             // untuk produk bersumber modifier atau menu masak. Sebelumnya kunci ini tidak ada sama sekali di sini.
             'track_stock' => $driven ? ($ms['portions'] ?? null) !== null : $v->tracksOwnStock(),

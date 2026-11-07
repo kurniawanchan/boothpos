@@ -43,3 +43,11 @@ export function recalculateRecipeCost(productId) {
 export function listRecipeModifierOptions(productId) {
   return client.get(`/products/${productId}/recipe-modifier-options`).then((r) => r.data?.data ?? []);
 }
+
+/**
+ * 093 — GET /recipe-ingredients: varian produk bertanda "Gunakan sebagai bahan" yang boleh dipilih di resep BARU, dengan
+ * stok tersedia di outlet yang berlaku (null bila outlet tidak tunggal). Mengembalikan `{data, meta}`.
+ */
+export function listRecipeIngredients(params = {}) {
+  return client.get('/recipe-ingredients', { params }).then((r) => r.data);
+}
