@@ -33,6 +33,13 @@ export const isOutOfStock = (stock) => stock !== null && stock !== undefined && 
 
 export const shownPrice = (v) => v.outlet_price ?? v.sell_price;
 
+/**
+ * 092 D8 — ada menu beresep di daftar? Angka stok menu beresep dihitung server dan berubah setiap penjualan atau baris
+ * tab, jadi layar yang menampilkannya memuat ulang daftar setelah transaksi. Tanpa menu beresep tidak ada yang perlu
+ * dimuat ulang (perilaku lama tetap, tanpa permintaan tambahan). SATU predikat untuk POS dan Tab.
+ */
+export const hasRecipeStock = (products) => (products || []).some((p) => (p.variants || []).some((v) => v.stock_basis === 'recipe'));
+
 export function buildProductCards(products, categoryCodeById = {}, categoryNameById = {}) {
   return (products || []).map((p) => {
     const variants = (p.variants || []).filter((v) => v.is_active);
@@ -40,6 +47,10 @@ export function buildProductCards(products, categoryCodeById = {}, categoryNameB
     // Angka stok kartu hanya bila SEMUA varian aktif punya stok sendiri; satu varian tanpa stok = kartu tanpa angka.
     const stocks = variants.map(stockOf);
     const totalStock = stocks.some((s) => s === null) ? null : stocks.reduce((sum, s) => sum + (s ?? 0), 0);
+    // 092 — varian beresep: angkanya SUDAH hasil hitung server (`outlet_stock` = porsi dari bahan, dikurangi tahanan tab
+    // terbuka); di sini hanya diteruskan bahan penghambatnya untuk pesan. Penghambat kartu = milik varian ber-stok terendah.
+    const recipeVariants = variants.filter((v) => v.stock_basis === 'recipe');
+    const limitingVariant = [...recipeVariants].sort((a, b) => (stockOf(a) ?? Infinity) - (stockOf(b) ?? Infinity))[0];
     return {
       product_id: p.id,
       name: p.name,
@@ -50,6 +61,8 @@ export function buildProductCards(products, categoryCodeById = {}, categoryNameB
       min_price: variants.length ? Math.min(...prices) : 0,
       max_price: variants.length ? Math.max(...prices) : 0,
       total_stock: totalStock,
+      stock_basis: recipeVariants.length ? 'recipe' : 'variant',
+      stock_limiting: limitingVariant?.stock_limiting ?? null,
       // 2026-10-31 (permintaan pemilik, membalik FR-031 087): produk bersumber bahan modifier menampilkan porsi yang
       // masih bisa dibuat dari bahan di outlet shift. HANYA angka: tidak pernah membuat kartu "habis", karena
       // penjualan tidak ditolak karena bahan (FR-014).
@@ -83,6 +96,9 @@ export function toCartItem(card, variant) {
     home_outlet_name: card.home_outlet_name,
     sell_price: shownPrice(variant),
     current_stock: stockOf(variant), // null = tanpa stok sendiri (tanpa batas qty di keranjang)
+    // 092 — untuk pesan "mentok di batas": bahan penghambat dari server (angka batasnya tetap `current_stock`).
+    stock_basis: variant.stock_basis ?? 'variant',
+    stock_limiting: variant.stock_limiting ?? null,
     // Falls back to the product's own image when this variant has none of
     // its own — mirrors the same fallback used by GET /variants/lookup.
     image_url: variant.image_url ?? card.image_url ?? null,
@@ -117,6 +133,8 @@ export function buildSearchCards(results) {
     home_outlet_name: v.home_outlet_name,
     sell_price: shownPrice(v),
     current_stock: stockOf(v), // GET /variants/lookup mengirim track_stock efektif (087)
+    stock_basis: v.stock_basis ?? 'variant', // 092
+    stock_limiting: v.stock_limiting ?? null,
     category_code: null,
     category_name: v.category_name ?? null,
     image_url: v.image_url ?? null,

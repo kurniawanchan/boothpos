@@ -100,6 +100,11 @@ class ProductController extends Controller
             ->orderBy('name')
             ->paginate($perPage);
 
+        // 092 — stok menu beresep untuk SEMUA varian halaman ini sekali jalan (bukan satu kueri per kartu, FR-018).
+        if ($orderingOutlet !== null && $withVariants) {
+            app(\App\Services\MenuStockService::class)->prime($request, collect($products->items())->flatMap(fn ($p) => $p->variants->pluck('id')));
+        }
+
         return response()->json([
             'data' => ProductResource::collection($products->items()),
             'meta' => [
@@ -604,7 +609,16 @@ class ProductController extends Controller
             ->limit($limit)
             ->get();
 
-        $data = $variants->map(fn (ProductVariant $v) => [
+        // 092 — stok menu beresep untuk semua varian hasil sekali jalan (lihat index()).
+        app(\App\Services\MenuStockService::class)->prime($request, $variants->pluck('id'));
+        $menuStock = app(\App\Services\MenuStockService::class);
+        $recipeDriven = app(\App\Services\RecipeService::class)->recipeDrivenVariantIds();
+
+        $data = $variants->map(function (ProductVariant $v) use ($request, $menuStock, $recipeDriven, $withModifiers) {
+            $driven = isset($recipeDriven[(int) $v->id]);
+            $ms = $driven ? $menuStock->forRequest($request, (int) $v->id) : null;
+
+            return [
             'variant_id' => $v->id,
             'product_id' => $v->product_id,
             'sku' => $v->sku,
@@ -616,16 +630,20 @@ class ProductController extends Controller
             'sell_price' => number_format((float) $v->sell_price, 2, '.', ''),
             'outlet_price' => ($op = app(\App\Support\OutletPriceBook::class)->forCurrentOutlet($v->id)) === null ? null : number_format($op, 2, '.', ''),
             'current_stock' => $v->current_stock,
-            'outlet_stock' => app(\App\Support\OutletPriceBook::class)->orderingStockOrNull($v->id),
+            // 092 — varian beresep: angka dari bahan (`outlet_stock`/`track_stock` yang sama dibaca klien lama).
+            'outlet_stock' => $driven ? ($ms['portions'] ?? null) : app(\App\Support\OutletPriceBook::class)->orderingStockOrNull($v->id),
             // 087 US6 — pelacakan EFEKTIF (sumber stok produk ikut): kartu hasil pencarian POS tidak menampilkan "habis"
             // untuk produk bersumber modifier atau menu masak. Sebelumnya kunci ini tidak ada sama sekali di sini.
-            'track_stock' => $v->tracksOwnStock(),
+            'track_stock' => $driven ? ($ms['portions'] ?? null) !== null : $v->tracksOwnStock(),
+            'stock_basis' => $driven ? 'recipe' : 'variant',
+            'stock_limiting' => $ms['limiting'] ?? null,
             // Falls back to the PRODUCT's own image when this variant has
             // none of its own — same accessor ProductVariant::image_url now
             // exposes to every caller (see its docblock), not duplicated
             // here anymore.
             'image_url' => $v->image_url,
-        ] + ($withModifiers ? ['modifier_groups' => app(\App\Services\ModifierResolver::class)->present($v->product)] : []));
+            ] + ($withModifiers ? ['modifier_groups' => app(\App\Services\ModifierResolver::class)->present($v->product)] : []);
+        });
 
         return response()->json(['data' => $data]);
     }

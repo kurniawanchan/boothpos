@@ -2777,6 +2777,8 @@ paths:
       tags: [Sales]
       summary: Buat transaksi penjualan
       description: |
+        092 — bahan RESEP seluruh isi (setelah tahanan tab terbuka lain) tidak cukup → `409` `code: insufficient_recipe_stock`
+        (skema `InsufficientRecipeStock`); transaksi digulung penuh.
         Endpoint inti kasir. Seluruh operasi berjalan dalam satu transaksi
         database: order, order_items, payments, payment_proofs, dan
         stock_movements.
@@ -6813,6 +6815,8 @@ paths:
         Harga dihitung SERVER dari master data — field harga dari klien diabaikan. Baris belum-terkirim
         yang identik (varian, catatan, harga) digabung. Stok dikurangi saat item ditambahkan (varian yang
         dilacak): stok kurang → `409` dan tab tidak berubah.
+        092 — bahan RESEP seluruh isi (setelah tahanan tab terbuka lain) tidak cukup → `409` `code: insufficient_recipe_stock`
+        (skema `InsufficientRecipeStock`); transaksi digulung penuh.
       requestBody:
         required: true
         content:
@@ -6836,7 +6840,9 @@ paths:
     patch:
       tags: [Restaurant]
       summary: Ubah jumlah/catatan baris yang BELUM dikirim (menu `floor`)
-      description: Selisih jumlah menggerakkan stok (sale/return) sebesar selisihnya. Baris yang sudah dikirim → `409`.
+      description: |
+        Selisih jumlah menggerakkan stok (sale/return) sebesar selisihnya. Baris yang sudah dikirim → `409`.
+        092 — menaikkan jumlah atau mengganti pilihan diperiksa terhadap bahan RESEP (`409` `insufficient_recipe_stock`, skema `InsufficientRecipeStock`); menurunkan tidak pernah ditolak.
       requestBody:
         required: true
         content:
@@ -6952,6 +6958,8 @@ paths:
       tags: [Restaurant]
       summary: Bayar tab — sebagian atau penuh (menu `floor`)
       description: |
+        092 — saat pembayaran melunasi tab, bahan RESEP diperiksa ulang (saldo bisa turun sejak baris ditambahkan):
+        `409` `insufficient_recipe_stock` (skema `InsufficientRecipeStock`) dan tab tetap terbuka tanpa pembayaran baru.
         Memakai aturan pembayaran penjualan ritel (bukti non-tunai, kembalian hanya dari tunai).
         084 (keputusan pemilik 2026-10-30) — pembayaran `qr_ewallet` (QRIS) di jalur tab LANGSUNG `verification: verified`
         (tanpa verifikasi manual; sebelumnya `pending`). Metode lain tidak berubah. Baris QRIS lama yang masih `pending`
@@ -7409,6 +7417,7 @@ paths:
       tags: [Restaurant]
       summary: Pisah tagihan — penjualan terpisah per item, atau bagi rata pratinjau (menu `floor`)
       description: |
+        092 — bahan RESEP bagian yang dibayar harus muat (`409` `insufficient_recipe_stock`, skema `InsufficientRecipeStock`).
         **048 / T059 — `mode: equal`.** Pratinjau bagi rata TANPA pembayaran dan TANPA mengubah tab: `parts` (2–5)
         bagian; setiap bagian rupiah utuh dari tagihan termasuk pajak; sisa pembulatan (dan sen) masuk ke bagian
         TERAKHIR sehingga jumlahnya tepat sama dengan tagihan. Kasir mencatat tiap bagian lewat `POST /tabs/{id}/payments`.
@@ -8460,6 +8469,24 @@ components:
         user: { type: object, nullable: true, properties: { id: { type: integer }, name: { type: string } } }
         created_at: { type: string, format: date-time }
 
+    InsufficientRecipeStock:
+      type: object
+      description: |
+        092 — `409` bahan RESEP tidak cukup (FR-013). Seluruh transaksi digulung: tidak ada baris, pergerakan bahan, atau
+        pembayaran. Hanya kebutuhan yang berasal dari resep yang menolak; bahan pilihan modifier tetap menjadi `material_warnings` (087).
+        Permintaan TANPA pengguna login (rute publik pesan mandiri) mendapat `limiting` tanpa `material_id`/`name`/`unit`/`on_hand`/`required`.
+      properties:
+        message: { type: string }
+        code: { type: string, enum: [insufficient_recipe_stock] }
+        limiting:
+          type: object
+          properties:
+            material_id: { type: integer }
+            name: { type: string }
+            unit: { type: string }
+            on_hand: { type: string, example: "3.000", description: "Saldo SETELAH tahanan tab lain." }
+            required: { type: string, example: "4.000" }
+            available_portions: { type: integer, example: 3 }
     MaterialWarning:
       type: object
       description: 087 — bahan yang menjadi minus karena penjualan ini (penjualan tetap tercatat).
@@ -8691,9 +8718,21 @@ components:
         sell_price: { $ref: '#/components/schemas/Money' }
         current_stock: { type: integer, readOnly: true }
         outlet_price: { type: string, nullable: true, readOnly: true, example: "9000.00", description: "045 — harga khusus di outlet yang berlaku; null = mengikuti sell_price. Layar kasir menampilkan outlet_price bila ada." }
-        outlet_stock: { type: integer, nullable: true, readOnly: true, description: "045 — saldo di outlet pemesanan; hanya terisi untuk `pos=1`. Layar kasir menampilkan outlet_stock bila ada, selain itu current_stock." }
-        track_stock: { type: boolean, readOnly: true, description: "028 — false untuk hidangan made-to-order (tanpa stok fisik); layar kasir tidak menampilkan angka stok untuknya. 087 US6 — pada payload POS (`pos=1`) dan `GET /variants/lookup` nilainya EFEKTIF: false juga untuk produk ber-`stock_source: modifier`." }
+        outlet_stock: { type: integer, nullable: true, readOnly: true, description: "045 — saldo di outlet pemesanan; hanya terisi untuk `pos=1`. Layar kasir menampilkan outlet_stock bila ada, selain itu current_stock. 092 — untuk varian beresep (`stock_basis: recipe`) nilainya STOK MENU dari bahan resep (null bila tak ada bahan pembatas aktif)." }
+        track_stock: { type: boolean, readOnly: true, description: "028 — false untuk hidangan made-to-order (tanpa stok fisik); layar kasir tidak menampilkan angka stok untuknya. 087 US6 — pada payload POS (`pos=1`) dan `GET /variants/lookup` nilainya EFEKTIF: false juga untuk produk ber-`stock_source: modifier`. 092 — untuk varian beresep: true bila ada bahan pembatas aktif (angka = `outlet_stock`), false bila tak ada." }
         stock_tracked: { type: boolean, readOnly: true, description: "087 US6 — pelacakan efektif (track_stock DAN produk bersumber `variant`). Payload pengelolaan: track_stock tetap mentah." }
+        stock_basis: { type: string, enum: [variant, recipe], readOnly: true, description: "092 — `recipe` = varian punya resep aktif: stok menu DIHITUNG SERVER dari bahan resep (kapasitas bahan terendah di outlet pemesanan dikurangi bahan yang ditahan tab terbuka) dan dikirim lewat `outlet_stock`/`track_stock` di atas; `current_stock` (stok varian mentah) diabaikan. `variant` = perilaku lama." }
+        stock_limiting:
+          type: object
+          nullable: true
+          readOnly: true
+          description: "092 — bahan penghambat stok menu beresep (hanya `pos=1`, outlet pemesanan); null bila bukan beresep atau tak ada bahan pembatas aktif."
+          properties:
+            material_id: { type: integer }
+            name: { type: string }
+            unit: { type: string }
+            on_hand: { type: string, example: "3.000", description: "Saldo bahan di outlet pemesanan SETELAH tahanan tab terbuka (tiga desimal)." }
+            per_portion: { type: string, example: "1.000", description: "Kebutuhan bahan per satu porsi menu (tiga desimal)." }
         image_url: { type: string, nullable: true, readOnly: true, description: "URL siap-pakai (disk publik) foto varian sendiri; null bila tidak ada (foto produk induk adalah field terpisah di Product)." }
         low_stock_alert: { type: integer, nullable: true }
         is_active: { type: boolean }

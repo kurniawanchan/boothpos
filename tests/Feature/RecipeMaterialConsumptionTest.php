@@ -140,15 +140,31 @@ class RecipeMaterialConsumptionTest extends TestCase
         $this->assertSame(99.0, $this->balance('telur'));
     }
 
-    public function test_a_shortfall_still_completes_the_sale_with_a_warning_naming_the_material_and_outlet(): void
+    /**
+     * 092 (keputusan pemilik 2026-11-06) MEMBALIK 089/087 untuk kebutuhan RESEP: dulu penjualan tetap selesai dengan saldo
+     * minus + peringatan; kini ditolak 409 dan saldo tidak berubah. Perilaku lama tetap berlaku untuk bahan PILIHAN
+     * MODIFIER (test berikutnya).
+     */
+    public function test_a_recipe_shortfall_is_refused_and_leaves_the_balance_untouched(): void
     {
         $this->recipe($this->nasiGoreng, ['ayam' => [2]]);
         $this->setStock('ayam', $this->outletA, 1);
 
-        $r = $this->checkout([[$this->nasiGoreng, 1, []]])->assertCreated();
+        $this->checkout([[$this->nasiGoreng, 1, []]])->assertStatus(409)->assertJsonPath('code', 'insufficient_recipe_stock');
 
-        $this->assertSame(-1.0, $this->balance('ayam'));
-        $this->assertSame('Indomie Ayam Bawang', $r->json('material_warnings.0.material'));
+        $this->assertSame(1.0, $this->balance('ayam'));
+        $this->assertSame(0, Order::query()->count());
+    }
+
+    public function test_a_modifier_option_shortfall_still_completes_the_sale_with_a_warning_naming_the_material_and_outlet(): void
+    {
+        $this->setStock('telur', $this->outletA, 1);
+
+        // Indomie tanpa resep; pilihan "Double Telur" butuh 2 butir: kekurangan bahan PILIHAN tetap hanya peringatan (087).
+        $r = $this->checkout([[$this->indomie, 1, $this->opts('soto', 'double')]])->assertCreated();
+
+        $this->assertSame(-1.0, $this->balance('telur'));
+        $this->assertSame('Telur', $r->json('material_warnings.0.material'));
         $this->assertSame('Warkop A', $r->json('material_warnings.0.outlet'));
     }
 

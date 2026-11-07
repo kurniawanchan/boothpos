@@ -101,6 +101,11 @@ class ProductVariant extends Model
         if (! $this->track_stock) {
             return false;
         }
+        // 092 (research D6, keputusan pemilik 2026-11-06): varian yang punya resep AKTIF memakai stok BAHAN, bukan stok
+        // varian — otomatis, tanpa pengaturan per produk. Pembacanya satu himpunan per permintaan (bukan query per varian).
+        if (app(\App\Support\RecipeDrivenVariants::class)->has((int) $this->id)) {
+            return false;
+        }
         $this->loadMissing('product');
 
         return ($this->product?->stock_source ?? Product::STOCK_VARIANT) === Product::STOCK_VARIANT;
@@ -112,14 +117,16 @@ class ProductVariant extends Model
      */
     public function scopeStockFromVariant(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
     {
-        return $query->whereHas('product', fn ($p) => $p->withTrashed()->where('stock_source', Product::STOCK_VARIANT));
+        return $query->whereHas('product', fn ($p) => $p->withTrashed()->where('stock_source', Product::STOCK_VARIANT))
+            ->whereNotIn('product_variants.id', array_keys(app(\App\Support\RecipeDrivenVariants::class)->ids())); // 092 D6
     }
 
     /** Syarat SQL yang sama dengan tracksOwnStock(), untuk daftar/laporan stok. */
     public function scopeTracksOwnStock(\Illuminate\Database\Eloquent\Builder $query): \Illuminate\Database\Eloquent\Builder
     {
         return $query->where('product_variants.track_stock', true)
-            ->whereHas('product', fn ($p) => $p->withTrashed()->where('stock_source', Product::STOCK_VARIANT));
+            ->whereHas('product', fn ($p) => $p->withTrashed()->where('stock_source', Product::STOCK_VARIANT))
+            ->whereNotIn('product_variants.id', array_keys(app(\App\Support\RecipeDrivenVariants::class)->ids())); // 092 D6
     }
 
     public function product(): BelongsTo

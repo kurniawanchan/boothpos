@@ -10,6 +10,8 @@ return [
     'variant_inactive' => 'Varian :sku tidak aktif.',
     'item_unavailable' => 'Item :sku tidak bisa dipesan: :reason.',
     'unavailable_product_inactive' => 'item sudah didiskontinu atau belum diterbitkan',
+    'insufficient_recipe_stock' => 'Stok bahan tidak cukup untuk :menu: :material tersisa :available :unit, dibutuhkan :required.',
+    'insufficient_recipe_stock_public' => 'Maaf, :menu tidak cukup tersedia saat ini (tersisa :portions porsi).',
     'unavailable_sold_out' => 'item sedang habis (86)',
     'payment_insufficient' => 'Total pembayaran tidak menutup total transaksi.',
     'proof_required_for_non_cash' => 'Bukti pembayaran wajib untuk metode non-tunai.',

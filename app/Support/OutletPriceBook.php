@@ -68,6 +68,12 @@ final class OutletPriceBook
     /** Outlet pemesanan yang dipaksakan untuk permintaan ini (layar POS/tab, `pos=1`); null = pakai outlet tunggal yang berlaku. */
     private ?int $ordering = null;
 
+    /** 092 — outlet pemesanan yang dipaksakan (`pos=1`), atau null: dasar stok menu berbasis resep (MenuStockService). */
+    public function orderingOutletId(): ?int
+    {
+        return $this->ordering;
+    }
+
     public function useOrderingOutlet(?int $outletId): void
     {
         $this->ordering = $outletId;

@@ -10,6 +10,8 @@ return [
     'variant_inactive' => 'Variant :sku is inactive.',
     'item_unavailable' => 'Item :sku cannot be ordered: :reason.',
     'unavailable_product_inactive' => 'the item is discontinued or not published',
+    'insufficient_recipe_stock' => 'Not enough ingredient stock for :menu: :material has :available :unit left, :required needed.',
+    'insufficient_recipe_stock_public' => 'Sorry, :menu is not available in that quantity right now (:portions portions left).',
     'unavailable_sold_out' => 'the item is sold out (86)',
     'payment_insufficient' => 'The payment total does not cover the transaction total.',
     'proof_required_for_non_cash' => 'A payment proof is required for non-cash methods.',

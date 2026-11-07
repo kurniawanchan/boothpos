@@ -33,7 +33,8 @@ class TabSettlementService
     {
         $ref = $data['client_ref'];
 
-        return DB::transaction(function () use ($tab, $data, $ref, $user) {
+        // 092 — `transaction()` membaca data terbaru (READ COMMITTED) untuk penjaga kapasitas.
+        return app(MenuStockService::class)->transaction(function () use ($tab, $data, $ref, $user) {
             $order = $this->tabs->lock($tab);
 
             // Idempotensi: pengiriman ulang (jaringan putus) dengan client_ref
@@ -128,6 +129,8 @@ class TabSettlementService
             // 087 — bahan pilihan modifier dipotong saat tab SELESAI (lunas), dari isi akhir tab; pelunasan
             // sebagian tidak memotong apa pun (research D4). Di dalam transaksi + kunci tab yang sama.
             if ($completes) {
+                // 092 FR-013 — periksa ulang: saldo bisa turun (koreksi, pindah stok) sejak baris ditambahkan.
+                app(MenuStockService::class)->assertCanFulfil($order, $order->items()->get());
                 app(ModifierMaterialConsumption::class)->consumeOrder($order, $user);
             }
 
@@ -155,7 +158,7 @@ class TabSettlementService
     {
         $ref = $data['client_ref'];
 
-        return DB::transaction(function () use ($tab, $data, $user, $ref) {
+        return app(MenuStockService::class)->transaction(function () use ($tab, $data, $user, $ref) {
             $order = $this->tabs->lock($tab);
 
             // Idempotensi: pengiriman ulang dengan client_ref yang sama tidak memisah dua kali.
@@ -236,6 +239,7 @@ class TabSettlementService
             // 087 — penjualan hasil split langsung `completed`: ia memotong bahan barisnya sendiri; sisa tab
             // memotong saat ia lunas. Baris utuh dipindah dengan id yang sama, baris sebagian diklon beserta
             // snapshot modifier-nya, jadi tidak ada yang terpotong dua kali (research D4).
+            app(MenuStockService::class)->assertCanFulfil($paid, $paid->items()->get());   // 092 FR-013
             app(ModifierMaterialConsumption::class)->consumeOrder($paid, $user);
 
             if (array_key_exists('discount_amount', $data) && $data['discount_amount'] !== null) {

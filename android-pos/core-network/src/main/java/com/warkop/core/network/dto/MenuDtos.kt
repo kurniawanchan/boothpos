@@ -39,6 +39,14 @@ import kotlinx.serialization.Serializable
     val options: List<ModifierOptionDto> = emptyList(),
 )
 
+/** 092 — bahan penghambat stok menu beresep (hanya untuk pesan; angka batasnya tetap `outlet_stock`). */
+@Serializable data class StockLimitingDto(
+    val name: String? = null,
+    val unit: String? = null,
+    @SerialName("on_hand") val onHand: String? = null,
+    @SerialName("per_portion") val perPortion: String? = null,
+)
+
 @Serializable data class VariantDto(
     val id: Long,
     @SerialName("variant_name") val variantName: String = "",
@@ -51,6 +59,10 @@ import kotlinx.serialization.Serializable
     @SerialName("current_stock") val currentStock: Int? = null,
     @SerialName("outlet_stock") val outletStock: Int? = null,
     @SerialName("track_stock") val trackStock: Boolean = true,
+    // 092 — `recipe` = stok menu dihitung SERVER dari bahan resep dan dikirim lewat outlet_stock/track_stock di atas
+    // (APK lama tanpa dua bidang ini tetap menampilkan angkanya). `variant` = perilaku lama.
+    @SerialName("stock_basis") val stockBasis: String = "variant",
+    @SerialName("stock_limiting") val stockLimiting: StockLimitingDto? = null,
 )
 
 @Serializable data class ProductDto(

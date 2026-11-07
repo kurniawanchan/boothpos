@@ -740,6 +740,15 @@ class PosStore(
         }
     }
 
+    /**
+     * 092 (research D8) — stok menu beresep dihitung server dan berubah setiap baris masuk/keluar tab (bahan ditahan)
+     * dan setelah penjualan. Muat ulang katalog (senyap) HANYA bila ada menu beresep; tanpa menu beresep tidak ada
+     * permintaan tambahan. Bukan polling baru.
+     */
+    private fun refreshRecipeStock() {
+        if (menu?.products?.any { it.stockBasis == "recipe" } == true) loadMenu(silent = true)
+    }
+
     /** Poll ±5 dtk selama ada sesi (SC-008); 304 = tak berubah. Gagal sesaat diabaikan: poll berikutnya mencoba lagi. */
     private fun startAvailabilityPolling() {
         val b = backend ?: return
@@ -836,8 +845,11 @@ class PosStore(
                 conn = Conn.ONLINE
                 upsert(o)
                 after(o)
+                refreshRecipeStock()
             } catch (e: ApiError) {
                 onFail()
+                // 092 — 409 "bahan tidak cukup" berarti angka stok di layar basi: muat ulang (pesan server tetap ditampilkan di bawah).
+                if (e is ApiError.Conflict && e.code == "insufficient_recipe_stock") refreshRecipeStock()
                 if (e is ApiError.Network) conn = Conn.OFFLINE
                 onShiftRefused(e)
                 // 077 — mode berganti: dialog menggantikan pesan galat/"dicabut" (tulis tidak pernah masuk ke mode lain; server menolaknya).
@@ -1403,6 +1415,7 @@ class PosStore(
                 keys.settled(intent)
                 conn = Conn.ONLINE
                 upsert(updated)
+                refreshRecipeStock() // 092 D8 — EDC tidak lewat send()
                 sheet = null
                 if (updated.closed) {
                     onSaleClosed(updated)
@@ -1470,6 +1483,7 @@ class PosStore(
                 keys.settled(intent)
                 conn = Conn.ONLINE
                 upsert(updated)
+                refreshRecipeStock() // 092 D8 — QRIS tidak lewat send()
                 sheet = null
                 when (val next = qrisAfterPayment(updated.closed, updated.remaining)) {
                     // 058 / US2 — penjualan tutup: struk masuk antrean cetak sekali (kunci antrean), lalu selesai.

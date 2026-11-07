@@ -180,6 +180,8 @@ describe('buildSearchCards', () => {
       category_name: 'Pin',
       image_url: 'http://localhost/storage/variants/slippery.png',
       modifier_groups: [], // 084 — hasil tanpa grup modifier tetap membawa daftar kosong
+      stock_basis: 'variant', // 092 — bidang TAMBAHAN; nilai lainnya di atas tidak berubah
+      stock_limiting: null,
     });
   });
 
@@ -286,5 +288,66 @@ describe('material-based stock on POS cards', () => {
     const [card] = buildProductCards([product({ stock_source: 'variant', variants: [{ id: 1, sell_price: '1', is_active: true, current_stock: 5 }] })]);
     expect(card.material_portions).toBeNull();
     expect(card.total_stock).toBe(5);
+  });
+});
+
+// 092 — stok menu berbasis resep: angkanya hasil hitung server (`outlet_stock`/`track_stock`), klien hanya
+// menampilkan dan meneruskan bahan penghambatnya.
+describe('092 recipe-based menu stock', () => {
+  const limiting = (name = 'Telur') => ({ material_id: 7, name, unit: 'butir', on_hand: '3.000', per_portion: '1.000' });
+  const recipeVariant = (overrides = {}) => variant({ id: 40, track_stock: true, current_stock: 999, outlet_stock: 3, stock_basis: 'recipe', stock_limiting: limiting(), ...overrides });
+
+  it('uses the server menu stock (outlet_stock) and ignores the raw variant stock number', () => {
+    expect(stockOf(recipeVariant())).toBe(3);
+  });
+
+  it('shows 0 as sold out, never as "no stock tracking"', () => {
+    const v = recipeVariant({ outlet_stock: 0 });
+    expect(stockOf(v)).toBe(0);
+    expect(isOutOfStock(stockOf(v))).toBe(true);
+    const [card] = buildProductCards([product({ variants: [v] })]);
+    expect(card.out_of_stock).toBe(true);
+    expect(card.total_stock).toBe(0);
+  });
+
+  it('an unbounded recipe menu (track_stock false) has no number and is never "out of stock"', () => {
+    const v = recipeVariant({ track_stock: false, outlet_stock: null, stock_limiting: null });
+    expect(stockOf(v)).toBeNull();
+    const [card] = buildProductCards([product({ variants: [v] })]);
+    expect(card.out_of_stock).toBe(false);
+    expect(card.total_stock).toBeNull();
+  });
+
+  it('passes the limiting ingredient of the lowest-stock recipe variant to the card', () => {
+    const [card] = buildProductCards([product({ variants: [
+      recipeVariant({ id: 41, outlet_stock: 8, stock_limiting: limiting('Sayur') }),
+      recipeVariant({ id: 42, outlet_stock: 2, stock_limiting: limiting('Telur') }),
+    ] })]);
+    expect(card.stock_basis).toBe('recipe');
+    expect(card.stock_limiting.name).toBe('Telur');
+  });
+
+  it('a product without recipe variants keeps the old card shape (basis variant, no limiting)', () => {
+    const [card] = buildProductCards([product({ variants: [variant({ id: 1 })] })]);
+    expect(card.stock_basis).toBe('variant');
+    expect(card.stock_limiting).toBeNull();
+  });
+
+  it('an old payload without the new fields behaves exactly as before', () => {
+    const [card] = buildProductCards([product({ variants: [variant({ id: 1, current_stock: 4 })] })]);
+    expect(card.total_stock).toBe(4);
+    expect(card.stock_limiting).toBeNull();
+  });
+
+  it('carries basis and limiting into the cart item and the search card', () => {
+    const [card] = buildProductCards([product({ variants: [recipeVariant()] })]);
+    const item = toCartItem(card, card.variants[0]);
+    expect(item.current_stock).toBe(3);
+    expect(item.stock_basis).toBe('recipe');
+    expect(item.stock_limiting.name).toBe('Telur');
+
+    const [hit] = buildSearchCards([{ variant_id: 40, sku: 'S', label: 'Menu', sell_price: '1.00', track_stock: true, outlet_stock: 3, current_stock: 999, stock_basis: 'recipe', stock_limiting: limiting() }]);
+    expect(hit.current_stock).toBe(3);
+    expect(hit.stock_limiting.name).toBe('Telur');
   });
 });

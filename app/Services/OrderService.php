@@ -80,7 +80,8 @@ class OrderService
             }
         }
 
-        return DB::transaction(function () use ($data, $cashier, $session) {
+        // 092 — `transaction()` membaca data terbaru (READ COMMITTED) agar penjaga kapasitas melihat tab terbuka yang baru di-commit.
+        return app(MenuStockService::class)->transaction(function () use ($data, $cashier, $session) {
             $subtotal = 0;
             $totalCost = 0;
             $lineData = [];
@@ -241,6 +242,8 @@ class OrderService
 
             // 087 — penjualan ritel langsung `completed`: bahan pilihan modifier dipotong di sini, di transaksi
             // yang sama dengan baris pesanannya (research D4). Retry `local_ref` sudah kembali lebih awal.
+            // 092 FR-013 — bahan RESEP seluruh pesanan harus muat (409 bila tidak); sebelum dipotong, dalam transaksi yang sama.
+            app(MenuStockService::class)->assertCanFulfil($order, $order->items()->get());
             app(ModifierMaterialConsumption::class)->consumeOrder($order, $cashier);
 
             // Tiap pembayaran checkout dicatat di shift penjualan ini (di sinilah

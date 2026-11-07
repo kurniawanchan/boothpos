@@ -104,6 +104,15 @@ class SelfServicePublicController extends Controller
             ->orderBy('name')
             ->get();
 
+        // 092 — menu beresep yang bahannya habis tampil habis di QR juga (tidak bisa dipesan): setiap varian aktifnya
+        // beresep DAN berstok menu 0. Satu batch untuk seluruh daftar (tanpa kueri per kartu).
+        $recipeStock = app(\App\Services\MenuStockService::class)->forVariants($products->flatMap(fn (Product $p) => $p->variants->pluck('id'))->all(), $outletId);
+        foreach ($products as $p) {
+            if ($p->variants->isNotEmpty() && $p->variants->every(fn (ProductVariant $v) => ($recipeStock[$v->id]['portions'] ?? null) === 0)) {
+                $soldOut[$p->id] = 0;
+            }
+        }
+
         $categoryIds = (clone $base)->pluck('category_id')->unique()->all();
         $categories = Category::query()->whereIn('id', $categoryIds)->where('is_active', true)->orderBy('display_order')->orderBy('name')->get(['id', 'name']);
 

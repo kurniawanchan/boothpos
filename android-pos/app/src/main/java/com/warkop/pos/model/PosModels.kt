@@ -59,6 +59,8 @@ data class Product(
     val groups: List<String> = emptyList(), val is86: Boolean = false, val imageUrl: String? = null,
     /** 075 — nama varian saja (tanpa nama produk), kode (sku) dan stok tampilan; stok null = tidak dilacak. */
     val variantName: String = "", val code: String = "", val stock: Int? = null,
+    /** 092 — `recipe` bila [stock] adalah porsi dari bahan resep (hasil hitung server); [limitingMaterial] = bahan penghambat, hanya tampilan. */
+    val stockBasis: String = "variant", val limitingMaterial: String? = null,
 )
 
 /**

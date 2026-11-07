@@ -232,7 +232,9 @@ class SelfServiceOrderService
      */
     public function dispatch(SelfServiceOrder $submission, User $user): array
     {
-        return DB::transaction(function () use ($submission, $user) {
+        // 092 — transaksi terluar yang membaca data terbaru (READ COMMITTED): `addLine`/`settle` di dalamnya menjalankan
+        // penjaga kapasitas bahan, yang harus melihat baris tab lain yang baru di-commit.
+        return app(MenuStockService::class)->transaction(function () use ($submission, $user) {
             $row = $this->lock($submission);
 
             if ($row->status !== SelfServiceOrder::VERIFIED) {
@@ -420,6 +422,14 @@ class SelfServiceOrderService
         if ($unavailable !== []) {
             throw new ShiftRuleException(__('self_service.item_unavailable'), 'item_unavailable', ['items' => array_values($unavailable)], 409);
         }
+
+        // 092 FR-013 — menu beresep yang bahannya tidak cukup ditolak SEBELUM pelanggan membayar (penyaring awal;
+        // pemeriksaan penentu ada saat dispatch). Respons publik tidak memuat nama bahan (renderer RecipeStockException).
+        $qtyByVariant = [];
+        foreach ($items as $item) {
+            $qtyByVariant[(int) $item['variant_id']] = ($qtyByVariant[(int) $item['variant_id']] ?? 0) + (int) $item['qty'];
+        }
+        app(MenuStockService::class)->assertQuantitiesAvailable($qtyByVariant, $outletId, $variants->map(fn (ProductVariant $v) => $v->product?->name ?? '')->all());
 
         $lines = [];
         $subtotal = 0.0;

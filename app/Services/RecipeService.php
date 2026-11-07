@@ -167,6 +167,8 @@ class RecipeService
                 oldValues: ['recipes' => $recipes->map(fn (Recipe $r) => $this->snapshot($r))->all()],
             );
             Recipe::query()->whereKey($recipes->pluck('id'))->delete();
+            // Hapus massal tidak memicu event model; tautan varian ikut terhapus (CASCADE).
+            app(\App\Support\RecipeDrivenVariants::class)->forget();
 
             return $recipes->count();
         });
@@ -272,6 +274,18 @@ class RecipeService
         }
 
         return array_map(fn (array $list) => collect($list), $out);
+    }
+
+    /**
+     * 092 D6 — id varian yang punya resep aktif (set, dimuat sekali per permintaan). Pembaca tunggal untuk
+     * `ProductVariant::tracksOwnStock()`, scope laporan, dan penghitung stok menu; JANGAN memanggil
+     * `isRecipeDriven()` per varian dalam loop (satu kueri per varian).
+     *
+     * @return array<int, true>
+     */
+    public function recipeDrivenVariantIds(): array
+    {
+        return app(\App\Support\RecipeDrivenVariants::class)->ids();
     }
 
     public function isRecipeDriven(ProductVariant $variant): bool
@@ -524,6 +538,9 @@ class RecipeService
      */
     private function resyncVariants(array $variantIds, ?int $userId): void
     {
+        // 092 D6: semua penulis resep lewat sini sesudah menyinkronkan tautan varian (pivot tanpa event model).
+        app(\App\Support\RecipeDrivenVariants::class)->forget();
+
         $variantIds = array_values(array_unique(array_map('intval', $variantIds)));
         $byVariant = $this->activeRecipesForVariants($variantIds);
 

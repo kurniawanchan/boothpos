@@ -74,6 +74,12 @@ function openImageLightbox(item) {
           <span class="font-mono text-[10.5px] text-muted-3">{{ item.sku }}</span>
           <span v-if="item.home_outlet_name" class="text-[10.5px] text-muted-3">{{ item.home_outlet_name }}</span>
           <span class="text-[12px] text-muted">{{ formatIDR(item.sell_price) }}</span>
+          <!-- 092 — kenapa tombol + berhenti: bahan resep penghambat menu ini (angka batas dari server) -->
+          <span
+            v-if="item.stock_limiting && item.current_stock != null && item.qty >= item.current_stock"
+            class="text-[11px] font-semibold leading-snug text-warn-text"
+            data-testid="cart-recipe-limit"
+          >{{ t('pos.recipe_stock_max', { material: item.stock_limiting.name, count: item.current_stock }) }}</span>
         </div>
         <div class="flex flex-col items-end gap-1.5">
           <span class="text-[13.5px] font-bold">{{ formatIDR(parseMoney(item.sell_price) * item.qty) }}</span>

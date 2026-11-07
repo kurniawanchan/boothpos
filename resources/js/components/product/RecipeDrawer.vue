@@ -9,6 +9,7 @@ import { variantName, variantPrice } from '../../utils/itemDetail';
 import { computeRecipeCost, referencePrice } from '../../utils/recipeCost';
 import FormDrawer from '../page/FormDrawer.vue';
 import BaseInput from '../ui/BaseInput.vue';
+import BaseSelect from '../ui/BaseSelect.vue';
 import BaseButton from '../ui/BaseButton.vue';
 import BaseTextarea from '../ui/BaseTextarea.vue';
 import ErrorState from '../ui/ErrorState.vue';
@@ -24,7 +25,7 @@ import { CELL_ERROR, CELL_HEAD, ROW_REMOVE, TABLE_LINK, cellInputClass } from '.
  * - Stok bahan dipotong saat PESANAN SELESAI (bukan saat resep disimpan); catatan di atas formulir menjelaskannya.
  * - Satuan baris = satuan bahan (read-only): tidak ada konversi satuan.
  * - Bahan = SATU tabel "Bahan per porsi" (rancangan Back Office). Pengelompokan per jenis (bahan baku / setengah jadi /
- *   kemasan) dipertahankan DI DALAM <select> lewat <optgroup>, bukan lagi tiga kotak terpisah. Urutan kirim = urutan baris
+ *   kemasan) dipertahankan DI DALAM pemilih (BaseSelect, ber-kotak-cari) lewat judul kelompok, bukan lagi tiga kotak terpisah. Urutan kirim = urutan baris
  *   (urutan baris tidak berpengaruh pada biaya).
  * - Pratinjau biaya memakai rumus yang SAMA dengan server (utils/recipeCost.js ↔ App\Support\RecipeCost). Biaya satuan
  *   berasal dari: biaya versi sebelumnya (GET /recipes/{id}), harga vendor acuan bahan (GET /materials/{id}:
@@ -141,7 +142,8 @@ async function load() {
         if (l.unit_cost !== undefined && l.unit_cost !== null) unitCosts[l.material_id] = Number(l.unit_cost);
       }));
     } else {
-      recipeName.value = '';
+      // Resep baru: nama bawaan = nama produk (boleh diubah; server tidak mewajibkan nama unik per produk, dan maks 100 karakter).
+      recipeName.value = (props.product?.name ?? '').slice(0, 100);
       yieldQty.value = '1';
       // "Berdasarkan jumlah varian": satu tabel dasar per varian aktif yang bukan BOM-selesai.
       blocks.value = variants.value.filter((v) => v.is_active !== false && !v.bom_complete).map((v) => newBlock(v.id, null, []));
@@ -164,12 +166,27 @@ watch(
 // --- bahan -------------------------------------------------------------------------------------------------------
 const kindLabel = (kind) => t(`products.rc_kind_${kind}`);
 
-/** Pilihan <select> per jenis; jenis tak dikenal jatuh ke bahan baku (sama seperti server). */
+/** Kelompok pilihan bahan per jenis; jenis tak dikenal jatuh ke bahan baku (sama seperti server). */
 const materialGroups = computed(() =>
   KINDS.map((kind) => ({ kind, items: materials.value.filter((m) => (KINDS.includes(m.kind) ? m.kind : 'ingredient') === kind) })).filter((g) => g.items.length),
 );
 // Bahan baris yang sudah tak aktif (tak ada di daftar) tetap harus tampil sebagai pilihan terpilih.
 const orphanOption = (line) => (line.material_id && !materials.value.some((m) => m.id === line.material_id) ? { id: line.material_id, name: line.name || String(line.material_id) } : null);
+
+// Opsi untuk BaseSelect (pemilih bawaan aplikasi, dengan kotak cari). `disabled` = sudah dipakai tabel lain; `group` = judul kelompok.
+const variantOptions = computed(() => variants.value.map((v) => ({
+  value: v.id,
+  label: `${variantName(v)} · ${v.sku}${v.is_active === false ? ` (${t('products.rc_variant_inactive')})` : ''}`,
+})));
+const variantChoices = (block) => variantOptions.value.map((o) => ({ ...o, disabled: variantTaken(block, o.value) }));
+const modifierChoices = (block) => [
+  { value: '', label: t('products.rc_block_no_modifier'), disabled: optionTaken(block, null) },
+  ...modifierGroups.value.flatMap((g) => g.options.map((o) => ({ value: o.id, label: o.name, group: g.name, disabled: optionTaken(block, o.id) }))),
+];
+const materialChoices = (line) => [
+  ...(orphanOption(line) ? [{ value: orphanOption(line).id, label: orphanOption(line).name }] : []),
+  ...materialGroups.value.flatMap((g) => g.items.map((m) => ({ value: m.id, label: m.name, group: kindLabel(g.kind) }))),
+];
 
 function newBlock(variantId, optionId, blockLines) {
   return { key: `b${++keySeq}`, variant_id: variantId, modifier_option_id: optionId, lines: blockLines };
@@ -423,39 +440,30 @@ async function submit() {
         <!-- Satu kartu = satu tabel bahan untuk SATU (varian, pilihan modifier). Tabel baru aktif setelah varian dipilih. -->
         <section v-for="(b, bi) in blocks" :key="b.key" class="flex flex-col gap-3 border-2 border-line bg-white p-3.5" data-testid="rc-block">
           <div class="flex flex-wrap items-start gap-3">
-            <label class="flex min-w-[200px] flex-1 flex-col gap-1 text-[12.5px] font-semibold text-muted-4">
-              {{ t('products.rc_block_variant') }}
-              <select
-                :value="b.variant_id ?? ''"
-                :class="cellInputClass({ error: !!blockErrors[b.key]?.variant })"
-                data-testid="rc-block-variant"
+            <div class="flex min-w-[200px] flex-1 flex-col gap-1" data-testid="rc-block-variant">
+              <span class="text-[12.5px] font-semibold text-muted-4">{{ t('products.rc_block_variant') }}</span>
+              <BaseSelect
+                :model-value="b.variant_id ?? ''"
+                :options="variantChoices(b)"
+                :placeholder="t('products.rc_block_variant_placeholder')"
                 :aria-label="t('products.rc_block_variant_aria', { n: bi + 1 })"
-                @change="pickVariant(b, $event.target.value)"
-              >
-                <option value="" disabled>{{ t('products.rc_block_variant_placeholder') }}</option>
-                <option v-for="v in variants" :key="v.id" :value="v.id" :disabled="variantTaken(b, v.id)">
-                  {{ variantName(v) }} · {{ v.sku }}{{ v.is_active === false ? ` (${t('products.rc_variant_inactive')})` : '' }}
-                </option>
-              </select>
-              <span v-if="blockErrors[b.key]?.variant" class="text-[12px] font-medium text-danger-text" role="alert">{{ blockErrors[b.key].variant }}</span>
-            </label>
-            <label class="flex min-w-[200px] flex-1 flex-col gap-1 text-[12.5px] font-semibold text-muted-4">
-              {{ t('products.rc_block_modifier') }}
-              <select
-                :value="b.modifier_option_id ?? ''"
+                :error="blockErrors[b.key]?.variant ?? ''"
+                searchable
+                @update:model-value="pickVariant(b, $event)"
+              />
+            </div>
+            <div class="flex min-w-[200px] flex-1 flex-col gap-1" data-testid="rc-block-modifier">
+              <span class="text-[12.5px] font-semibold text-muted-4">{{ t('products.rc_block_modifier') }}</span>
+              <BaseSelect
+                :model-value="b.modifier_option_id ?? ''"
+                :options="modifierChoices(b)"
                 :disabled="b.variant_id === null"
-                :class="cellInputClass({ error: !!blockErrors[b.key]?.modifier })"
-                data-testid="rc-block-modifier"
                 :aria-label="t('products.rc_block_modifier_aria', { n: bi + 1 })"
-                @change="pickModifier(b, $event.target.value)"
-              >
-                <option value="" :disabled="optionTaken(b, null)">{{ t('products.rc_block_no_modifier') }}</option>
-                <optgroup v-for="g in modifierGroups" :key="g.id" :label="g.name">
-                  <option v-for="o in g.options" :key="o.id" :value="o.id" :disabled="optionTaken(b, o.id)">{{ o.name }}</option>
-                </optgroup>
-              </select>
-              <span v-if="blockErrors[b.key]?.modifier" class="text-[12px] font-medium text-danger-text" role="alert">{{ blockErrors[b.key].modifier }}</span>
-            </label>
+                :error="blockErrors[b.key]?.modifier ?? ''"
+                searchable
+                @update:model-value="pickModifier(b, $event)"
+              />
+            </div>
             <button type="button" class="mt-6 flex h-8 w-8 items-center justify-center rounded-md border border-line text-muted-4 hover:bg-surface-subtle" data-testid="rc-block-remove" :aria-label="t('products.rc_block_remove_aria', { n: bi + 1 })" @click="removeBlock(b)">
               <i class="ph-duotone ph-trash text-[15px]" aria-hidden="true"></i>
             </button>
@@ -467,7 +475,7 @@ async function submit() {
 
           <div v-else class="flex flex-col gap-1.5" data-testid="rc-materials">
             <p :id="`${tableLabelId}-${b.key}`" class="text-[13px] font-semibold text-ink">{{ t('products.rc_materials_label') }}<span class="text-danger-text" aria-hidden="true"> *</span></p>
-            <!-- Satu tabel (rancangan Back Office): jenis bahan tetap terkelompok, tetapi di dalam <select> lewat <optgroup>.
+            <!-- Satu tabel (rancangan Back Office): jenis bahan tetap terkelompok, tetapi di dalam pemilih lewat judul kelompok.
                  Biaya baris yang belum diketahui tampil "—", tidak pernah nol diam-diam. -->
             <div class="overflow-x-auto border-2 border-line bg-white">
               <table class="w-full min-w-[620px] border-collapse text-left text-[13px]" :aria-labelledby="`${tableLabelId}-${b.key}`">
@@ -484,20 +492,16 @@ async function submit() {
                 <tbody>
                   <tr v-for="(l, i) in b.lines" :key="l.key" class="border-b border-line-2 align-top" data-testid="rc-line">
                     <td class="p-0">
-                      <select
-                        :value="l.material_id ?? ''"
-                        :class="cellInputClass({ error: !!lineErrors[l.key]?.material })"
+                      <BaseSelect
+                        cell
+                        :model-value="l.material_id ?? ''"
+                        :options="materialChoices(l)"
+                        :placeholder="t('products.rc_material_placeholder')"
                         :aria-label="t('products.rc_row_material_aria', { n: i + 1 })"
-                        :aria-invalid="lineErrors[l.key]?.material ? 'true' : undefined"
-                        @change="pickMaterial(l, $event.target.value)"
-                      >
-                        <option value="" disabled>{{ t('products.rc_material_placeholder') }}</option>
-                        <option v-if="orphanOption(l)" :value="orphanOption(l).id">{{ orphanOption(l).name }}</option>
-                        <optgroup v-for="g in materialGroups" :key="g.kind" :label="kindLabel(g.kind)">
-                          <option v-for="m in g.items" :key="m.id" :value="m.id">{{ m.name }}</option>
-                        </optgroup>
-                      </select>
-                      <p v-if="lineErrors[l.key]?.material" role="alert" :class="CELL_ERROR">{{ lineErrors[l.key].material }}</p>
+                        :error="lineErrors[l.key]?.material ?? ''"
+                        searchable
+                        @update:model-value="pickMaterial(l, $event)"
+                      />
                     </td>
                     <td class="border-l border-line-3 p-0">
                       <input v-model="l.quantity" type="number" step="any" :class="cellInputClass({ number: true, error: !!lineErrors[l.key]?.quantity })" :aria-label="t('products.rc_row_qty_aria', { n: i + 1 })" :aria-invalid="lineErrors[l.key]?.quantity ? 'true' : undefined" />

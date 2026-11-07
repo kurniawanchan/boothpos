@@ -23,6 +23,10 @@ const props = defineProps({
   // 036: kotak cari di atas daftar (filter huruf-besar-kecil-tak-peduli pada label). Opt-in:
   // pemanggil lain tidak berubah sama sekali.
   searchable: { type: Boolean, default: false },
+  // 092 (opt-in, pemanggil lain tidak berubah): pemicu bergaya sel tabel (datar, tanpa bingkai sampai difokus) untuk tabel
+  // seperti laci Resep, dan nama aksesibel untuk kontrol yang tidak punya label tampak.
+  cell: { type: Boolean, default: false },
+  ariaLabel: { type: String, default: '' },
 });
 const emit = defineEmits(['update:modelValue']);
 
@@ -85,7 +89,8 @@ function updatePanelPosition() {
     position: 'fixed',
     ...(openUp ? { bottom: `${window.innerHeight - r.top + 6}px` } : { top: `${r.bottom + 6}px` }),
     left: `${r.left}px`,
-    width: `${r.width}px`,
+    // Sel tabel sempit: panel tetap cukup lebar untuk nama yang panjang dan kotak cari.
+    width: `${props.cell ? Math.max(r.width, 260) : r.width}px`,
     maxHeight: `${Math.round(Math.max(140, Math.min(320, available)))}px`,
   };
 }
@@ -109,6 +114,7 @@ function toggle() {
   isOpen.value ? close() : open();
 }
 function select(option) {
+  if (option.disabled) return;
   emit('update:modelValue', option.value);
   close();
   nextTick(() => rootEl.value?.querySelector('button')?.focus());
@@ -147,7 +153,13 @@ function onSearchKeydown(e) {
 function moveActive(delta) {
   const n = visibleOptions.value.length;
   if (n === 0) return;
-  activeIndex.value = (activeIndex.value + delta + n) % n;
+  // 092: lewati opsi nonaktif (mis. varian yang sudah dipakai tabel lain); berhenti bila semuanya nonaktif.
+  let next = activeIndex.value;
+  for (let step = 0; step < n; step++) {
+    next = (next + delta + n) % n;
+    if (!visibleOptions.value[next]?.disabled) break;
+  }
+  activeIndex.value = next;
   nextTick(() => panelEl.value?.querySelector('[data-active="true"]')?.scrollIntoView?.({ block: 'nearest' }));
 }
 watch(query, () => {
@@ -200,17 +212,25 @@ onBeforeUnmount(() => {
       type="button"
       role="combobox"
       :aria-labelledby="label ? `${id}-label` : undefined"
+      :aria-label="!label && ariaLabel ? ariaLabel : undefined"
       aria-haspopup="listbox"
       :aria-expanded="isOpen"
       :aria-controls="`${id}-listbox`"
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="error ? errorId : undefined"
       :disabled="disabled"
-      class="flex h-[46px] items-center justify-between gap-2 rounded-lg border bg-white px-3.5 text-left text-[14.5px] outline-none transition-colors disabled:bg-line-5 disabled:text-muted-3 focus:border-brand focus:ring-[3px] focus:ring-mint-100"
-      :class="[
-        error ? 'border-danger-border' : 'border-line',
-        selectedOption ? 'text-ink' : 'text-muted-3',
-      ]"
+      class="flex items-center justify-between gap-2 text-left outline-none transition-colors disabled:text-muted-3"
+      :class="cell
+        ? [
+            'h-11 w-full bg-transparent px-3 text-[13.5px] focus:bg-white focus:ring-2 focus:ring-inset disabled:bg-line-5',
+            error ? 'ring-2 ring-inset ring-danger-border focus:ring-danger-border' : 'focus:ring-brand',
+            selectedOption ? 'text-ink' : 'text-muted-3',
+          ]
+        : [
+            'h-[46px] rounded-lg border bg-white px-3.5 text-[14.5px] disabled:bg-line-5 focus:border-brand focus:ring-[3px] focus:ring-mint-100',
+            error ? 'border-danger-border' : 'border-line',
+            selectedOption ? 'text-ink' : 'text-muted-3',
+          ]"
       @click="toggle"
       @keydown="onTriggerKeydown"
     >
@@ -256,23 +276,31 @@ onBeforeUnmount(() => {
         >
           {{ effectivePlaceholder }}
         </div>
+        <template v-for="(opt, i) in visibleOptions" :key="opt.value">
+        <!-- 092: judul kelompok (mis. Bahan baku / Kemasan) sebelum opsi pertama tiap kelompok; opsi tanpa `group` tidak berubah. -->
+        <div
+          v-if="opt.group && (i === 0 || visibleOptions[i - 1].group !== opt.group)"
+          role="presentation"
+          class="px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-muted-3"
+        >{{ opt.group }}</div>
         <button
-          v-for="(opt, i) in visibleOptions"
-          :key="opt.value"
           type="button"
           role="option"
           :data-active="i === activeIndex"
           :aria-selected="opt.value == modelValue"
+          :aria-disabled="opt.disabled ? 'true' : undefined"
           class="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-[14px] transition-colors"
           :class="
-            opt.value == modelValue
-              ? 'bg-mint-100 font-semibold text-ink'
-              : i === activeIndex
-                ? 'bg-line-5 text-ink'
-                : 'text-ink hover:bg-line-5'
+            opt.disabled
+              ? 'cursor-not-allowed text-muted-3'
+              : opt.value == modelValue
+                ? 'bg-mint-100 font-semibold text-ink'
+                : i === activeIndex
+                  ? 'bg-line-5 text-ink'
+                  : 'text-ink hover:bg-line-5'
           "
           @click="select(opt)"
-          @mouseenter="activeIndex = i"
+          @mouseenter="!opt.disabled && (activeIndex = i)"
         >
           <template v-if="hasThumbs">
             <img v-if="opt.thumb" :src="opt.thumb" alt="" class="h-7 w-7 flex-none rounded-md border border-line-2 object-cover" />
@@ -281,11 +309,12 @@ onBeforeUnmount(() => {
           <span class="flex-1 truncate">{{ opt.label }}</span>
           <i v-if="opt.value == modelValue" class="ph-duotone ph-check shrink-0 text-[14px] text-brand" aria-hidden="true"></i>
         </button>
+        </template>
         <div v-if="visibleOptions.length === 0" class="px-3 py-2 text-[13px] text-muted-3">{{ t('common.no_options') }}</div>
       </div>
     </Teleport>
 
-    <span v-if="error" :id="errorId" class="text-[12px] font-medium text-danger-text">{{ error }}</span>
+    <span v-if="error" :id="errorId" class="text-[12px] font-medium text-danger-text" :class="{ 'px-3 pb-2': cell }">{{ error }}</span>
     <span v-else-if="hint" class="text-[11.5px] text-muted-3">{{ hint }}</span>
   </div>
 </template>
