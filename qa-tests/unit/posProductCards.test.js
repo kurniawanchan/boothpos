@@ -351,3 +351,31 @@ describe('092 recipe-based menu stock', () => {
     expect(hit.stock_limiting.name).toBe('Telur');
   });
 });
+
+// 093 — produk sebagai bahan: server mengirim `outlet_stock` varian bahan SUDAH dikurangi tahanan tab terbuka dan
+// bahan penghambat menu bisa berupa produk (`variant_id`, `material_id` null). Klien tidak menghitung ulang apa pun.
+describe('093 product ingredients', () => {
+  const variantLimiting = () => ({ ingredient_type: 'variant', material_id: null, variant_id: 77, name: 'Telur', unit: 'pcs', on_hand: '45.000', per_portion: '1.000' });
+
+  it('carries a product limiting ingredient to the card and the cart item like a material one', () => {
+    const menu = variant({ id: 40, track_stock: true, current_stock: 999, outlet_stock: 45, stock_basis: 'recipe', stock_limiting: variantLimiting() });
+    const [card] = buildProductCards([product({ variants: [menu] })]);
+    expect(card.stock_basis).toBe('recipe');
+    expect(card.stock_limiting).toMatchObject({ ingredient_type: 'variant', variant_id: 77, name: 'Telur' });
+    expect(toCartItem(card, menu).stock_limiting.name).toBe('Telur');
+  });
+
+  it('shows the ingredient product exactly the server number (balance minus holds) without recomputing', () => {
+    // saldo fisik 50, tahanan 5 → server mengirim 45; kartu tidak boleh menampilkan 50 maupun mengurangi lagi.
+    const telur = variant({ id: 50, track_stock: true, current_stock: 50, outlet_stock: 45, stock_basis: 'variant' });
+    const [card] = buildProductCards([product({ variants: [telur] })]);
+    expect(stockOf(telur)).toBe(45);
+    expect(card.total_stock).toBe(45);
+    expect(card.stock_limiting).toBeNull();
+  });
+
+  it('an ingredient product held down to zero is out of stock, not hidden', () => {
+    const telur = variant({ id: 50, track_stock: true, current_stock: 5, outlet_stock: 0, stock_basis: 'variant' });
+    expect(stockOf(telur)).toBe(0);
+  });
+});

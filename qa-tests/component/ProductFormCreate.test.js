@@ -119,6 +119,38 @@ describe('ProductFormDrawer — create mode follows the Menu item design (043)',
     ]);
   });
 
+  // 093 — penanda produk bahan: terkirim bersama label satuan; bawaan mati; galat server tampil di tempatnya.
+  it('sends the ingredient flag off by default, and on with a trimmed unit label once ticked', async () => {
+    const { user } = await openCreate();
+    await fillMinimum(user);
+    expect(screen.queryByTestId('ingredient-unit-input')).toBeNull();
+    await save(user);
+    await waitFor(() => expect(createProduct).toHaveBeenCalledTimes(1));
+    expect(createProduct.mock.calls[0][0]).toMatchObject({ use_as_ingredient: false, ingredient_unit: null });
+  });
+
+  it('shows the unit field when ticked and posts use_as_ingredient with the unit', async () => {
+    const { user } = await openCreate();
+    await fillMinimum(user);
+    await user.click(screen.getByTestId('ingredient-flag-input'));
+    await user.type(await screen.findByTestId('ingredient-unit-input'), '  pcs ');
+    await save(user);
+
+    await waitFor(() => expect(createProduct).toHaveBeenCalledTimes(1));
+    expect(createProduct.mock.calls[0][0]).toMatchObject({ use_as_ingredient: true, ingredient_unit: 'pcs' });
+  });
+
+  it('shows the server refusal next to the toggle', async () => {
+    const { ApiError } = await import('../../resources/js/utils/errors');
+    createProduct.mockRejectedValueOnce(new ApiError('x', { status: 422, errors: { use_as_ingredient: ['Tidak bisa ditandai sebagai bahan.'] } }));
+    const { user } = await openCreate();
+    await fillMinimum(user);
+    await user.click(screen.getByTestId('ingredient-flag-input'));
+    await save(user);
+
+    expect((await screen.findByTestId('ingredient-flag-error')).textContent).toContain('Tidak bisa ditandai sebagai bahan.');
+  });
+
   it('keeps the item base price and the first variant price in sync both ways', async () => {
     const { user } = await openCreate();
     const base = screen.getByLabelText(/^harga dasar/i);

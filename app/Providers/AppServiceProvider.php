@@ -23,6 +23,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->scoped(\App\Support\OutletPriceBook::class);
         // 092 D6 — himpunan varian beresep, dimuat sekali per permintaan (tracksOwnStock dipanggil per varian).
         $this->app->scoped(\App\Support\RecipeDrivenVariants::class);
+        // 093 D5 — himpunan varian yang dirujuk baris resep (dipakai penjaga tahanan dan validasi), sekali per permintaan.
+        $this->app->scoped(\App\Support\IngredientVariants::class);
         // 087 — peringatan bahan minus dari penyelesaian pesanan, per permintaan.
         $this->app->scoped(\App\Support\MaterialWarningBag::class);
 

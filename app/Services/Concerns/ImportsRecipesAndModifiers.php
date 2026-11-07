@@ -363,18 +363,35 @@ trait ImportsRecipesAndModifiers
 
             try {
                 $existing = Recipe::query()->where('product_id', $product->id)->whereNull('archived_at')->where('name', $g['name'])->first();
-                if ($existing !== null && $existing->blocks()->whereNotNull('modifier_option_id')->exists()) {
-                    // Sheet ini hanya memuat resep DASAR. Tabel bahan bermodifier (diatur di layar Resep) dipertahankan:
-                    // tanpa ini, impor ulang akan menghapusnya diam-diam.
-                    $keep = $existing->blocks()->whereNotNull('modifier_option_id')->with('lines')->get()->map(fn ($b) => [
-                        'variant_id' => $b->variant_id, 'modifier_option_id' => $b->modifier_option_id,
-                        'lines' => $b->lines->map(fn ($l) => ['material_id' => $l->material_id, 'quantity' => $l->quantity, 'shrinkage_pct' => $l->shrinkage_pct])->all(),
-                    ])->all();
-                    $data = ['blocks' => array_merge(
-                        array_map(fn ($id) => ['variant_id' => $id, 'modifier_option_id' => null, 'lines' => $lines], $chosen->pluck('id')->all()),
-                        $keep,
-                    )] + $data;
-                    unset($data['variant_ids'], $data['lines']);
+                if ($existing !== null) {
+                    // Sheet ini hanya memuat resep DASAR berbahan baku. Yang diatur di layar Resep dipertahankan, kalau tidak
+                    // impor ulang menghapusnya diam-diam: (1) tabel bahan bermodifier; (2) baris bahan berupa PRODUK (093),
+                    // di blok dasar maupun blok bermodifier — lembar ini tidak punya kolom untuknya.
+                    $existing->loadMissing('blocks.lines');
+                    $productLines = fn ($block) => $block->lines->whereNotNull('variant_id')
+                        ->map(fn ($l) => ['variant_id' => $l->variant_id, 'quantity' => $l->quantity, 'shrinkage_pct' => 0])->values()->all();
+                    $baseProductLines = [];
+                    $keep = [];
+                    foreach ($existing->blocks as $b) {
+                        if ($b->modifier_option_id === null) {
+                            $baseProductLines[$b->variant_id] = $productLines($b);
+
+                            continue;
+                        }
+                        $keep[] = [
+                            'variant_id' => $b->variant_id, 'modifier_option_id' => $b->modifier_option_id,
+                            'lines' => $b->lines->map(fn ($l) => $l->variant_id !== null
+                                ? ['variant_id' => $l->variant_id, 'quantity' => $l->quantity, 'shrinkage_pct' => 0]
+                                : ['material_id' => $l->material_id, 'quantity' => $l->quantity, 'shrinkage_pct' => $l->shrinkage_pct])->all(),
+                        ];
+                    }
+                    if ($keep !== [] || array_filter($baseProductLines) !== []) {
+                        $data = ['blocks' => array_merge(
+                            array_map(fn ($id) => ['variant_id' => $id, 'modifier_option_id' => null, 'lines' => array_merge($lines, $baseProductLines[$id] ?? [])], $chosen->pluck('id')->all()),
+                            $keep,
+                        )] + $data;
+                        unset($data['variant_ids'], $data['lines']);
+                    }
                 }
                 $existing ? $service->update($existing, $data, $user) : $service->create($product, $data, $user);
             } catch (ValidationException $e) {

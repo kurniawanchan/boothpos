@@ -33,6 +33,9 @@ class UpdateProductRequest extends FormRequest
             'is_retail' => ['sometimes', 'boolean'],
             // 087 US6 — sumber stok produk; efeknya di semua modul ditentukan ProductVariant::tracksOwnStock().
             'stock_source' => ['sometimes', 'in:variant,modifier'],
+            // 093 — boleh dipakai sebagai bahan resep produk lain (saldo varian bersama). Syarat dinyalakan: IngredientProductService.
+            'use_as_ingredient' => ['sometimes', 'boolean'],
+            'ingredient_unit' => ['sometimes', 'nullable', 'string', 'max:20'],
             'is_active' => ['sometimes', 'boolean'],
             'station_id' => ['sometimes', 'nullable', 'integer', function (string $attribute, mixed $value, \Closure $fail) {
                 if ($value !== null && ! \App\Models\Station::whereKey($value)->exists()) {

@@ -49,6 +49,18 @@ return [
     'recipe_quantity_invalid' => 'Jumlah harus lebih dari 0.',
     'recipe_shrinkage_invalid' => 'Susut harus antara 0 dan 99,99%.',
     'recipe_material_unknown' => 'Bahan tidak dikenal.',
+    // 093 — produk sebagai bahan resep
+    'recipe_ingredient_required' => 'Pilih tepat satu bahan: bahan baku atau produk.',
+    'recipe_ingredient_not_flagged' => 'Produk ":product" belum ditandai "Gunakan sebagai bahan".',
+    'recipe_ingredient_self' => 'Sebuah produk tidak bisa menjadi bahan resepnya sendiri.',
+    'recipe_ingredient_recursive' => 'Produk ":product" punya resep sendiri, jadi tidak punya stok sendiri dan tidak bisa dipakai sebagai bahan.',
+    'recipe_ingredient_untracked' => 'Produk ":product" tidak melacak stok varian, jadi tidak bisa dipakai sebagai bahan.',
+    'recipe_ingredient_no_shrinkage' => 'Bahan berupa produk tidak memakai susut; isi 0.',
+    'recipe_ingredient_whole_quantity' => 'Bahan berupa produk harus bilangan bulat per porsi (jumlah ÷ porsi resep). Untuk takaran pecahan, pakai bahan baku.',
+    'recipe_product_is_ingredient' => 'Produk ini ditandai "Gunakan sebagai bahan" sehingga memiliki stok sendiri dan tidak boleh diberi resep.',
+    'ingredient_flag_has_recipe' => 'Tidak bisa ditandai sebagai bahan: ada varian yang punya resep, sehingga stoknya diturunkan dari bahan.',
+    'ingredient_flag_untracked' => 'Tidak bisa ditandai sebagai bahan: stok varian harus dilacak dan bersumber dari varian.',
+    'ingredient_in_use' => 'Produk ini dipakai sebagai bahan di resep: :recipes.',
     'recipe_conflict_bom' => 'Varian :skus memakai BOM yang sudah selesai sebagai sumber biaya. Buka kembali BOM-nya sebelum memakai resep.',
     'recipe_conflict_recipe' => 'Varian ini digerakkan resep. Biayanya tidak bisa ditandai selesai lewat BOM.',
     // 2026-10-31 — hapus varian permanen (VariantDeletionService).

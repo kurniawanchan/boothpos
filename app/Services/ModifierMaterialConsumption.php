@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\Material;
 use App\Models\MaterialStockMovement;
 use App\Models\ModifierOptionMaterial;
+use App\Models\ProductVariant;
+use App\Models\StockMovement;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
@@ -36,6 +38,8 @@ class ModifierMaterialConsumption
         private MaterialStockService $stock,
         private RecipeService $recipes,
         private MaterialWarningBag $warnings,
+        // 093: SATU penulis saldo varian (StockService) — pemakaian produk sebagai bahan tidak punya jalur tulis sendiri.
+        private StockService $variantStock,
     ) {}
 
     /**
@@ -55,14 +59,18 @@ class ModifierMaterialConsumption
         // bila tetap terjadi, buku besar membuktikan pesanan ini sudah dipotong — jangan potong lagi.
         $already = MaterialStockMovement::query()
             ->where('type', 'sale')->where('reference_type', 'order_item')
-            ->whereIn('reference_id', $items->pluck('id'))->exists();
+            ->whereIn('reference_id', $items->pluck('id'))->exists()
+            // 093: pesanan yang HANYA berbahan produk tidak meninggalkan jejak di buku besar bahan baku; buku besar varian
+            // (`recipe_sale` menunjuk baris menu) juga harus diperiksa, kalau tidak sabuk ini buta terhadapnya.
+            || StockMovement::query()->where('type', StockMovement::RECIPE_SALE)->where('reference_type', 'order_item')
+                ->whereIn('reference_id', $items->pluck('id'))->exists();
         if ($already) {
             Log::warning('087: consumeOrder dipanggil ulang untuk pesanan yang bahannya sudah dipotong.', ['order_id' => $order->id]);
 
             return [];
         }
 
-        [$need, $materials, $costPerPortion] = $this->needFor($items);
+        [$need, $materials, $costPerPortion, $variantNeed, $variants] = $this->needFor($items);
 
         $warnings = [];
         foreach ($need as $materialId => $perLine) {
@@ -91,6 +99,10 @@ class ModifierMaterialConsumption
                 ];
             }
         }
+
+        // 093: bahan berupa produk, berurutan variant_id lalu baris (urutan kunci tetap, tanpa deadlock). StockService menolak
+        // saldo negatif; penjaga kapasitas (MenuStockService) menolaknya lebih dulu dengan 409.
+        $this->writeVariantNeed((int) $order->outlet_id, $variantNeed, $variants, StockMovement::RECIPE_SALE, -1, $user);
 
         $this->addMaterialCost($order, $items, $costPerPortion);
 
@@ -125,13 +137,31 @@ class ModifierMaterialConsumption
                 $this->stock->applyMovement(material: $materials[$row->material_id], outletId: (int) $order->outlet_id, type: 'return', qtyChange: $back, referenceType: 'order_item', referenceId: (int) $row->reference_id, userId: $user->id);
             }
         }
+
+        // 093: bahan berupa produk kembali sebesar potongan bersih `recipe_sale − recipe_return` per (varian, baris) dari
+        // buku besar varian — bukan dari resep hari ini (resep dan penanda bisa berubah sesudah jual). `recipe_waste` tidak kembali.
+        $variantRows = StockMovement::query()
+            ->whereIn('type', [StockMovement::RECIPE_SALE, StockMovement::RECIPE_RETURN])->where('reference_type', 'order_item')
+            ->whereIn('reference_id', $lineIds)
+            ->groupBy('variant_id', 'reference_id')
+            ->selectRaw('variant_id, reference_id, SUM(qty_change) AS net')
+            ->orderBy('variant_id')->orderBy('reference_id')
+            ->get();
+        $variants = ProductVariant::withTrashed()->whereIn('id', $variantRows->pluck('variant_id')->unique())->get()->keyBy('id');
+        foreach ($variantRows as $row) {
+            $back = -(int) $row->net;
+            if ($back > 0 && $variants->has($row->variant_id)) {
+                $this->variantStock->applyMovement(variant: $variants[$row->variant_id], outletId: (int) $order->outlet_id, type: StockMovement::RECIPE_RETURN, qtyChange: $back, referenceType: 'order_item', referenceId: (int) $row->reference_id, userId: $user->id);
+            }
+        }
     }
 
     /** Baris yang sudah dimasak lalu dibuang: bahannya terpakai walau pesanan tak pernah selesai. */
     public function wasteLine(OrderItem $line, User $user): void
     {
-        [$need, $materials] = $this->needFor(collect([$line]));
+        [$need, $materials, , $variantNeed, $variants] = $this->needFor(collect([$line]));
         $outletId = (int) $line->order()->value('outlet_id');
+        $this->writeVariantNeed($outletId, $variantNeed, $variants, StockMovement::RECIPE_WASTE, -1, $user);
 
         foreach ($need as $materialId => $perLine) {
             foreach ($perLine as $lineId => $qty) {
@@ -145,12 +175,18 @@ class ModifierMaterialConsumption
      * itu (089). Satu penerjemah untuk keduanya supaya jejak, penguncian, idempotensi, dan void/refund tetap satu.
      *
      * @param  Collection<int, OrderItem>  $items
-     * @return array{0: array<int, array<int, float>>, 1: array<int, Material>, 2: array<int, float>} [need, materials, costPerPortion]
+     * 093: elemen ke-4/5 = kebutuhan VARIAN produk bahan `[variant_id][order_item_id] => int` dan modelnya; hanya resep yang
+     * menghasilkannya (pilihan modifier selalu memetakan bahan baku).
+     *
+     * @return array{0: array<int, array<int, float>>, 1: array<int, Material>, 2: array<int, float>, 3: array<int, array<int, int>>, 4: array<int, ProductVariant>} [need, materials, costPerPortion, variantNeed, variants]
      */
     private function needFor(Collection $items): array
     {
         [$need, $materials, $costPerPortion] = $this->modifierNeed($items);
-        $this->addRecipeNeed($items, $need, $materials, $costPerPortion);
+        $variantNeed = [];
+        $variants = [];
+        $this->addRecipeNeed($items, $need, $materials, $costPerPortion, $variantNeed, $variants);
+        $variantNeed = $this->wholeVariantNeed($variantNeed);
 
         ksort($need);
         foreach ($need as $materialId => $perLine) {
@@ -158,7 +194,50 @@ class ModifierMaterialConsumption
             $need[$materialId] = array_filter(array_map(fn ($q) => round($q, 3), $perLine), fn ($q) => $q > 0);
         }
 
-        return [array_filter($need), $materials, $costPerPortion];
+        return [array_filter($need), $materials, $costPerPortion, $variantNeed, $variants];
+    }
+
+    /**
+     * 093 (research D7) — stok varian bilangan bulat. Validasi resep menjamin kebutuhan per porsi bulat; pembulatan di sini
+     * hanya pertahanan terhadap data yang menyimpang (resep ditulis di luar RecipeService), dan menyimpangnya dicatat.
+     *
+     * @param  array<int, array<int, float>>  $variantNeed
+     * @return array<int, array<int, int>>
+     */
+    private function wholeVariantNeed(array $variantNeed): array
+    {
+        ksort($variantNeed);
+        $out = [];
+        foreach ($variantNeed as $variantId => $perLine) {
+            ksort($perLine);
+            foreach ($perLine as $lineId => $qty) {
+                $whole = (int) round($qty);
+                if (abs($qty - $whole) > 1e-6) {
+                    Log::warning('093: kebutuhan bahan produk tidak bulat, dibulatkan.', ['variant_id' => $variantId, 'order_item_id' => $lineId, 'need' => $qty]);
+                }
+                if ($whole > 0) {
+                    $out[$variantId][$lineId] = $whole;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Tulis kebutuhan varian lewat StockService (satu-satunya penulis saldo varian), berurutan variant_id lalu baris.
+     *
+     * @param  array<int, array<int, int>>  $variantNeed
+     * @param  array<int, ProductVariant>  $variants
+     * @param  int  $sign  -1 mengurangi (jual/buang)
+     */
+    private function writeVariantNeed(int $outletId, array $variantNeed, array $variants, string $type, int $sign, User $user): void
+    {
+        foreach ($variantNeed as $variantId => $perLine) {
+            foreach ($perLine as $lineId => $qty) {
+                $this->variantStock->applyMovement(variant: $variants[$variantId], outletId: $outletId, type: $type, qtyChange: $sign * $qty, referenceType: 'order_item', referenceId: $lineId, userId: $user->id);
+            }
+        }
     }
 
     /**
@@ -168,14 +247,16 @@ class ModifierMaterialConsumption
      * Memakai `addRecipeNeed` yang SAMA dengan pemotongan, jadi tidak ada penerjemah kedua.
      *
      * @param  Collection<int, OrderItem>  $items
-     * @return array{0: array<int, array<int, float>>, 1: array<int, Material>} [need[bahan][baris] => jumlah, bahan]
+     * @return array{0: array<int, array<int, float>>, 1: array<int, Material>, 2: array<int, array<int, int>>, 3: array<int, ProductVariant>} [need[bahan][baris] => jumlah, bahan, variantNeed[varian][baris] => jumlah, varian]
      */
     public function recipeNeed(Collection $items): array
     {
         $need = [];
         $materials = [];
         $costPerPortion = [];
-        $this->addRecipeNeed($items, $need, $materials, $costPerPortion);
+        $variantNeed = [];
+        $variants = [];
+        $this->addRecipeNeed($items, $need, $materials, $costPerPortion, $variantNeed, $variants);
 
         ksort($need);
         foreach ($need as $materialId => $perLine) {
@@ -183,7 +264,8 @@ class ModifierMaterialConsumption
             $need[$materialId] = array_filter(array_map(fn ($q) => round($q, 3), $perLine), fn ($q) => $q > 0);
         }
 
-        return [array_filter($need), $materials];
+        // 093: elemen ke-3/4 = kebutuhan varian produk bahan dan modelnya (pemanggil lama yang hanya membaca dua elemen pertama tak terpengaruh).
+        return [array_filter($need), $materials, $this->wholeVariantNeed($variantNeed), $variants];
     }
 
     /**
@@ -242,8 +324,10 @@ class ModifierMaterialConsumption
      * @param  array<int, array<int, float>>  $need  diisi
      * @param  array<int, Material>  $materials  diisi
      * @param  array<int, float>  $costPerPortion  diisi (hanya biaya blok bermodifier)
+     * @param  array<int, array<int, float>>  $variantNeed  diisi (093): kebutuhan varian produk bahan per (varian, baris)
+     * @param  array<int, ProductVariant>  $variants  diisi (093)
      */
-    private function addRecipeNeed(Collection $items, array &$need, array &$materials, array &$costPerPortion): void
+    private function addRecipeNeed(Collection $items, array &$need, array &$materials, array &$costPerPortion, array &$variantNeed, array &$variants): void
     {
         $byVariant = $this->recipes->activeRecipesForVariants($items->pluck('variant_id')->filter()->all());
         if ($byVariant === []) {
@@ -272,6 +356,23 @@ class ModifierMaterialConsumption
                         continue;
                     }
                     foreach ($block->lines as $line) {
+                        // 093: baris berupa PRODUK memakai saldo varian bersama. TIDAK dilewati walau varian nonaktif — berbeda dari
+                        // bahan baku: melewatinya diam-diam membuat stok menyimpang dari yang terpakai.
+                        if ($line->variant_id !== null) {
+                            $variant = $line->variant;
+                            if ($variant === null) {
+                                continue;
+                            }
+                            $perPortion = \App\Support\RecipeCost::perPortionNeed((float) $line->quantity, 0.0, $portions, $times);
+                            $variantNeed[$variant->id][$item->id] = ($variantNeed[$variant->id][$item->id] ?? 0) + $perPortion * $item->qty;
+                            $variants[$variant->id] ??= $variant;
+                            if ($block->modifier_option_id !== null) {
+                                $costPerPortion[$item->id] = ($costPerPortion[$item->id] ?? 0) + $perPortion * (float) ($this->recipes->variantUnitCost($variant) ?? 0);
+                            }
+
+                            continue;
+                        }
+
                         $material = $line->material;
                         if ($material === null || $material->trashed() || ! $material->is_active) {
                             continue;

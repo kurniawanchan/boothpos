@@ -38,9 +38,37 @@ class StockMovementReferences
         $result = array_fill_keys($movements->pluck('id')->all(), null);
 
         $this->resolveOrders($movements, $result);
+        $this->resolveRecipeUse($movements, $result);
         $this->resolveTransfers($movements, $result);
 
         return $result;
+    }
+
+    /**
+     * 093 — pergerakan `recipe_*` (produk dipakai sebagai BAHAN): reference_id = id BARIS PESANAN menu penyebab. Penjaga
+     * "pesanan harus memuat varian pergerakan" di resolveOrders TIDAK berlaku di sini karena varian pergerakan adalah
+     * bahan, bukan menu; penggantinya: baris pesanan itu harus ada. Hasil membawa nama menu (`menu`) supaya riwayat
+     * bahan menjawab "dipakai untuk menu apa, di pesanan mana" (FR-026). Baris yang sudah hilang → null, bukan salah.
+     */
+    private function resolveRecipeUse(Collection $movements, array &$result): void
+    {
+        $uses = $movements->filter(fn ($m) => in_array($m->type, StockMovement::RECIPE_TYPES, true) && $m->reference_type === 'order_item' && $m->reference_id);
+        if ($uses->isEmpty()) {
+            return;
+        }
+
+        $rows = OrderItem::query()
+            ->join('orders', 'orders.id', '=', 'order_items.order_id')
+            ->whereIn('order_items.id', $uses->pluck('reference_id')->unique())
+            ->get(['order_items.id as item_id', 'order_items.order_id', 'order_items.name_snapshot', 'orders.order_number'])
+            ->keyBy('item_id');
+
+        foreach ($uses as $m) {
+            $hit = $rows->get($m->reference_id);
+            $result[$m->id] = $hit
+                ? ['type' => 'order', 'id' => (int) $hit->order_id, 'number' => $hit->order_number, 'menu' => $hit->name_snapshot]
+                : null;
+        }
     }
 
     /** 045 Stage 6 — pergerakan transfer_* menunjuk nomor transfer (reference_id = id transfer). */

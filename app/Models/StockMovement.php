@@ -16,6 +16,19 @@ class StockMovement extends Model
 
     public $timestamps = false; // hanya created_at, diisi manual di service
 
+    /**
+     * 093 — pemakaian varian sebagai BAHAN resep. Sengaja bukan `sale`/`return`: `reference_id` pada `sale` bermakna id
+     * ORDER di sebagian jalur dan id BARIS di jalur lain, sedangkan pemakaian resep SELALU id baris menu penyebab
+     * (`reference_type = order_item`); varian pada baris ini adalah bahan, bukan menu.
+     */
+    public const RECIPE_SALE = 'recipe_sale';
+
+    public const RECIPE_RETURN = 'recipe_return';
+
+    public const RECIPE_WASTE = 'recipe_waste';
+
+    public const RECIPE_TYPES = [self::RECIPE_SALE, self::RECIPE_RETURN, self::RECIPE_WASTE];
+
     protected $fillable = [
         'variant_id', 'outlet_id', 'type', 'qty_change', 'stock_before', 'stock_after',
         'reference_type', 'reference_id', 'reason', 'user_id', 'created_at',

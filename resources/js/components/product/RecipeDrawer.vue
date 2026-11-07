@@ -1,7 +1,8 @@
 <script setup>
 import { computed, reactive, ref, useId, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { createRecipe, getRecipe, listRecipeModifierOptions, updateRecipe } from '../../api/recipes';
+import { createRecipe, getRecipe, listRecipeModifierOptions, updateRecipe, listRecipeIngredients } from '../../api/recipes';
+import { ingredientKey, isWholePerPortion, lineFromServer, linePayload, parseIngredientKey, productOptionLabel } from '../../utils/recipeIngredients';
 import { getMaterial, listMaterials } from '../../api/materials';
 import { useToastStore } from '../../stores/toast';
 import { formatIDR } from '../../utils/formatters';
@@ -60,7 +61,8 @@ const MAX_BACKDATE_DAYS = 30;
 const tableLabelId = `rc-table-${useId()}`;
 const loadState = ref('loading'); // loading | ready | error
 const materials = ref([]);
-const unitCosts = reactive({}); // material_id → number | null (null = diketahui TIDAK punya harga)
+const ingredients = ref([]); // 093: varian produk bertanda bahan (GET /recipe-ingredients)
+const unitCosts = reactive({}); // kunci bahan (`m12` bahan baku / `v34` produk) → number | null (null = diketahui TIDAK punya harga)
 const recipeName = ref('');
 const yieldQty = ref('1');
 const effectiveFrom = ref('');
@@ -100,16 +102,22 @@ async function loadAllMaterials() {
   return all;
 }
 
-function lineFromRecipe(l) {
-  return {
-    key: `l${++keySeq}`,
-    material_id: l.material_id,
-    name: l.name ?? '',
-    unit: l.unit ?? '',
-    quantity: String(Number(l.quantity)),
-    shrinkage: String(Number(l.shrinkage_pct ?? 0)),
-  };
+/** 093: semua halaman produk bahan (sama dengan pola bahan baku di atas). Gagal → kosong, resep bahan baku tetap bisa dibuat. */
+async function loadAllIngredients() {
+  if (!props.product?.id) return [];
+  const all = [];
+  let page = 1;
+  let last = 1;
+  do {
+    const res = await listRecipeIngredients({ exclude_product_id: props.product.id, per_page: 100, page });
+    all.push(...(res?.data ?? []));
+    last = res?.meta?.last_page ?? 1;
+    page += 1;
+  } while (page <= last && page <= 20);
+  return all;
 }
+
+const lineFromRecipe = (l) => lineFromServer(l, () => `l${++keySeq}`);
 
 async function load() {
   const mine = ++loadSeq;
@@ -119,13 +127,15 @@ async function load() {
   Object.keys(lineErrors).forEach((k) => delete lineErrors[k]);
   Object.keys(blockErrors).forEach((k) => delete blockErrors[k]);
   try {
-    const [mats, recipe, groups] = await Promise.all([
+    const [mats, recipe, groups, products] = await Promise.all([
       loadAllMaterials(),
       props.recipe ? getRecipe(props.recipe.id) : Promise.resolve(null),
       props.product?.id ? listRecipeModifierOptions(props.product.id).catch(() => []) : Promise.resolve([]),
+      loadAllIngredients().catch(() => []),
     ]);
     if (mine !== loadSeq) return;
     materials.value = mats;
+    ingredients.value = products ?? [];
     modifierGroups.value = groups ?? [];
     Object.keys(unitCosts).forEach((k) => delete unitCosts[k]);
     effectiveFrom.value = recipe?.effective_from ?? today();
@@ -139,7 +149,7 @@ async function load() {
       const source = recipe.blocks ?? (recipe.variants ?? []).map((v) => ({ variant_id: v.id, modifier_option_id: null, lines: recipe.lines ?? [] }));
       blocks.value = source.filter((b) => existing.has(b.variant_id)).map((b) => newBlock(b.variant_id, b.modifier_option_id ?? null, (b.lines ?? []).map(lineFromRecipe)));
       source.forEach((b) => (b.lines ?? []).forEach((l) => {
-        if (l.unit_cost !== undefined && l.unit_cost !== null) unitCosts[l.material_id] = Number(l.unit_cost);
+        if (l.unit_cost !== undefined && l.unit_cost !== null) unitCosts[l.variant_id ? `v${l.variant_id}` : `m${l.material_id}`] = Number(l.unit_cost);
       }));
     } else {
       // Resep baru: nama bawaan = nama produk (boleh diubah; server tidak mewajibkan nama unik per produk, dan maks 100 karakter).
@@ -183,9 +193,16 @@ const modifierChoices = (block) => [
   { value: '', label: t('products.rc_block_no_modifier'), disabled: optionTaken(block, null) },
   ...modifierGroups.value.flatMap((g) => g.options.map((o) => ({ value: o.id, label: o.name, group: g.name, disabled: optionTaken(block, o.id) }))),
 ];
+// 093: nilai opsi = kunci bahan (`m12` / `v34`). Baris produk lama yang penandanya sudah mati (atau tak ada di daftar)
+// tetap tampil sebagai pilihan terpilih, diberi catatan, supaya resep lama bisa dibuka dan disimpan ulang.
+const productOrphan = (line) => (line.variant_id && !ingredients.value.some((p) => p.variant_id === line.variant_id)
+  ? { value: `v${line.variant_id}`, label: `${line.name || line.sku || line.variant_id} (${t('products.rc_product_unflagged')})`, group: t('products.rc_kind_product') }
+  : null);
 const materialChoices = (line) => [
-  ...(orphanOption(line) ? [{ value: orphanOption(line).id, label: orphanOption(line).name }] : []),
-  ...materialGroups.value.flatMap((g) => g.items.map((m) => ({ value: m.id, label: m.name, group: kindLabel(g.kind) }))),
+  ...(orphanOption(line) ? [{ value: `m${orphanOption(line).id}`, label: orphanOption(line).name }] : []),
+  ...(productOrphan(line) ? [productOrphan(line)] : []),
+  ...materialGroups.value.flatMap((g) => g.items.map((m) => ({ value: `m${m.id}`, label: m.name, group: kindLabel(g.kind) }))),
+  ...ingredients.value.map((p) => ({ value: `v${p.variant_id}`, label: productOptionLabel(p, t), group: t('products.rc_kind_product') })),
 ];
 
 function newBlock(variantId, optionId, blockLines) {
@@ -193,7 +210,7 @@ function newBlock(variantId, optionId, blockLines) {
 }
 
 function addLine(block) {
-  block.lines.push({ key: `l${++keySeq}`, material_id: null, name: '', unit: '', quantity: '', shrinkage: '0' });
+  block.lines.push({ key: `l${++keySeq}`, material_id: null, variant_id: null, name: '', unit: '', sku: '', flagged: true, quantity: '', shrinkage: '0' });
 }
 
 function removeLine(block, line) {
@@ -243,7 +260,7 @@ const variantOf = (block) => variants.value.find((v) => v.id === block.variant_i
 
 /** Biaya satuan sebuah bahan: harga vendor acuan, selain itu `standard_cost` bahan setengah jadi (cermin RecipeService::unitCost). */
 async function resolveUnitCost(material) {
-  if (Object.prototype.hasOwnProperty.call(unitCosts, material.id)) return;
+  if (Object.prototype.hasOwnProperty.call(unitCosts, `m${material.id}`)) return;
   let cost = null;
   try {
     const full = await getMaterial(material.id);
@@ -252,22 +269,44 @@ async function resolveUnitCost(material) {
   } catch {
     cost = null; // harga tak bisa dipastikan → baris ditandai belum lengkap, bukan nol
   }
-  unitCosts[material.id] = cost;
+  unitCosts[`m${material.id}`] = cost;
 }
 
 function pickMaterial(line, rawValue) {
-  const id = Number(rawValue);
-  const m = materials.value.find((x) => x.id === id);
+  const parsed = parseIngredientKey(rawValue);
   // Placeholder "Pilih bahan" (nilai kosong) tidak mengosongkan pilihan lama: baris tanpa bahan ditolak validate().
+  if (!parsed) return;
+  if (parsed.type === 'product') {
+    const p = ingredients.value.find((x) => x.variant_id === parsed.id);
+    if (!p) return; // baris produk lama yang sudah tak bertanda: pilihan terpilihnya sendiri, tak ada yang diubah
+    line.variant_id = p.variant_id;
+    line.material_id = null;
+    line.name = p.product_name;
+    line.unit = p.unit ?? '';
+    line.sku = p.sku;
+    line.flagged = true;
+    line.shrinkage = '0'; // produk bahan tidak memakai susut
+    delete lineErrors[line.key]?.material;
+    return;
+  }
+  const m = materials.value.find((x) => x.id === parsed.id);
   if (!m) return;
   line.material_id = m.id;
+  line.variant_id = null;
   line.name = m.name;
   line.unit = m.unit ?? '';
+  line.sku = '';
   delete lineErrors[line.key]?.material;
   resolveUnitCost(m);
 }
 
-const unitCostOf = (line) => (line.material_id !== null && Object.prototype.hasOwnProperty.call(unitCosts, line.material_id) ? unitCosts[line.material_id] : null);
+// Biaya baris produk baru belum diketahui di pratinjau (daftar pilihan tidak membawa harga pokok); baris yang sudah
+// tersimpan membawa `unit_cost` dari server, dan server selalu menghitung biaya yang sebenarnya.
+const unitCostOf = (line) => {
+  const k = ingredientKey(line);
+
+  return k !== '' && Object.prototype.hasOwnProperty.call(unitCosts, k) ? unitCosts[k] : null;
+};
 
 // --- pratinjau biaya -------------------------------------------------------------------------------------------
 /** Biaya per BLOK (tiap tabel punya total sendiri); harga jual acuan = varian blok itu. */
@@ -276,7 +315,7 @@ function previewOf(block) {
   const price = v && variantPrice(v) !== null ? Number(variantPrice(v)) : null;
 
   return computeRecipeCost(
-    block.lines.map((l) => ({ quantity: l.quantity, shrinkage_pct: l.shrinkage, unit_cost: l.material_id === null ? null : unitCostOf(l) })),
+    block.lines.map((l) => ({ quantity: l.quantity, shrinkage_pct: l.variant_id ? 0 : l.shrinkage, unit_cost: ingredientKey(l) === '' ? null : unitCostOf(l) })),
     Number(yieldQty.value),
     price,
   );
@@ -328,11 +367,12 @@ function validate() {
     }
     b.lines.forEach((l) => {
       const e = {};
-      if (l.material_id === null) e.material = t('products.rc_err_material');
+      if (ingredientKey(l) === '') e.material = t('products.rc_err_material');
       const q = l.quantity === '' ? NaN : Number(l.quantity);
       if (!Number.isFinite(q) || q <= 0) e.quantity = t('products.rc_err_qty');
+      else if (l.variant_id && !isWholePerPortion(q, y)) e.quantity = t('products.rc_err_whole');
       const sh = l.shrinkage === '' ? 0 : Number(l.shrinkage);
-      if (!Number.isFinite(sh) || sh < 0 || sh > 99.99) e.shrinkage = t('products.rc_err_shrink');
+      if (!l.variant_id && (!Number.isFinite(sh) || sh < 0 || sh > 99.99)) e.shrinkage = t('products.rc_err_shrink');
       if (Object.keys(e).length) {
         lineErrors[l.key] = e;
         ok = false;
@@ -345,12 +385,12 @@ function validate() {
 function applyServerErrors(errors, order) {
   Object.entries(errors ?? {}).forEach(([field, messages]) => {
     const message = Array.isArray(messages) ? messages[0] : messages;
-    const line = /^blocks\.(\d+)\.lines\.(\d+)\.(material_id|quantity|shrinkage_pct)$/.exec(field);
+    const line = /^blocks\.(\d+)\.lines\.(\d+)\.(material_id|variant_id|quantity|shrinkage_pct)$/.exec(field);
     const blk = /^blocks\.(\d+)\.(variant_id|modifier_option_id|lines)$/.exec(field);
     if (line) {
       const target = order[Number(line[1])]?.lines[Number(line[2])];
       if (!target) return;
-      const column = line[3] === 'material_id' ? 'material' : line[3] === 'quantity' ? 'quantity' : 'shrinkage';
+      const column = line[3] === 'material_id' || line[3] === 'variant_id' ? 'material' : line[3] === 'quantity' ? 'quantity' : 'shrinkage';
       lineErrors[target.key] = { ...(lineErrors[target.key] ?? {}), [column]: message };
     } else if (blk) {
       const target = order[Number(blk[1])];
@@ -376,7 +416,7 @@ async function submit() {
     blocks: order.map((b) => ({
       variant_id: b.variant_id,
       modifier_option_id: b.modifier_option_id,
-      lines: b.lines.map((l) => ({ material_id: l.material_id, quantity: Number(l.quantity), shrinkage_pct: l.shrinkage === '' ? 0 : Number(l.shrinkage) })),
+      lines: b.lines.map(linePayload),
     })),
     note: note.value.trim() || null,
   };
@@ -494,7 +534,7 @@ async function submit() {
                     <td class="p-0">
                       <BaseSelect
                         cell
-                        :model-value="l.material_id ?? ''"
+                        :model-value="ingredientKey(l)"
                         :options="materialChoices(l)"
                         :placeholder="t('products.rc_material_placeholder')"
                         :aria-label="t('products.rc_row_material_aria', { n: i + 1 })"
@@ -509,7 +549,9 @@ async function submit() {
                     </td>
                     <!-- Satuan = satuan bahan terpilih, teks biasa (tidak ada konversi satuan). -->
                     <td class="border-l border-line-3 px-3 py-3 text-right font-semibold text-muted-4" data-testid="rc-unit">{{ l.unit || '—' }}</td>
-                    <td class="border-l border-line-3 p-0">
+                    <!-- 093: bahan berupa produk tidak memakai susut (stok varian bilangan bulat). -->
+                    <td v-if="l.variant_id" class="border-l border-line-3 px-3 py-3 text-right text-muted-4" data-testid="rc-shrink-na">—</td>
+                    <td v-else class="border-l border-line-3 p-0">
                       <input v-model="l.shrinkage" type="number" step="any" :class="cellInputClass({ number: true, error: !!lineErrors[l.key]?.shrinkage })" :aria-label="t('products.rc_row_shrink_aria', { n: i + 1 })" :aria-invalid="lineErrors[l.key]?.shrinkage ? 'true' : undefined" />
                       <p v-if="lineErrors[l.key]?.shrinkage" role="alert" :class="[CELL_ERROR, 'text-right']">{{ lineErrors[l.key].shrinkage }}</p>
                     </td>

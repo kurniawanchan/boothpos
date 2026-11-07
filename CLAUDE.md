@@ -155,8 +155,8 @@ Full history and reasoning for each rule: `docs/claude-md-history.md`. Feature n
 - A remote `origin` (github.com/kurniawanchan/boothpos) exists (dated note 2026-10-11; the earlier "no remote" line was outdated), but **pushing and opening PRs need the developer's explicit per-instance authorization** (constitution; the harness may also deny them) — never push on your own initiative.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/092-recipe-based-menu-stock/plan.md`
-(branch `092-recipe-based-menu-stock`) — stok menu berbasis resep (web + Android): `MenuStockService` menurunkan stok menu dari saldo bahan outlet dikurangi bahan yang ditahan tab terbuka; varian beresep otomatis lepas dari stok varian; penjaga kapasitas atomik menolak pesanan melebihi bahan (409 `insufficient_recipe_stock`, hanya kebutuhan RESEP — membalik 087 FR-031 khusus resep, keputusan pemilik 2026-11-06); angka dikirim lewat `outlet_stock`/`track_stock` yang sudah dibaca web dan Android. Tanpa tabel/migrasi baru. Lihat research.md D1–D12.
+Active feature plan: `specs/093-product-as-ingredient/plan.md`
+(branch `093-product-as-ingredient`) — produk sebagai bahan resep dengan SATU saldo bersama (web + Android): `products.use_as_ingredient`; `recipe_lines.variant_id` (XOR dengan `material_id`); `ModifierMaterialConsumption` tetap SATU penerjemah dan `StockService::applyMovement` tetap SATU penulis stok varian (tipe baru `recipe_sale`/`recipe_return`/`recipe_waste`); tahanan tab terbuka diperluas ke varian dan juga menjaga penjualan langsung produk bahan; rekursi DILARANG dua arah; jumlah bahan produk wajib bulat tanpa susut; urutan kunci global material → saldo material → varian → saldo varian. Android tanpa perubahan kode fungsional. Satu migrasi skema, tanpa tabel saldo baru. Lihat research.md D1–D14.
 
-Rencana sebelumnya: `specs/091-modifier-attach-selection-summary/plan.md`, `specs/090-self-service-qr-ordering/plan.md`, `specs/089-recipe-multi-modifier-qty/plan.md`.
+Rencana sebelumnya: `specs/092-recipe-based-menu-stock/plan.md`, `specs/091-modifier-attach-selection-summary/plan.md`, `specs/090-self-service-qr-ordering/plan.md`.
 <!-- SPECKIT END -->

@@ -10,6 +10,11 @@ export const MOVEMENT_TYPE_VARIANT = {
   adjustment: 'neutral',
   return: 'mint',
   initial: 'neutral',
+  // 093 — produk dipakai sebagai BAHAN resep: pemakaian, pemulihan (void/refund), dan bahan terbuang. Tipe terpisah dari
+  // `sale`/`return` supaya riwayat membedakan penjualan langsung dari pemakaian resep.
+  recipe_sale: 'neutral',
+  recipe_return: 'mint',
+  recipe_waste: 'warn',
 };
 
 export function movementTypeVariant(type) {

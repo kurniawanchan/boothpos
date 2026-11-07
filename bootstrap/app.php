@@ -71,6 +71,24 @@ return Application::configure(basePath: dirname(__DIR__))
             return response()->json($request->user() === null ? $e->toPublicArray() : $e->toInternalArray(), $e->status);
         });
 
+        // 093 — penjualan langsung produk bahan menembus tahanan resep tab terbuka: 409 `insufficient_stock_reserved`.
+        $exceptions->render(function (\App\Exceptions\StockReservedException $e, Request $request) {
+            if (! $request->is('api/*') && ! $request->expectsJson()) {
+                return null;
+            }
+
+            return response()->json($e->toArray(), $e->status);
+        });
+
+        // 093 — produk/varian yang masih dipakai resep tidak boleh dinonaktifkan/dihapus/dimatikan pelacakannya: 409 dengan daftar resep.
+        $exceptions->render(function (\App\Exceptions\IngredientInUseException $e, Request $request) {
+            if (! $request->is('api/*') && ! $request->expectsJson()) {
+                return null;
+            }
+
+            return response()->json($e->toArray(), $e->status);
+        });
+
         // 078 — SATU renderer untuk semua penolakan throttle: pesan Indonesia dengan lama tunggu, bukan "Too Many Attempts." bawaan
         // (Inggris, tanpa waktu). `Retry-After` dari exception dipertahankan. Kunci `pin_locked` (kunci PIN per pengguna) tidak lewat
         // sini — itu 429 buatan PinAuthService dengan kodenya sendiri.

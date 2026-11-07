@@ -169,6 +169,7 @@ class RecipeService
             Recipe::query()->whereKey($recipes->pluck('id'))->delete();
             // Hapus massal tidak memicu event model; tautan varian ikut terhapus (CASCADE).
             app(\App\Support\RecipeDrivenVariants::class)->forget();
+        app(\App\Support\IngredientVariants::class)->forget(); // 093
 
             return $recipes->count();
         });
@@ -243,7 +244,7 @@ class RecipeService
     {
         return Recipe::query()->active()
             ->whereHas('variants', fn ($q) => $q->where('product_variants.id', $variant->id))
-            ->with(['blocks.lines.material', 'blocks.option'])
+            ->with(['blocks.lines.material', 'blocks.lines.variant.product', 'blocks.option'])
             ->orderBy('name')->orderBy('id')->get();
     }
 
@@ -264,7 +265,7 @@ class RecipeService
         if ($links->isEmpty()) {
             return [];
         }
-        $recipes = Recipe::query()->active()->whereIn('id', $links->pluck('recipe_id')->unique())->with(['blocks.lines.material', 'blocks.option'])->get()->keyBy('id');
+        $recipes = Recipe::query()->active()->whereIn('id', $links->pluck('recipe_id')->unique())->with(['blocks.lines.material', 'blocks.lines.variant.product', 'blocks.option'])->get()->keyBy('id');
 
         $out = [];
         foreach ($links as $link) {
@@ -331,11 +332,11 @@ class RecipeService
     /** @return array{line_costs: list<float|null>, portion_cost: float, incomplete: bool, food_cost_pct: float|null, gross_margin: float|null, unit_costs: list<float|null>} */
     public function cost(Recipe $recipe, ?float $basePrice, ?RecipeBlock $block = null): array
     {
-        $recipe->loadMissing('blocks.lines.material');
+        $recipe->loadMissing('blocks.lines.material', 'blocks.lines.variant');
         // Tanpa blok: resep dasar blok pertama (bentuk lama satu tabel); tanpa blok sama sekali = biaya nol.
         $block ??= $recipe->blocks->first(fn ($b) => $b->modifier_option_id === null) ?? $recipe->blocks->first();
         $lines = $block ? $block->lines : collect();
-        $units = $lines->map(fn ($l) => $this->unitCost($l->material))->all();
+        $units = $lines->map(fn ($l) => $l->variant_id !== null ? $this->variantUnitCost($l->variant) : $this->unitCost($l->material))->all();
         $inputs = $lines->values()->map(fn ($l, $i) => ['quantity' => $l->quantity, 'shrinkage_pct' => $l->shrinkage_pct, 'unit_cost' => $units[$i]])->all();
 
         return RecipeCost::compute($inputs, (float) $recipe->yield, $basePrice) + ['unit_costs' => array_values($units)];
@@ -361,11 +362,23 @@ class RecipeService
         return $material->kind === 'semi_finished' && $material->standard_cost !== null ? (float) $material->standard_cost : null;
     }
 
+    /**
+     * 093 — biaya satuan bahan berupa produk = harga pokok varian-nya. Nol dianggap TIDAK diketahui (null), seperti bahan
+     * tanpa harga vendor: biaya resep ditandai tak lengkap, bukan dihitung gratis. Produk bahan tidak pernah beresep,
+     * jadi `cost_price`-nya bukan hasil resep lain (tidak ada putaran biaya).
+     */
+    public function variantUnitCost(?ProductVariant $variant): ?float
+    {
+        $cost = $variant === null ? 0.0 : (float) $variant->cost_price;
+
+        return $cost > 0 ? $cost : null;
+    }
+
     /** @return list<array<string, mixed>> semua resep sebuah produk (termasuk arsip), diurutkan menurut nama */
     public function list(Product $product, bool $mayCost): array
     {
         $head = $product->variants()->orderBy('id')->first();
-        $recipes = Recipe::query()->where('product_id', $product->id)->with(['variants', 'blocks.lines.material'])->orderBy('name')->orderBy('id')->get();
+        $recipes = Recipe::query()->where('product_id', $product->id)->with(['variants', 'blocks.lines.material', 'blocks.lines.variant'])->orderBy('name')->orderBy('id')->get();
 
         return $recipes->map(function (Recipe $r) use ($mayCost, $head) {
             $row = [
@@ -392,7 +405,7 @@ class RecipeService
      */
     public function present(Recipe $recipe, bool $mayCost): array
     {
-        $recipe->loadMissing(['blocks.lines.material', 'blocks.option.group', 'variants']);
+        $recipe->loadMissing(['blocks.lines.material', 'blocks.lines.variant.product', 'blocks.option.group', 'variants']);
         $head = $recipe->variants->sortBy('id')->first();
 
         $blocks = $recipe->blocks->values()->map(function (RecipeBlock $b) use ($recipe, $mayCost) {
@@ -425,11 +438,31 @@ class RecipeService
         ] : []);
     }
 
+    /**
+     * 093 — baris bahan berupa produk. `unit` = label satuan produk (kosong → "unit"); `ingredient_flagged` false berarti
+     * penandanya sudah dimatikan sesudah resep dibuat (resep tetap berlaku, FR-004) sehingga UI menandainya.
+     *
+     * @return array<string, mixed>
+     */
+    private function presentProductLine(\App\Models\RecipeLine $l): array
+    {
+        $variant = $l->variant;
+        $product = $variant?->product;
+
+        return [
+            'material_id' => null, 'variant_id' => $l->variant_id,
+            'name' => $variant && $product ? $variant->lineName() : null,
+            'sku' => $variant?->sku, 'unit' => $product?->ingredient_unit ?: 'unit', 'kind' => 'product',
+            'ingredient_flagged' => (bool) $product?->use_as_ingredient,
+            'quantity' => $this->num($l->quantity, 4), 'shrinkage_pct' => $this->num($l->shrinkage_pct, 2),
+        ];
+    }
+
     /** @param  array<string, mixed>|null  $c  hasil cost() untuk blok ini (null = tanpa izin biaya) */
     private function presentLines(RecipeBlock $block, ?array $c): array
     {
         return $block->lines->values()->map(function ($l, $i) use ($c) {
-            $row = [
+            $row = $l->variant_id !== null ? $this->presentProductLine($l) : [
                 'material_id' => $l->material_id, 'name' => $l->material?->name, 'unit' => $l->material?->unit, 'kind' => $l->material?->kind,
                 'quantity' => $this->num($l->quantity, 4), 'shrinkage_pct' => $this->num($l->shrinkage_pct, 2),
             ];
@@ -492,14 +525,29 @@ class RecipeService
             return array_values(array_map(fn ($b) => [
                 'variant_id' => (int) ($b['variant_id'] ?? 0),
                 'modifier_option_id' => ! empty($b['modifier_option_id']) ? (int) $b['modifier_option_id'] : null,
-                'lines' => array_values($b['lines'] ?? []),
+                'lines' => $this->orderedLines($b['lines'] ?? []),
             ], $data['blocks'] ?? []));
         }
 
-        $lines = array_values($data['lines'] ?? []);
+        $lines = $this->orderedLines($data['lines'] ?? []);
 
         return array_map(fn ($id) => ['variant_id' => (int) $id, 'modifier_option_id' => null, 'lines' => $lines],
             array_values(array_unique(array_map('intval', $data['variant_ids'] ?? []))));
+    }
+
+    /**
+     * BUG YANG DITEMUKAN & DIPERBAIKI (093): `FormRequest::validated()` menyusun ulang larik bersarang menurut URUTAN ATURAN
+     * (semua `material_id` dulu, baru `variant_id`), sehingga resep campuran bahan baku + produk tersimpan dengan baris
+     * terbalik dari urutan yang dikirim klien. Kunci larik asli tetap indeks kirim, jadi urutkan menurut kuncinya.
+     *
+     * @param  array<int|string, array<string, mixed>>  $lines
+     * @return list<array<string, mixed>>
+     */
+    private function orderedLines(array $lines): array
+    {
+        ksort($lines);
+
+        return array_values($lines);
     }
 
     /** @param list<array{variant_id: int, modifier_option_id: int|null, lines: list<array<string, mixed>>}> $blocks */
@@ -510,7 +558,11 @@ class RecipeService
             $block = $recipe->blocks()->create(['variant_id' => $b['variant_id'], 'modifier_option_id' => $b['modifier_option_id'], 'display_order' => $bi + 1]);
             foreach (array_values($b['lines']) as $i => $l) {
                 $block->lines()->create([
-                    'recipe_id' => $recipe->id, 'material_id' => (int) $l['material_id'], 'quantity' => $l['quantity'],
+                    'recipe_id' => $recipe->id,
+                    'material_id' => ! empty($l['material_id']) ? (int) $l['material_id'] : null,
+                    // 093 — varian produk bahan: saldo bersama; tepat satu dari dua rujukan (CHECK di DB).
+                    'variant_id' => ! empty($l['variant_id']) ? (int) $l['variant_id'] : null,
+                    'quantity' => $l['quantity'],
                     'shrinkage_pct' => $l['shrinkage_pct'] ?? 0, 'display_order' => $i + 1,
                 ]);
             }
@@ -525,7 +577,7 @@ class RecipeService
             'variant_ids' => $r->variants->pluck('id')->all(),
             'blocks' => $r->blocks->map(fn ($b) => [
                 'variant_id' => $b->variant_id, 'modifier_option_id' => $b->modifier_option_id,
-                'lines' => $b->lines->map(fn ($l) => ['material_id' => $l->material_id, 'quantity' => (float) $l->quantity, 'shrinkage_pct' => (float) $l->shrinkage_pct])->all(),
+                'lines' => $b->lines->map(fn ($l) => ['material_id' => $l->material_id, 'variant_id' => $l->variant_id, 'quantity' => (float) $l->quantity, 'shrinkage_pct' => (float) $l->shrinkage_pct])->all(),
             ])->all(),
         ];
     }
@@ -540,6 +592,7 @@ class RecipeService
     {
         // 092 D6: semua penulis resep lewat sini sesudah menyinkronkan tautan varian (pivot tanpa event model).
         app(\App\Support\RecipeDrivenVariants::class)->forget();
+        app(\App\Support\IngredientVariants::class)->forget(); // 093
 
         $variantIds = array_values(array_unique(array_map('intval', $variantIds)));
         $byVariant = $this->activeRecipesForVariants($variantIds);
@@ -589,6 +642,20 @@ class RecipeService
         $variantIds = array_values(array_unique(array_column($blocks, 'variant_id')));
         $key = fn (int $i, string $field) => $legacy ? $field : "blocks.{$i}.{$field}";
 
+        // 093 — produk bahan punya saldo sendiri; resep akan menurunkan stoknya dari bahan (092), jadi keduanya tidak boleh bersamaan.
+        if ($product->use_as_ingredient) {
+            $e[$legacy ? 'variant_ids' : 'blocks'] = __('products.recipe_product_is_ingredient');
+        }
+
+        // 093 — konteks baris produk dimuat SEKALI (bukan satu kueri per baris): varian yang dirujuk, himpunan varian
+        // yang sudah beresep (rekursi), dan varian yang SUDAH ada di resep ini (boleh tetap walau penandanya kini mati, FR-004).
+        $productVariantIds = collect($blocks)->flatMap(fn ($b) => collect($b['lines'])->pluck('variant_id'))->filter()->map(fn ($id) => (int) $id)->unique()->values();
+        $refVariants = $productVariantIds->isEmpty() ? collect() : ProductVariant::query()->with('product')->whereIn('id', $productVariantIds)->get()->keyBy('id');
+        $recursive = $productVariantIds->isEmpty() ? [] : DB::table('recipe_variants')
+            ->join('recipes', 'recipes.id', '=', 'recipe_variants.recipe_id')->whereNull('recipes.archived_at')
+            ->whereIn('recipe_variants.variant_id', $productVariantIds)->pluck('recipe_variants.variant_id')->flip()->all();
+        $kept = $existing === null ? [] : $existing->lines()->whereNotNull('variant_id')->pluck('variant_id')->flip()->all();
+
         if ($blocks === []) {
             $e[$legacy ? 'variant_ids' : 'blocks'] = __('products.recipe_variants_required');
         } elseif (in_array(0, $variantIds, true) || ProductVariant::query()->whereIn('id', $variantIds)->where('product_id', $product->id)->count() !== count($variantIds)) {
@@ -598,6 +665,7 @@ class RecipeService
         // Pilihan modifier harus milik grup yang berlaku untuk produk ini; pasangan (varian, pilihan) tidak boleh kembar.
         $allowed = $blocks === [] ? collect() : app(ModifierResolver::class)->effectiveGroups($product)->flatMap(fn ($g) => $g->options->pluck('id'))->flip();
         $seen = [];
+        $seenVariants = [];
         foreach ($blocks as $i => $b) {
             if ($b['modifier_option_id'] !== null && ! $allowed->has($b['modifier_option_id'])) {
                 $e[$key($i, 'modifier_option_id')] = __('products.recipe_modifier_foreign');
@@ -620,8 +688,23 @@ class RecipeService
                 if ($shrink < 0 || $shrink > 99.99) {
                     $e["{$p}.shrinkage_pct"] = __('products.recipe_shrinkage_invalid');
                 }
-                if (! Material::query()->whereKey((int) ($l['material_id'] ?? 0))->exists()) {
-                    $e["{$p}.material_id"] = __('products.recipe_material_unknown');
+                $materialId = (int) ($l['material_id'] ?? 0);
+                $variantId = (int) ($l['variant_id'] ?? 0);
+                if (($materialId > 0) === ($variantId > 0)) {
+                    // Keduanya terisi atau keduanya kosong: tepat SATU rujukan bahan (CHECK di DB menjaga hal yang sama).
+                    $e["{$p}.material_id"] = __('products.recipe_ingredient_required');
+                } elseif ($materialId > 0) {
+                    if (! Material::query()->whereKey($materialId)->exists()) {
+                        $e["{$p}.material_id"] = __('products.recipe_material_unknown');
+                    }
+                } else {
+                    foreach ($this->productLineErrors($variantId, $l, $yield, $product, $refVariants, $recursive, $kept) as $field => $message) {
+                        $e["{$p}.{$field}"] ??= $message;
+                    }
+                    if (isset($seenVariants[$i][$variantId])) {
+                        $e["{$p}.variant_id"] = __('products.recipe_block_duplicate');
+                    }
+                    $seenVariants[$i][$variantId] = true;
                 }
             }
         }
@@ -629,6 +712,51 @@ class RecipeService
         if ($e !== []) {
             throw ValidationException::withMessages($e);
         }
+    }
+
+    /**
+     * 093 — aturan satu baris bahan berupa produk (research D7, D8). Mengembalikan [field => pesan]; kosong = lolos.
+     * Baris yang SUDAH ada di resep ini (`$kept`) dilepas dari syarat "produk bertanda": mematikan penanda tidak boleh
+     * membuat resep lama tak bisa disimpan ulang, hanya menutup pilihan untuk baris BARU (FR-004).
+     *
+     * @param  Collection<int, ProductVariant>  $variants  varian yang dirujuk, dikunci id
+     * @param  array<int, int>  $recursive  varian yang sudah punya resep tidak-arsip (kunci id)
+     * @param  array<int, int>  $kept  varian yang sudah ada di resep ini (kunci id)
+     * @return array<string, string>
+     */
+    private function productLineErrors(int $variantId, array $line, float $yield, Product $product, Collection $variants, array $recursive, array $kept): array
+    {
+        $variant = $variants->get($variantId);
+        $isKept = isset($kept[$variantId]);
+        if ($variant === null || (! $variant->is_active && ! $isKept)) {
+            return ['variant_id' => __('products.recipe_material_unknown')];
+        }
+
+        $name = $variant->product?->name ?? $variant->sku;
+        if ((int) $variant->product_id === (int) $product->id) {
+            return ['variant_id' => __('products.recipe_ingredient_self')];
+        }
+        if (isset($recursive[$variantId])) {
+            return ['variant_id' => __('products.recipe_ingredient_recursive', ['product' => $name])];
+        }
+        if (! $variant->track_stock || ($variant->product?->stock_source ?? Product::STOCK_VARIANT) !== Product::STOCK_VARIANT) {
+            return ['variant_id' => __('products.recipe_ingredient_untracked', ['product' => $name])];
+        }
+        if (! $variant->product?->use_as_ingredient && ! $isKept) {
+            return ['variant_id' => __('products.recipe_ingredient_not_flagged', ['product' => $name])];
+        }
+
+        $errors = [];
+        if (abs((float) ($line['shrinkage_pct'] ?? 0)) > 1e-9) {
+            $errors['shrinkage_pct'] = __('products.recipe_ingredient_no_shrinkage');
+        }
+        // Stok varian bilangan bulat: kebutuhan per porsi harus bulat dan ≥ 1, tanpa pembulatan diam-diam (stok tak boleh hilang/ganda).
+        $perPortion = $yield > 0 ? (float) ($line['quantity'] ?? 0) / $yield : 0.0;
+        if ($perPortion < 1 - 1e-6 || abs($perPortion - round($perPortion)) > 1e-6) {
+            $errors['quantity'] = __('products.recipe_ingredient_whole_quantity');
+        }
+
+        return $errors;
     }
 
     private function num(mixed $v, int $dp): string
