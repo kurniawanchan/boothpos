@@ -60,6 +60,17 @@ return Application::configure(basePath: dirname(__DIR__))
             return response()->json(['message' => $e->getMessage(), 'code' => $e->reason] + $e->context, $e->status);
         });
 
+        // 092 — bahan resep tidak cukup: 409 `insufficient_recipe_stock` dengan bahan penghambat. Permintaan tanpa pengguna
+        // login (rute publik pesan mandiri) mendapat bentuk tanpa nama/id bahan (contracts/api-changes.md §2).
+        $exceptions->render(function (\App\Exceptions\RecipeStockException $e, Request $request) {
+            if (! $request->is('api/*') && ! $request->expectsJson()) {
+                return null;
+            }
+
+            // Rute publik pesan mandiri tidak punya pengguna login; staf mendapat nama bahan, pelanggan tidak.
+            return response()->json($request->user() === null ? $e->toPublicArray() : $e->toInternalArray(), $e->status);
+        });
+
         // 078 — SATU renderer untuk semua penolakan throttle: pesan Indonesia dengan lama tunggu, bukan "Too Many Attempts." bawaan
         // (Inggris, tanpa waktu). `Retry-After` dari exception dipertahankan. Kunci `pin_locked` (kunci PIN per pengguna) tidak lewat
         // sini — itu 429 buatan PinAuthService dengan kodenya sendiri.

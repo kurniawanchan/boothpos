@@ -64,6 +64,13 @@ async function renderDrawer({ recipe = RECIPE_ROW, product = PRODUCT } = {}) {
   return view;
 }
 
+// Pemilih bawaan aplikasi (BaseSelect): pemicu = combobox, panel opsi di-teleport ke <body>. `holder` boleh pemicunya
+// sendiri atau pembungkus ber-testid (varian/modifier).
+const triggerOf = (holder) => (holder.getAttribute('role') === 'combobox' ? holder : within(holder).getByRole('combobox'));
+async function pick(user, holder, optionName) {
+  await user.click(triggerOf(holder));
+  await user.click(await screen.findByRole('option', { name: optionName }));
+}
 const lineRows = () => screen.queryAllByTestId('rc-line');
 const submitBtn = (name) => screen.getByRole('button', { name });
 
@@ -121,9 +128,37 @@ describe('RecipeDrawer (043/089)', () => {
     expect(screen.queryByText(/hasil \(yield\)/i)).not.toBeInTheDocument();
     // 2026-11-02: satu tabel bahan per varian aktif yang bukan BOM-selesai (Es dilewati).
     expect(screen.getAllByTestId('rc-block')).toHaveLength(1);
-    expect(screen.getByTestId('rc-block-variant')).toHaveValue('1');
-    expect(screen.getByTestId('rc-block-modifier')).toHaveValue('');
+    expect(triggerOf(screen.getByTestId('rc-block-variant'))).toHaveTextContent('Panas · KOP-1');
+    expect(triggerOf(screen.getByTestId('rc-block-modifier'))).toHaveTextContent(/tanpa modifier/i);
     expect(screen.getByLabelText(/berlaku mulai/i)).toHaveValue(TODAY);
+  }, 30000);
+
+  it('a NEW recipe is prefilled with the product name (still editable); an existing recipe keeps its own name', async () => {
+    const user = await userEv();
+    const view = await renderDrawer({ recipe: null });
+    const name = screen.getByLabelText(/nama resep/i);
+    expect(name).toHaveValue('Kopi Susu');
+    await user.clear(name);
+    await user.type(name, 'Topping');
+    expect(name).toHaveValue('Topping');
+    view.unmount();
+
+    await renderDrawer();
+    expect(screen.getByLabelText(/nama resep/i)).toHaveValue('Dasar');
+  }, 30000);
+
+  it('the prefilled name is cut to the 100 character limit and saves as is when untouched', async () => {
+    const user = await userEv();
+    const long = { ...PRODUCT, name: 'K'.repeat(130) };
+    await renderDrawer({ recipe: null, product: long });
+    expect(screen.getByLabelText(/nama resep/i)).toHaveValue('K'.repeat(100));
+
+    await user.click(screen.getByTestId('rc-add'));
+    await pick(user, screen.getByRole('combobox', { name: 'Bahan 1' }), 'Susu');
+    await user.type(screen.getByLabelText('Jumlah bahan 1'), '1');
+    await user.click(submitBtn(/simpan resep/i));
+    await waitFor(() => expect(createRecipe).toHaveBeenCalledTimes(1));
+    expect(createRecipe.mock.calls[0][1].name).toBe('K'.repeat(100));
   }, 30000);
 
   it('editing prefills the recipe into ONE table (unit of each material shown) with its own name and date, and says "Ubah resep"', async () => {
@@ -136,12 +171,12 @@ describe('RecipeDrawer (043/089)', () => {
     expect(lineRows()).toHaveLength(3);
     expect(within(lineRows()[0]).getByTestId('rc-unit')).toHaveTextContent('kg');
     expect(within(lineRows()[2]).getByTestId('rc-unit')).toHaveTextContent('pcs');
-    expect(screen.getByLabelText('Bahan 1')).toHaveValue('1');
-    expect(screen.getByLabelText('Bahan 3')).toHaveValue('4');
+    expect(screen.getByRole('combobox', { name: 'Bahan 1' })).toHaveTextContent('Biji kopi');
+    expect(screen.getByRole('combobox', { name: 'Bahan 3' })).toHaveTextContent('Gelas');
     expect(screen.getByLabelText('Jumlah bahan 2')).toHaveValue(0.5);
     expect(screen.getByLabelText('Susut % bahan 2')).toHaveValue(20);
     expect(screen.getByLabelText(/^porsi$/i)).toHaveValue(2);
-    expect(screen.getByTestId('rc-block-variant')).toHaveValue('1');
+    expect(triggerOf(screen.getByTestId('rc-block-variant'))).toHaveTextContent('Panas · KOP-1');
   }, 30000);
 
   it('computes the live cost preview exactly (35.000 → 17.500 per portion → 35,0% food cost) and follows edits', async () => {
@@ -185,7 +220,7 @@ describe('RecipeDrawer (043/089)', () => {
     // bahan baku dengan harga vendor (preferensi menang atas yang termurah)
     getMaterial.mockResolvedValueOnce({ ...MATERIALS[1], vendor_prices: [{ id: 1, price: '30000.00', is_preferred: false }, { id: 2, price: '40000.00', is_preferred: true }] });
     await user.click(screen.getByTestId('rc-add'));
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Bahan 1' }), 'Susu');
+    await pick(user, screen.getByRole('combobox', { name: 'Bahan 1' }), 'Susu');
     await user.type(screen.getByLabelText('Jumlah bahan 1'), '2');
     expect(getMaterial).toHaveBeenCalledWith(2);
     await waitFor(() => expect(screen.getAllByTestId('rc-line-cost')[0]).toHaveTextContent('Rp 80.000'));
@@ -194,35 +229,57 @@ describe('RecipeDrawer (043/089)', () => {
     // setengah jadi tanpa harga vendor → standard_cost 12,5 × 10 = 125
     getMaterial.mockResolvedValueOnce({ ...MATERIALS[2], vendor_prices: [] });
     await user.click(screen.getByTestId('rc-add'));
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Bahan 2' }), 'Sirup gula');
+    await pick(user, screen.getByRole('combobox', { name: 'Bahan 2' }), 'Sirup gula');
     await user.type(screen.getByLabelText('Jumlah bahan 2'), '10');
     await waitFor(() => expect(within(lineRows()[1]).getByTestId('rc-line-cost')).toHaveTextContent('Rp 125'));
 
     // gagal memuat harga → tidak diketahui (bukan nol)
     getMaterial.mockRejectedValueOnce(new Error('network'));
     await user.click(screen.getByTestId('rc-add'));
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Bahan 3' }), 'Gelas');
+    await pick(user, screen.getByRole('combobox', { name: 'Bahan 3' }), 'Gelas');
     await user.type(screen.getByLabelText('Jumlah bahan 3'), '1');
     await waitFor(() => expect(screen.getByTestId('rc-incomplete')).toHaveTextContent(/1 bahan/));
     expect(within(lineRows()[2]).getByTestId('rc-line-cost')).toHaveTextContent('—');
   }, 30000);
 
-  it('renders ONE table headed BAHAN PER PORSI, with the material select grouped by kind (<optgroup>) instead of three boxes', async () => {
+  it('renders ONE table headed BAHAN PER PORSI, with the material picker grouped by kind and searchable instead of three boxes', async () => {
+    const user = await userEv();
     await renderDrawer({ recipe: null });
     expect(screen.getByText('Bahan per porsi')).toBeInTheDocument();
     expect(screen.getAllByRole('table')).toHaveLength(1);
     expect(screen.getAllByRole('columnheader').map((h) => h.textContent.trim()).filter(Boolean)).toEqual(['Bahan / setengah jadi', 'Qty', 'UOM', 'Susut %', 'Biaya']);
     expect(screen.queryByTestId('rc-kind-ingredient')).not.toBeInTheDocument();
 
-    const { default: userEvent } = await import('@testing-library/user-event');
-    await userEvent.setup().click(screen.getByTestId('rc-add'));
-    const select = screen.getByRole('combobox', { name: 'Bahan 1' });
-    const groups = [...select.querySelectorAll('optgroup')].map((g) => ({ label: g.label, options: [...g.querySelectorAll('option')].map((o) => o.textContent.trim()) }));
+    await user.click(screen.getByTestId('rc-add'));
+    await user.click(screen.getByRole('combobox', { name: 'Bahan 1' }));
+    const panel = screen.getByRole('listbox');
+    // Bukan <select> bawaan peramban: panel aplikasi dengan kotak cari, judul kelompok mengikuti jenis bahan.
+    expect(screen.getByRole('combobox', { name: 'Bahan 1' }).tagName).toBe('BUTTON');
+    expect(within(panel).getByPlaceholderText(/cari/i)).toBeInTheDocument();
+    const groups = [];
+    for (const el of panel.children) {
+      if (el.getAttribute('role') === 'presentation') groups.push({ label: el.textContent.trim(), options: [] });
+      else if (el.getAttribute('role') === 'option' && groups.length) groups.at(-1).options.push(el.textContent.trim());
+    }
     expect(groups).toEqual([
       { label: 'Bahan baku', options: ['Biji kopi', 'Susu'] },
       { label: 'Setengah jadi', options: ['Sirup gula'] },
       { label: 'Kemasan', options: ['Gelas'] },
     ]);
+  }, 30000);
+
+  it('typing in the search box narrows the material list and picking a hit fills the row', async () => {
+    const user = await userEv();
+    await renderDrawer({ recipe: null });
+    await user.click(screen.getByTestId('rc-add'));
+    await user.click(screen.getByRole('combobox', { name: 'Bahan 1' }));
+
+    await user.type(within(screen.getByRole('listbox')).getByPlaceholderText(/cari/i), 'sir');
+    expect(screen.getAllByRole('option').map((o) => o.textContent.trim())).toEqual(['Sirup gula']);
+    await user.click(screen.getByRole('option', { name: 'Sirup gula' }));
+
+    expect(screen.getByRole('combobox', { name: 'Bahan 1' })).toHaveTextContent('Sirup gula');
+    expect(within(lineRows()[0]).getByTestId('rc-unit')).toHaveTextContent('ml');
   }, 30000);
 
   it('"+ Tambah bahan" appends an empty row, "×" removes it, and the portion cost sits in the table footer', async () => {
@@ -236,7 +293,7 @@ describe('RecipeDrawer (043/089)', () => {
 
     await user.click(within(footer).getByTestId('rc-add'));
     expect(lineRows()).toHaveLength(4);
-    expect(screen.getByLabelText('Bahan 4')).toHaveValue('');
+    expect(screen.getByRole('combobox', { name: 'Bahan 4' })).toHaveTextContent(/pilih bahan/i);
     expect(within(lineRows()[3]).getByTestId('rc-line-cost')).toHaveTextContent('—');
 
     await user.click(screen.getByRole('button', { name: 'Hapus bahan 4' }));
@@ -249,12 +306,14 @@ describe('RecipeDrawer (043/089)', () => {
     const user = await userEv();
     const view = await renderDrawer({ recipe: null });
     useToastStore().items = [];
-    await user.type(screen.getByLabelText(/nama resep/i), '  Topping  ');
+    const nameInput = screen.getByLabelText(/nama resep/i);
+    await user.clear(nameInput); // bawaan = nama produk
+    await user.type(nameInput, '  Topping  ');
     const portions = screen.getByLabelText(/^porsi$/i);
     await user.clear(portions);
     await user.type(portions, '2');
     await user.click(screen.getByTestId('rc-add'));
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Bahan 1' }), 'Susu');
+    await pick(user, screen.getByRole('combobox', { name: 'Bahan 1' }), 'Susu');
     await user.type(screen.getByLabelText('Jumlah bahan 1'), '0.5');
     await user.type(screen.getByLabelText(/catatan perubahan/i), '  kurangi susu  ');
     await user.click(submitBtn(/simpan resep/i));
@@ -306,6 +365,7 @@ describe('RecipeDrawer (043/089)', () => {
     await user.clear(screen.getByLabelText(/^porsi$/i));
     await user.type(screen.getByLabelText(/^porsi$/i), '0');
     await user.click(screen.getByTestId('rc-block-remove')); // tidak ada tabel
+    await user.clear(screen.getByLabelText(/nama resep/i)); // bawaan = nama produk; kosongkan supaya validasi nama teruji
     await user.click(submitBtn(/simpan resep/i));
     expect(await screen.findByText(/porsi harus lebih dari 0/i)).toBeInTheDocument();
     expect(screen.getByText(/beri nama resep/i)).toBeInTheDocument();
@@ -314,7 +374,7 @@ describe('RecipeDrawer (043/089)', () => {
 
     // baris: bahan belum dipilih, jumlah 0, susut 100
     await user.click(screen.getByTestId('rc-add-block'));
-    await user.selectOptions(screen.getByTestId('rc-block-variant'), '1');
+    await pick(user, screen.getByTestId('rc-block-variant'), /panas/i);
     await user.click(screen.getByTestId('rc-add'));
     await user.type(screen.getByLabelText('Jumlah bahan 1'), '0');
     const shrink = screen.getByLabelText('Susut % bahan 1');
@@ -389,9 +449,9 @@ describe('RecipeDrawer (043/089)', () => {
       expect(blocks).toHaveLength(3);
       expect(within(blocks[2]).getByTestId('rc-block-inactive')).toBeInTheDocument();
       expect(within(blocks[2]).queryByTestId('rc-add')).not.toBeInTheDocument();
-      expect(within(blocks[2]).getByTestId('rc-block-modifier')).toBeDisabled();
+      expect(triggerOf(within(blocks[2]).getByTestId('rc-block-modifier'))).toBeDisabled();
 
-      await user.selectOptions(within(blocks[2]).getByTestId('rc-block-variant'), '1');
+      await pick(user, within(blocks[2]).getByTestId('rc-block-variant'), /panas/i);
       expect(within(screen.getAllByTestId('rc-block')[2]).getByTestId('rc-add')).toBeInTheDocument();
     }, 30000);
 
@@ -402,19 +462,24 @@ describe('RecipeDrawer (043/089)', () => {
       await user.click(screen.getByTestId('rc-add-block'));
       const second = screen.getAllByTestId('rc-block')[1];
 
-      await user.selectOptions(within(second).getByTestId('rc-block-variant'), '1'); // Panas lagi → jatuh ke pilihan bebas pertama
+      await pick(user, within(second).getByTestId('rc-block-variant'), /panas/i); // Panas lagi → jatuh ke pilihan bebas pertama
       const modifier = within(second).getByTestId('rc-block-modifier');
-      expect(modifier).toHaveValue('50');
-      const none = within(modifier).getByRole('option', { name: /tanpa modifier/i });
-      expect(none).toBeDisabled(); // pasangan (Panas, dasar) sudah dipakai blok pertama
+      expect(triggerOf(modifier)).toHaveTextContent('Lvl 1');
+      await user.click(triggerOf(modifier));
+      // Pasangan (Panas, dasar) sudah dipakai blok pertama: opsi itu tampil tetapi tidak bisa dipilih.
+      expect(screen.getByRole('option', { name: /tanpa modifier/i })).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getByRole('option', { name: 'Lvl 2' })).not.toHaveAttribute('aria-disabled');
+      await user.keyboard('{Escape}');
 
-      await user.type(screen.getByLabelText(/nama resep/i), 'Pedas');
+      const nameInput = screen.getByLabelText(/nama resep/i);
+      await user.clear(nameInput);
+      await user.type(nameInput, 'Pedas');
       for (const block of screen.getAllByTestId('rc-block')) {
         await user.click(within(block).getByTestId('rc-add'));
       }
       const selects = screen.getAllByRole('combobox', { name: 'Bahan 1' });
-      await user.selectOptions(selects[0], 'Susu');
-      await user.selectOptions(selects[1], 'Susu');
+      await pick(user, selects[0], 'Susu');
+      await pick(user, selects[1], 'Susu');
       const qty = screen.getAllByLabelText('Jumlah bahan 1');
       await user.type(qty[0], '1');
       await user.type(qty[1], '2');
@@ -432,9 +497,10 @@ describe('RecipeDrawer (043/089)', () => {
       await renderDrawer({ recipe: null, product: PRODUCT });
       await user.click(screen.getByTestId('rc-add-block'));
       const second = within(screen.getAllByTestId('rc-block')[1]).getByTestId('rc-block-variant');
+      await user.click(triggerOf(second));
 
-      expect(within(second).getByRole('option', { name: /panas/i })).toBeDisabled(); // sudah dipakai blok pertama
-      expect(within(second).getByRole('option', { name: /^es/i })).toBeEnabled();
+      expect(screen.getByRole('option', { name: /panas/i })).toHaveAttribute('aria-disabled', 'true'); // sudah dipakai blok pertama
+      expect(screen.getByRole('option', { name: /^es/i })).not.toHaveAttribute('aria-disabled');
     }, 30000);
   });
 });

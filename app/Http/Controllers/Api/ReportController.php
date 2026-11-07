@@ -592,6 +592,8 @@ class ReportController extends Controller
                 ->whereNull('product_variants.deleted_at')
                 // 087 US6 — produk bersumber stok `modifier` tidak punya stok varian; tidak tercantum di laporan stok.
                 ->whereExists(fn ($p) => $p->selectRaw('1')->from('products')->whereColumn('products.id', 'product_variants.product_id')->where('products.stock_source', 'variant'))
+                // 092 D6 — varian beresep memakai stok BAHAN; stok variannya tidak bergerak lagi, jadi tidak dilaporkan.
+                ->whereNotIn('product_variants.id', array_keys(app(\App\Support\RecipeDrivenVariants::class)->ids()))
                 ->orderBy('product_variants.variant_name')
                 ->get([
                     'product_variants.id as variant_id',
@@ -622,7 +624,9 @@ class ReportController extends Controller
                     ->where('product_variants.data_mode', ModeGate::current())
                     ->whereNull('product_variants.deleted_at')
                     // 087 US6 — sama dengan cabang per outlet: varian produk bersumber `modifier` tidak dihitung.
-                    ->whereExists(fn ($p) => $p->selectRaw('1')->from('products')->whereColumn('products.id', 'product_variants.product_id')->where('products.stock_source', 'variant'));
+                    ->whereExists(fn ($p) => $p->selectRaw('1')->from('products')->whereColumn('products.id', 'product_variants.product_id')->where('products.stock_source', 'variant'))
+                    // 092 D6 — sama dengan cabang per outlet: varian beresep tidak dihitung.
+                    ->whereNotIn('product_variants.id', array_keys(app(\App\Support\RecipeDrivenVariants::class)->ids()));
             })
             ->selectRaw('
                 outlets.id as outlet_id,

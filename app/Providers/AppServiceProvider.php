@@ -21,6 +21,8 @@ class AppServiceProvider extends ServiceProvider
         // antar-permintaan pada worker jangka panjang).
         $this->app->scoped(\App\Support\OutletContext::class);
         $this->app->scoped(\App\Support\OutletPriceBook::class);
+        // 092 D6 — himpunan varian beresep, dimuat sekali per permintaan (tracksOwnStock dipanggil per varian).
+        $this->app->scoped(\App\Support\RecipeDrivenVariants::class);
         // 087 — peringatan bahan minus dari penyelesaian pesanan, per permintaan.
         $this->app->scoped(\App\Support\MaterialWarningBag::class);
 

@@ -14,7 +14,7 @@ import { useToastStore } from '../stores/toast';
 import { cartTotals } from '../utils/posTotals';
 import { uuid } from '../utils/uuid';
 import { formatIDR, toMoneyString } from '../utils/money';
-import { buildProductCards, buildSearchCards, toCartItem, isOutOfStock } from '../utils/posProductCards';
+import { buildProductCards, buildSearchCards, toCartItem, isOutOfStock, hasRecipeStock } from '../utils/posProductCards';
 import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { useMenuAvailability } from '../composables/useMenuAvailability';
 import PosCartPanel from '../components/pos/PosCartPanel.vue';
@@ -278,6 +278,8 @@ async function handlePaymentSubmit(payments) {
     // already surfaced by the shared axios interceptor.
   } finally {
     submittingOrder.value = false;
+    // 092 D8 — stok menu beresep berubah setelah penjualan (dan 409 "bahan tidak cukup" berarti angka layar basi): muat ulang.
+    if (hasRecipeStock(browsedProducts.value)) loadBrowse().catch(() => {});
   }
 }
 
@@ -453,7 +455,7 @@ async function resumeDraft(draftId) {
                   <template v-else-if="card.min_price === card.max_price">{{ formatIDR(card.min_price) }}</template>
                   <template v-else>{{ formatIDR(card.min_price) }}–{{ formatIDR(card.max_price) }}</template>
                 </span>
-                <span v-if="card.total_stock !== null" class="text-[11px] text-muted-3">{{ t('pos.stock_count', { count: card.total_stock }) }}</span>
+                <span v-if="card.total_stock !== null" class="text-[11px] text-muted-3" :title="card.stock_limiting ? t('pos.recipe_stock_limit', { material: card.stock_limiting.name }) : undefined">{{ t('pos.stock_count', { count: card.total_stock }) }}</span>
                 <span
                   v-else-if="card.material_portions != null"
                   class="text-[11px]"

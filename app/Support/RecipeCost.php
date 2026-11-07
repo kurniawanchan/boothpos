@@ -25,6 +25,19 @@ class RecipeCost
     }
 
     /**
+     * 092 (research D2) — kebutuhan bahan untuk SATU porsi menu: `jumlah ÷ (1 − susut%/100) ÷ Portions × jumlah pilihan`.
+     * SATU-SATUNYA rumus kebutuhan bahan resep: pemotongan stok saat pesanan selesai (ModifierMaterialConsumption)
+     * dan angka stok menu yang ditampilkan (MenuStockService) sama-sama memanggilnya, supaya angka tampil tidak
+     * pernah berbeda dari angka terpotong. Murni, tanpa pembulatan; pemanggil membulatkan di hasil akhir.
+     *
+     * @param  int  $times  berapa kali blok berlaku per porsi (1 untuk blok dasar; jumlah pilihan untuk blok bermodifier)
+     */
+    public static function perPortionNeed(float $quantity, float $shrinkagePct, float $yield, int $times = 1): float
+    {
+        return $quantity / (1 - $shrinkagePct / 100) / $yield * $times;
+    }
+
+    /**
      * @param  list<array{quantity: float|int|string, shrinkage_pct: float|int|string, unit_cost: float|int|string|null}>  $lines
      * @return array{line_costs: list<float|null>, portion_cost: float, incomplete: bool, food_cost_pct: float|null, gross_margin: float|null}
      */

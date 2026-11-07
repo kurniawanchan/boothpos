@@ -178,9 +178,13 @@ describe('RecipeSection (043/089)', () => {
     const drawer = await screen.findByRole('dialog', { name: /^resep$/i });
     await within(drawer).findByTestId('rc-stock-note');
     expect(getRecipe).not.toHaveBeenCalled();
-    await user.type(within(drawer).getByLabelText(/nama resep/i), 'Baru');
+    const name = within(drawer).getByLabelText(/nama resep/i);
+    expect(name).toHaveValue('Kopi Susu'); // 092: resep baru memakai nama produk sebagai bawaan
+    await user.clear(name);
+    await user.type(name, 'Baru');
     await user.click(within(drawer).getByTestId('rc-add'));
-    await user.selectOptions(within(drawer).getByRole('combobox', { name: 'Bahan 1' }), 'Biji kopi');
+    await user.click(within(drawer).getByRole('combobox', { name: 'Bahan 1' }));
+    await user.click(await screen.findByRole('option', { name: 'Biji kopi' })); // panel pemilih di-teleport ke <body>
     await user.type(within(drawer).getByLabelText('Jumlah bahan 1'), '1');
     await user.click(within(drawer).getByRole('button', { name: /simpan resep/i }));
 

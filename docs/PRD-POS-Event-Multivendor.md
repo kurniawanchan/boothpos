@@ -1095,3 +1095,11 @@ Poin berikut masih berstatus ASSUMPTION dan perlu dikonfirmasi:
 > dapur dibuat). Ini TIDAK menghidupkan kembali apa pun yang dipotong di §10.2/§10.3 (bukan portal artist, bukan katalog tercetak). Tambahan:
 > pilihan Dine-In / Take Away pada POS web dan Android, QR per meja (dengan filter dan paginasi di Restaurant Setup), dan notifikasi suara di
 > tablet Android. Rute publik tanpa token adalah pengecualian Konstitusi IV yang dicatat (lihat `specs/090-self-service-qr-ordering/plan.md`).
+
+> **Catatan bertanggal 2026-11-06 (fitur 092, atas permintaan pemilik produk) — perilaku baru yang MEMBALIK sebagian keputusan 087.**
+> Stok menu yang punya resep aktif kini berasal dari **bahan baku**, bukan dari stok varian: stok menu = porsi utuh terbesar yang bisa dibuat
+> dari saldo bahan di outlet pemesanan (bahan dengan kapasitas terendah menentukan), dikurangi bahan yang **ditahan** tab terbuka. Varian
+> beresep otomatis lepas dari stok variannya sendiri (tanpa pengaturan per produk). Pesanan yang kebutuhan bahan RESEP-nya melebihi saldo kini
+> **DITOLAK** (409 `insufficient_recipe_stock`), membalik keputusan 087 bahwa penjualan tidak pernah ditolak karena bahan — pembalikan ini
+> berlaku HANYA untuk kebutuhan yang berasal dari resep; bahan dari pilihan modifier tetap hanya peringatan. Bahan tetap dipotong saat pesanan
+> selesai (087/089 tidak berubah). Tanpa nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/092-recipe-based-menu-stock/`.

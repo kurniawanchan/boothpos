@@ -64,3 +64,28 @@ describe('firstFieldErrors', () => {
     expect(firstFieldErrors(err)).toEqual({});
   });
 });
+
+// 092 — 409 "bahan resep tidak cukup": penangan pusat meneruskan pesan server (sudah menyebut bahan penghambat)
+// dan kode mesin-terbaca; tidak ada penanganan per layar.
+describe('409 insufficient_recipe_stock', () => {
+  const body = {
+    message: 'Stok bahan tidak cukup untuk Nasi Goreng: Telur tersisa 3 butir, dibutuhkan 4.',
+    code: 'insufficient_recipe_stock',
+    limiting: { material_id: 7, name: 'Telur', unit: 'butir', on_hand: '3.000', required: '4.000', available_portions: 3 },
+  };
+
+  it('is a conflict that carries the server message, the code and the limiting ingredient', () => {
+    const err = normalizeAxiosError({ response: { status: 409, data: body } });
+    expect(err.isConflict).toBe(true);
+    expect(err.message).toBe(body.message);
+    expect(err.code).toBe('insufficient_recipe_stock');
+    expect(err.data.limiting.name).toBe('Telur');
+    expect(err.data.limiting.available_portions).toBe(3);
+  });
+
+  it('the public (self-service) shape has no ingredient name but still the portions left', () => {
+    const err = normalizeAxiosError({ response: { status: 409, data: { message: 'Maaf, Nasi Goreng tidak cukup tersedia saat ini (tersisa 3 porsi).', code: 'insufficient_recipe_stock', limiting: { available_portions: 3 } } } });
+    expect(err.code).toBe('insufficient_recipe_stock');
+    expect(err.data.limiting).toEqual({ available_portions: 3 });
+  });
+});

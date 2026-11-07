@@ -10,7 +10,7 @@ import { listProducts } from '../api/products';
 import { listCategories } from '../api/categories';
 import { addTabLine, updateTabLine, removeTabLine, payTab, closeEmptyTab, sendTab, getTab, moveTab, mergeTab, splitTab, voidTab } from '../api/tabs';
 import { setTicketItemStatus } from '../api/kitchen';
-import { buildProductCards } from '../utils/posProductCards';
+import { buildProductCards, hasRecipeStock } from '../utils/posProductCards';
 import { formatIDR } from '../utils/money';
 import { uuid } from '../utils/uuid';
 import { toastMaterialWarnings } from '../utils/materialWarnings';
@@ -132,6 +132,12 @@ const pickerCard = ref(null);
 // Item yang sedang dipilihkan modifier-nya: { card, variant, groups }.
 const modifierTarget = ref(null);
 
+// 092 D8 — stok menu beresep dihitung server dan berubah setiap baris masuk/keluar tab (bahan ditahan) dan setelah
+// bayar; 409 "bahan tidak cukup" berarti angka layar basi. Muat ulang menu (ditunda, bukan polling) bila ada menu beresep.
+function refreshRecipeStock() {
+  if (hasRecipeStock(products.value)) debouncedLoadMenu();
+}
+
 async function run(action) {
   mutationSeq += 1;
   busy.value = true;
@@ -142,6 +148,7 @@ async function run(action) {
     return false;
   } finally {
     busy.value = false;
+    refreshRecipeStock();
   }
 }
 
@@ -321,6 +328,7 @@ async function submitPayment(payments) {
     // 409 (shift tutup, tab tidak terbuka, kembalian tak valid) sudah ditoast global.
   } finally {
     paying.value = false;
+    refreshRecipeStock(); // 092 D8
   }
 }
 

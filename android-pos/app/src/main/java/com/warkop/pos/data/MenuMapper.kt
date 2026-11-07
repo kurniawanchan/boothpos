@@ -63,6 +63,8 @@ object MenuMapper {
                     variantName = v.variantName, code = v.sku.orEmpty(),
                     // Sama seperti POS web: saldo outlet bila ada, selain itu total; hidangan tanpa stok fisik tidak punya angka.
                     stock = if (v.trackStock) (v.outletStock ?: v.currentStock) else null,
+                    // 092 — angka stok di atas SUDAH hasil hitung server untuk varian beresep; di sini hanya basis dan bahan penghambat.
+                    stockBasis = v.stockBasis, limitingMaterial = v.stockLimiting?.name,
                 )
             }
             items += variants

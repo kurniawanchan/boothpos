@@ -162,6 +162,31 @@ class ModifierMaterialConsumption
     }
 
     /**
+     * 092 (research D5) — kebutuhan bahan yang berasal dari RESEP saja (blok dasar dan blok bermodifier milik resep),
+     * tanpa bahan pilihan modifier. Dipakai penjaga kapasitas dan penghitung tahanan MenuStockService: keputusan
+     * pemilik 2026-11-06 menolak pesanan hanya untuk kebutuhan resep; bahan pilihan modifier tetap peringatan (087).
+     * Memakai `addRecipeNeed` yang SAMA dengan pemotongan, jadi tidak ada penerjemah kedua.
+     *
+     * @param  Collection<int, OrderItem>  $items
+     * @return array{0: array<int, array<int, float>>, 1: array<int, Material>} [need[bahan][baris] => jumlah, bahan]
+     */
+    public function recipeNeed(Collection $items): array
+    {
+        $need = [];
+        $materials = [];
+        $costPerPortion = [];
+        $this->addRecipeNeed($items, $need, $materials, $costPerPortion);
+
+        ksort($need);
+        foreach ($need as $materialId => $perLine) {
+            ksort($perLine);
+            $need[$materialId] = array_filter(array_map(fn ($q) => round($q, 3), $perLine), fn ($q) => $q > 0);
+        }
+
+        return [array_filter($need), $materials];
+    }
+
+    /**
      * 087 — bahan pilihan modifier. `$costPerPortion` HANYA berisi biaya bahan pilihan: biaya resep sudah ada di
      * `cost_price` varian (disinkronkan RecipeService), jadi menambahkannya lagi di sini akan menghitung dua kali (089 D9).
      *
@@ -251,7 +276,8 @@ class ModifierMaterialConsumption
                         if ($material === null || $material->trashed() || ! $material->is_active) {
                             continue;
                         }
-                        $perPortion = (float) $line->quantity / (1 - (float) $line->shrinkage_pct / 100) / $portions * $times;
+                        // 092 D2: rumus tunggal, juga dipakai angka stok menu (MenuStockService).
+                        $perPortion = \App\Support\RecipeCost::perPortionNeed((float) $line->quantity, (float) $line->shrinkage_pct, $portions, $times);
                         $need[$material->id][$item->id] = ($need[$material->id][$item->id] ?? 0) + $perPortion * $item->qty;
                         $materials[$material->id] ??= $material;
                         // Biaya blok DASAR sudah ada di cost_price varian; biaya blok bermodifier belum, jadi masuk HPP baris di sini.

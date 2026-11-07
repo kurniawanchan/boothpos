@@ -256,3 +256,84 @@ describe('BaseSelect — fits the screen (037)', () => {
   });
 });
 
+
+// 092 — opsi tambahan (opt-in) untuk tabel Resep: opsi nonaktif, judul kelompok, gaya sel tabel, nama aksesibel.
+describe('BaseSelect — disabled options, groups, cell mode (092)', () => {
+  const MIXED = [
+    { value: '', label: 'Tanpa modifier' },
+    { value: 10, label: 'Lvl 1', group: 'Level', disabled: true },
+    { value: 11, label: 'Lvl 2', group: 'Level' },
+    { value: 20, label: 'Susu', group: 'Topping' },
+  ];
+
+  it('shows each group heading once, before the first option of that group', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: MIXED, modelValue: '' } });
+    await user.click(screen.getByRole('combobox'));
+
+    const kids = [...screen.getByRole('listbox').children].filter((e) => ['presentation', 'option'].includes(e.getAttribute('role')));
+    expect(kids.map((e) => `${e.getAttribute('role')}:${e.textContent.trim()}`)).toEqual([
+      'option:Tanpa modifier', 'presentation:Level', 'option:Lvl 1', 'option:Lvl 2', 'presentation:Topping', 'option:Susu',
+    ]);
+  });
+
+  it('a disabled option is visible but cannot be chosen by click or keyboard', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    render(BaseSelect, { props: { options: MIXED, modelValue: '', 'onUpdate:modelValue': onUpdate } });
+    await user.click(screen.getByRole('combobox'));
+
+    const disabled = screen.getByRole('option', { name: 'Lvl 1' });
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    await user.click(disabled);
+    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.getByRole('listbox')).toBeInTheDocument(); // panel tetap terbuka
+
+    // Fokus kembali ke pemicu (seperti pengguna keyboard): panah bawah dari "Tanpa modifier" melompati "Lvl 1" ke "Lvl 2"; Enter memilihnya.
+    screen.getByRole('combobox').focus();
+    await user.keyboard('{ArrowDown}{Enter}');
+    expect(onUpdate).toHaveBeenCalledWith(11);
+  });
+
+  it('options without group or disabled render exactly as before (no headings, all selectable)', async () => {
+    const user = userEvent.setup();
+    render(BaseSelect, { props: { options: OPTIONS, modelValue: 1 } });
+    await user.click(screen.getByRole('combobox'));
+
+    expect([...screen.getByRole('listbox').children].some((e) => e.getAttribute('role') === 'presentation')).toBe(false);
+    for (const o of screen.getAllByRole('option')) expect(o).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('gives an unlabeled control its accessible name from ariaLabel, and ignores it when a visible label exists', () => {
+    const { unmount } = render(BaseSelect, { props: { options: OPTIONS, ariaLabel: 'Bahan 1' } });
+    expect(screen.getByRole('combobox', { name: 'Bahan 1' })).toBeInTheDocument();
+    unmount();
+
+    render(BaseSelect, { props: { options: OPTIONS, label: 'Outlet', ariaLabel: 'Bahan 1' } });
+    expect(screen.getByRole('combobox', { name: 'Outlet' })).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Bahan 1' })).toBeNull();
+  });
+
+  it('cell mode drops the bordered form-field look (flat, no rounded border) but keeps the same behavior', async () => {
+    const user = userEvent.setup();
+    const onUpdate = vi.fn();
+    render(BaseSelect, { props: { options: OPTIONS, cell: true, ariaLabel: 'Bahan 1', 'onUpdate:modelValue': onUpdate } });
+    const trigger = screen.getByRole('combobox', { name: 'Bahan 1' });
+
+    // `\b` tidak cocok setelah "]", jadi cocokkan token kelas utuh.
+    const has = (el, cls) => el.className.split(/\s+/).includes(cls);
+    expect(has(trigger, 'rounded-lg')).toBe(false);
+    expect(has(trigger, 'h-[46px]')).toBe(false);
+    expect(has(trigger, 'h-11')).toBe(true);
+    await user.click(trigger);
+    await user.click(screen.getByRole('option', { name: 'Yayi' }));
+    expect(onUpdate).toHaveBeenCalledWith(2);
+  });
+
+  it('the default (non-cell) look is unchanged: bordered rounded field of 46px', () => {
+    render(BaseSelect, { props: { options: OPTIONS } });
+    const tokens = screen.getByRole('combobox').className.split(/\s+/);
+    expect(tokens).toContain('rounded-lg');
+    expect(tokens).toContain('h-[46px]');
+  });
+});

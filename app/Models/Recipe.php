@@ -29,6 +29,16 @@ class Recipe extends Model
         return ['yield' => 'decimal:3', 'effective_from' => 'date', 'cost_applied_at' => 'datetime', 'archived_at' => 'datetime'];
     }
 
+    protected static function booted(): void
+    {
+        // 092 D6: memo "varian beresep" harus ikut berubah setiap resep disimpan/dihapus, termasuk lewat jalur
+        // yang tidak melewati RecipeService (impor, tes). Pivot `recipe_variants` tidak punya event, jadi
+        // RecipeService juga memanggil forget() sesudah menyinkronkan tautan.
+        $forget = fn () => app(\App\Support\RecipeDrivenVariants::class)->forget();
+        static::saved($forget);
+        static::deleted($forget);
+    }
+
     /** Resep yang boleh memotong stok hari ini: bukan arsip dan sudah berlaku menurut hari bisnis (042). */
     public function scopeActive(Builder $q): Builder
     {

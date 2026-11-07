@@ -81,5 +81,35 @@ describe('PosCartPanel', () => {
       expect(screen.getByRole('button', { name: 'Tambah Indomie Kuah' })).not.toBeDisabled();
     });
   });
+
+  // 092 — kenapa tombol + berhenti: bahan resep penghambat (angka batas = stok menu dari server).
+  describe('recipe stock limit', () => {
+    const limiting = { material_id: 7, name: 'Telur', unit: 'butir', on_hand: '3.000', per_portion: '1.000' };
+
+    it('names the limiting ingredient once the quantity reaches the menu stock, and stops the + button', async () => {
+      const { pinia } = renderPanel();
+      const cart = usePosCartStore(pinia);
+      cart.add({ variant_id: 1, sku: 'SKU1', name: 'Nasi Goreng', sell_price: '20000.00', current_stock: 1, stock_basis: 'recipe', stock_limiting: limiting });
+      await Promise.resolve();
+      expect(screen.getByTestId('cart-recipe-limit')).toHaveTextContent(/maksimal 1 porsi.*telur/i);
+      expect(screen.getByRole('button', { name: /tambah|increase/i })).toBeDisabled();
+    });
+
+    it('shows no hint while below the limit', async () => {
+      const { pinia } = renderPanel();
+      const cart = usePosCartStore(pinia);
+      cart.add({ variant_id: 1, sku: 'SKU1', name: 'Nasi Goreng', sell_price: '20000.00', current_stock: 5, stock_basis: 'recipe', stock_limiting: limiting });
+      await Promise.resolve();
+      expect(screen.queryByTestId('cart-recipe-limit')).toBeNull();
+    });
+
+    it('shows no hint for a non-recipe item even at its stock limit', async () => {
+      const { pinia } = renderPanel();
+      const cart = usePosCartStore(pinia);
+      cart.add({ variant_id: 2, sku: 'SKU2', name: 'Kopi', sell_price: '10000.00', current_stock: 1 });
+      await Promise.resolve();
+      expect(screen.queryByTestId('cart-recipe-limit')).toBeNull();
+    });
+  });
 });
 

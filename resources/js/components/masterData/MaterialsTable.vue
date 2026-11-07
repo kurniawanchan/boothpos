@@ -20,6 +20,7 @@ import MaterialStockAdjustModal from './MaterialStockAdjustModal.vue';
 import MaterialUsageModal from './MaterialUsageModal.vue';
 import { useOutletStore } from '../../stores/outlet';
 import { isNegativeStock, materialStockText } from '../../utils/materialStock';
+import { OTHER_UNIT, needsCustomUnit, unitOptions } from '../../utils/materialUnits';
 
 /**
  * Daftar bahan baku (pencarian, tabel, formulir, hapus, harga vendor) — dipecah UTUH dari MaterialsView (perilaku
@@ -122,6 +123,23 @@ const form = reactive(blankForm());
 const formErrors = reactive({});
 const saving = ref(false);
 
+// Satuan dipilih dari daftar (searchable); "Lainnya…" membuka isian teks untuk satuan di luar daftar, dan bahan lama
+// bersatuan khusus tetap tampil lewat mode itu (nilainya tidak hilang diam-diam). Server tetap menerima teks apa pun.
+const customUnit = ref(false);
+const unitChoices = computed(() => unitOptions(t('vendors_materials.unit_other')));
+const unitChoice = computed({
+  get: () => (customUnit.value ? OTHER_UNIT : form.unit),
+  set: (v) => {
+    if (v === OTHER_UNIT) {
+      customUnit.value = true;
+      form.unit = '';
+    } else {
+      customUnit.value = false;
+      form.unit = v;
+    }
+  },
+});
+
 const showDelete = ref(false);
 const deleteTarget = ref(null);
 const deleting = ref(false);
@@ -132,6 +150,7 @@ const pricesMaterialId = ref(null);
 function openCreate() {
   editingMaterial.value = null;
   Object.assign(form, blankForm());
+  customUnit.value = false;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -147,6 +166,7 @@ function openEdit(material) {
     kind: material.kind ?? 'ingredient',
     standard_cost: material.standard_cost ?? '',
   });
+  customUnit.value = needsCustomUnit(material.unit);
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -276,7 +296,17 @@ defineExpose({ openCreate, reload: load });
       />
       <BaseInput v-model="form.name" :label="t('vendors_materials.material_name')" required maxlength="150" :error="formErrors.name" />
       <BaseSelect v-model="form.kind" :label="t('vendors_materials.material_kind')" :options="kindOptions" :error="formErrors.kind" />
-      <BaseInput v-model="form.unit" :label="t('vendors_materials.unit_with_examples')" required maxlength="20" :error="formErrors.unit" />
+      <BaseSelect
+        v-model="unitChoice"
+        :label="t('vendors_materials.unit')"
+        :options="unitChoices"
+        :placeholder="t('vendors_materials.unit_placeholder')"
+        searchable
+        required
+        :error="customUnit ? '' : formErrors.unit"
+        data-testid="material-unit-select"
+      />
+      <BaseInput v-if="customUnit" v-model="form.unit" :label="t('vendors_materials.unit_custom')" required maxlength="20" :error="formErrors.unit" data-testid="material-unit-custom" />
       <BaseInput
         v-if="form.kind === 'semi_finished'"
         v-model="form.standard_cost"

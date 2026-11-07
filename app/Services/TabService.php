@@ -181,7 +181,8 @@ class TabService
         app(\App\Services\ReleaseService::class)->publishDueCached();
         app(\App\Services\RecipeService::class)->applyDueCached();
 
-        return DB::transaction(function () use ($tab, $data, $user) {
+        // 092 — `transaction()` membaca data terbaru (READ COMMITTED) agar penjaga kapasitas melihat baris tab lain yang baru di-commit.
+        return app(MenuStockService::class)->transaction(function () use ($tab, $data, $user) {
             $order = $this->lockOpen($tab);
 
             $variant = ProductVariant::with('product')->lockForUpdate()->findOrFail($data['variant_id']);
@@ -237,6 +238,10 @@ class TabService
                 ]);
             }
 
+            // 092 FR-013 — tolak bila bahan RESEP seluruh isi tab ini melebihi saldo setelah tahanan tab lain (409).
+            // Dijalankan sesudah baris tersimpan supaya kebutuhan memuat baris baru; penolakan menggulung transaksi.
+            app(MenuStockService::class)->assertCanFulfil($order, $order->items()->get());
+
             $this->stockService->applyLineMovementIfTracked(
                 line: $line, variant: $variant, outletId: (int) $order->outlet_id, type: 'sale', qtyChange: -$qty,
                 referenceType: 'order_item', referenceId: $line->id, userId: $user->id,
@@ -253,12 +258,13 @@ class TabService
      */
     public function updateLine(Order $tab, int $itemId, array $data, User $user): Order
     {
-        return DB::transaction(function () use ($tab, $itemId, $data, $user) {
+        return app(MenuStockService::class)->transaction(function () use ($tab, $itemId, $data, $user) {
             $order = $this->lockOpen($tab);
             $line = $order->items()->findOrFail($itemId);
             $this->assertUnsent($line);
 
             $reprice = false;
+            $mayNeedMore = false;   // 092: hanya kenaikan qty atau ganti pilihan yang bisa menambah kebutuhan bahan
 
             if (array_key_exists('note', $data)) {
                 $line->note = $this->cleanNote($data['note']);
@@ -276,6 +282,7 @@ class TabService
                 $line->modifiers = $resolved['snapshot'] ?: null;
                 $line->sell_price = $resolved['unit_price'];
                 $reprice = true;
+                $mayNeedMore = true;
             }
 
             if (isset($data['qty']) && (int) $data['qty'] !== $line->qty) {
@@ -294,6 +301,7 @@ class TabService
 
                 $line->qty = (int) $data['qty'];
                 $reprice = true;
+                $mayNeedMore = $mayNeedMore || $delta > 0;
             }
 
             if ($reprice) {
@@ -301,6 +309,10 @@ class TabService
             }
 
             $line->save();
+            // 092 FR-013 — menurunkan qty tidak pernah ditolak (melepas tahanan); menaikkan/ganti pilihan diperiksa.
+            if ($mayNeedMore) {
+                app(MenuStockService::class)->assertCanFulfil($order, $order->items()->get());
+            }
             $this->recalculate($order);
             $this->assertNotBelowPaid($order);
 
