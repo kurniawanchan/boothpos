@@ -38,7 +38,8 @@ class OrderApprovalCloneTest extends TestCase
             'image_path' => 'order-approvals/live-signature.png', 'image_mime' => 'image/png',
             'items_hash' => $seller['items_hash'], 'items_snapshot' => json_encode(['lines' => $seller['items']]),
             'approved_by' => $this->cloneUserId(), 'approver_name' => 'Penyetuju', 'on_behalf' => false,
-            'approved_at' => now(), 'active_slot' => 1, 'created_at' => now(), 'updated_at' => now(),
+            'approved_at' => now(), 'active_slot' => 1, 'bulk_ref' => '0b1f2e3d-0000-4000-8000-000000000064',
+            'created_at' => now(), 'updated_at' => now(),
         ]);
 
         (new LiveToDemoCloner)->run();
@@ -48,6 +49,8 @@ class OrderApprovalCloneTest extends TestCase
 
         $demoApproval = OrderApproval::where('order_id', $demoOrderId)->firstOrFail();
         $this->assertNotSame($liveApprovalId, $demoApproval->id);
+        // 064 — penanda batch ikut tersalin apa adanya (opak, tidak unik, tak perlu dibuat ulang); berkas bersama sudah disalin SATU kali oleh FileCopier.
+        $this->assertSame('0b1f2e3d-0000-4000-8000-000000000064', $demoApproval->bulk_ref);
         $this->assertNotSame('order-approvals/live-signature.png', $demoApproval->image_path, 'berkas disalin, tak pernah dibagi');
         $this->assertSame('live-signature-bytes', Storage::disk('local')->get($demoApproval->image_path));
         $this->assertTrue(Storage::disk('local')->exists('order-approvals/live-signature.png'), 'berkas LIVE tak tersentuh');

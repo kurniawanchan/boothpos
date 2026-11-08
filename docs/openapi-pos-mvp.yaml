@@ -322,6 +322,11 @@ paths:
                       database sudah mutakhir. Daftar migrasinya TIDAK PERNAH
                       dikirim. Aplikasi tidak pernah menerapkan migrasi dari
                       sebuah request — administrator yang melakukannya.
+                  bulk_approve_max:
+                    type: integer
+                    description: |
+                      064 — batas penjualan per persetujuan massal (`config('approvals.bulk_max')`, bawaan 200). Terbuka untuk semua
+                      peran; hanya kemudahan agar dialog bisa memperingatkan SEBELUM mengirim — server tetap penegaknya (422).
 
   /settings/payment:
     get:
@@ -2148,6 +2153,65 @@ paths:
         '200': { description: "Berkas gambar", content: { 'image/*': { schema: { type: string, format: binary } } } }
         '403': { description: Tanpa menu sales }
         '404': { description: "Gambar tak ada, bukan milik penjualan ini, sudah dihapus, atau berkasnya hilang." }
+
+  /orders/approvals/bulk/preview:
+    post:
+      tags: [Order]
+      summary: Pratinjau persetujuan massal — apa yang AKAN disetujui (064)
+      description: |
+        Hanya baca: tidak menulis baris, berkas, atau log, dan tidak merekonsiliasi persetujuan basi. Mengembalikan
+        angka untuk langkah konfirmasi (`approvals`, `eligible_orders`, `amount`, rincian per seller), penjualan yang
+        akan dilewati beserta alasannya, dan `plan` = `items_hash` terkini tiap seller yang akan disetujui (isi yang
+        akan ditinjau pengguna; dikirim kembali saat menerapkan). `selected = eligible_orders + skipped.length`.
+        Aksi `sales.approve`; id yang tak terlihat pengguna (mode lain, seller lain, tak ada) sama-sama `not_found`
+        tanpa `order_number`. Maksimal `bulk_approve_max` id (422 menyebut batasnya).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_ids]
+              properties:
+                order_ids: { type: array, minItems: 1, items: { type: integer }, description: "Distinct, maksimal `config('approvals.bulk_max')` (bawaan 200)." }
+      responses:
+        '200': { description: Pratinjau, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/BulkApprovalPreview' } } } } } }
+        '403': { description: "Peran tanpa aksi `approve` (`action_not_allowed`)", content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalError' } } } }
+        '422': { description: "`order_ids` kosong/bukan bilangan bulat/tidak distinct, atau melebihi batas." }
+
+  /orders/approvals/bulk:
+    post:
+      tags: [Order]
+      summary: Setujui banyak penjualan sekaligus (064)
+      description: |
+        Titik masuk massal di atas persetujuan satu seller (059) — aturannya sama, tak ada aturan baru. SATU
+        `method`/`image` untuk seluruh batch; gambar divalidasi dan disimpan SEKALI sebelum penjualan mana pun
+        disentuh, path-nya dipakai bersama semua baris batch. Tiap PENJUALAN satu transaksi yang menyetujui semua
+        seller yang masih menunggu DAN boleh disetujui pemanggil (owner/admin: semua seller, `on_behalf`; pengguna
+        ber-seller: hanya sellernya), terlepas dari penjualan lain — gagal pada satu penjualan hanya menggulung
+        penjualan itu. Yang tak layak DILEWATI dengan alasan; respons selalu `200` setelah bentuk valid. Kesegaran:
+        isi seller harus sama dengan `plan` (dari pratinjau), kalau tidak penjualan dilewati `changed`; `plan` hanya
+        bisa membuat sebuah penjualan dilewati, tak pernah membuatnya berhasil. Idempoten dalam efek: mengulang
+        permintaan yang sama melewati yang sudah disetujui (indeks unik tetap jaring terakhir). Semua persetujuan batch
+        berbagi `bulk_ref`; tiap persetujuan punya log `order_approved` di transaksinya, ditambah satu log agregat
+        `order_bulk_approved`. Tidak mengubah uang, stok, laporan, atau settlement.
+        `order_ids` dan `plan` dikirim sebagai SATU string JSON per kolom (array bersarang melewati `max_input_vars` PHP).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [order_ids, plan, method]
+              properties:
+                order_ids: { type: string, description: "String JSON: array id penjualan (distinct, ≤ batas)." }
+                plan: { type: string, description: "String JSON: `plan` dari pratinjau. `[]` sah (semua penjualan akan dilewati `changed`)." }
+                method: { type: string, enum: [draw, upload, stamp] }
+                image: { type: string, format: binary, description: "Wajib untuk draw/upload, dilarang untuk stamp. PNG/JPEG dari ISI berkas, ≤ 5 MB." }
+      responses:
+        '200': { description: Hasil per penjualan, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/BulkApprovalResult' } } } } } }
+        '403': { description: "Peran tanpa aksi `approve` (`action_not_allowed`)", content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalError' } } } }
+        '422': { description: "Gambar salah (kurang/berlebih untuk metodenya, 0 byte, > 5 MB, bukan PNG/JPEG), JSON rusak, metode salah, id tidak distinct, atau melebihi batas — DITOLAK sebelum penjualan mana pun diproses: nol baris, nol berkas." }
 
   /orders/{id}/approvals:
     get:
@@ -6425,6 +6489,66 @@ components:
               method: { type: string, enum: [draw, upload, stamp], nullable: true }
               approved_at: { type: string, format: date-time, nullable: true }
               on_behalf: { type: boolean, nullable: true }
+    BulkApprovalPreview:
+      type: object
+      description: "064 — respons pratinjau persetujuan massal."
+      required: [selected, eligible_orders, approvals, amount, sellers, skipped, plan]
+      properties:
+        selected: { type: integer }
+        eligible_orders: { type: integer }
+        approvals: { type: integer, description: "Jumlah persetujuan seller yang akan dicatat bila diterapkan." }
+        amount: { $ref: '#/components/schemas/Money' }
+        sellers:
+          type: array
+          items:
+            type: object
+            properties:
+              artist_id: { type: integer }
+              artist_name: { type: string }
+              approvals: { type: integer }
+              amount: { $ref: '#/components/schemas/Money' }
+        skipped:
+          type: array
+          items: { $ref: '#/components/schemas/BulkApprovalSkip' }
+        plan:
+          type: array
+          items:
+            type: object
+            properties:
+              order_id: { type: integer }
+              sellers:
+                type: array
+                items: { type: object, properties: { artist_id: { type: integer }, items_hash: { type: string } } }
+    BulkApprovalSkip:
+      type: object
+      properties:
+        order_id: { type: integer }
+        order_number: { type: string, nullable: true, description: "null untuk `not_found` (tak pernah membocorkan nomor penjualan yang tak terlihat)." }
+        reason: { type: string, enum: [not_found, voided, already_approved, no_approvable_seller, changed, failed] }
+        message: { type: string }
+    BulkApprovalResult:
+      type: object
+      description: "064 — respons penerapan persetujuan massal. `approved_orders + skipped_total = selected = results.length`; `results` berurutan seperti permintaan."
+      required: [bulk_ref, method, selected, approved_orders, approved_sellers, skipped_total, skipped_by_reason, results]
+      properties:
+        bulk_ref: { type: string, format: uuid }
+        method: { type: string, enum: [draw, upload, stamp] }
+        selected: { type: integer }
+        approved_orders: { type: integer }
+        approved_sellers: { type: integer }
+        skipped_total: { type: integer }
+        skipped_by_reason: { type: object, additionalProperties: { type: integer } }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              order_id: { type: integer }
+              order_number: { type: string, nullable: true }
+              status: { type: string, enum: [approved, skipped] }
+              sellers_approved: { type: integer, description: "Hanya untuk `approved`." }
+              reason: { type: string, enum: [not_found, voided, already_approved, no_approvable_seller, changed, failed], description: "Hanya untuk `skipped`." }
+              message: { type: string }
     OrderApprovals:
       type: object
       description: "059 — respons GET/POST `/orders/{id}/approvals`."
@@ -6478,6 +6602,7 @@ components:
               has_image: { type: boolean }
               can_view_image: { type: boolean }
               invalidated_at: { type: string, format: date-time, nullable: true }
+              via_bulk: { type: boolean, description: "064 — dibuat oleh persetujuan massal (`bulk_ref` terisi)." }
               invalidation_reason: { type: string, nullable: true, example: items_changed }
     ApprovalError:
       type: object
@@ -6586,6 +6711,12 @@ components:
           type: array
           items: { type: string }
           example: [dashboard, pos, session, products, reports, settings]
+        can_approve_sellers:
+          type: boolean
+          description: |
+            064 — pengguna punya seller yang bisa disetujuinya (owner/admin, atau terikat ke seller). Dihitung server oleh satu
+            definisi (`OrderApprovalService::mayApproveAny`); dasar menampilkan tombol "Setujui massal". Kosmetik: server
+            tetap memeriksa hak per seller per penjualan.
         seller_scoped:
           type: boolean
           description: |

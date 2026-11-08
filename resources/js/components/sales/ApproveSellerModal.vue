@@ -1,25 +1,18 @@
 <script setup>
-import { computed, defineAsyncComponent, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import BaseModal from '../ui/BaseModal.vue';
 import BaseButton from '../ui/BaseButton.vue';
-import ApprovalStamp from './ApprovalStamp.vue';
+import ApprovalMethodPicker from './ApprovalMethodPicker.vue';
 import { formatIDR } from '../../utils/money';
-import { useAuthStore } from '../../stores/auth';
-
-// Kanvas hanya dimuat saat dialog ini dibuka (bukan di bundel Sales) — Constitution V.
-import SignaturePadFallback from '../settlement/SignaturePadFallback.vue';
-const SignaturePad = defineAsyncComponent({
-  loader: () => import('../settlement/SignaturePad.vue'),
-  errorComponent: SignaturePadFallback,
-  timeout: 15000,
-});
 
 /**
  * 059 (US1) — menyetujui item SATU seller: pilih metode (gambar / unggah / stempel), lalu langkah
  * konfirmasi yang menyebut seller, jumlah item, dan nilainya SEBELUM apa pun dikirim. Membatalkan atau
  * menutup tidak mengirim apa pun. Server menentukan segalanya (penyetuju, waktu, hak, kesegaran hash);
  * di sini hanya kemudahan agar kesalahan jelas terlihat sebelum permintaan.
+ *
+ * 064: pemilih metode dipindah ke ApprovalMethodPicker (dipakai juga dialog massal). Perilaku dan test id tak berubah.
  */
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -31,17 +24,10 @@ const props = defineProps({
 const emit = defineEmits(['submit', 'close']);
 
 const { t } = useI18n();
-const auth = useAuthStore();
-
-const METHODS = ['draw', 'upload', 'stamp'];
-const MAX_BYTES = 5 * 1024 * 1024;
-const ALLOWED = ['image/png', 'image/jpeg'];
 
 const method = ref('draw');
 const step = ref('choose'); // choose → confirm
-const hasInk = ref(false);
-const pad = ref(null);
-const file = ref(null);
+const picker = ref(null);
 const clientError = ref('');
 
 watch(
@@ -50,59 +36,24 @@ watch(
     if (!open) return;
     method.value = 'draw';
     step.value = 'choose';
-    hasInk.value = false;
-    file.value = null;
     clientError.value = '';
+    picker.value?.reset();
   },
   { immediate: true },
 );
 
-watch(method, () => {
-  clientError.value = '';
-  hasInk.value = false; // berpindah tab melepas kanvas (goresan hilang), jadi penanda tinta ikut direset
-});
-
-function onFile(event) {
-  clientError.value = '';
-  const picked = event.target.files?.[0] ?? null;
-  event.target.value = ''; // memilih berkas yang sama dua kali tetap memicu change
-  if (!picked) return;
-  if (!ALLOWED.includes(picked.type)) {
-    file.value = null;
-    clientError.value = t('approvals.file_type_error');
-  } else if (picked.size > MAX_BYTES) {
-    file.value = null;
-    clientError.value = t('approvals.file_size_error');
-  } else {
-    file.value = picked;
-  }
-}
-
 function goConfirm() {
   clientError.value = '';
-  if (method.value === 'draw' && !hasInk.value) {
-    clientError.value = t('approvals.signature_required');
-    return;
-  }
-  if (method.value === 'upload' && !file.value) {
-    clientError.value = clientError.value || t('approvals.image_required');
-    return;
-  }
+  if (!picker.value?.validate()) return;
   step.value = 'confirm';
 }
 
 async function confirm() {
-  let image = null;
-  if (method.value === 'draw') {
-    const blob = await pad.value?.toBlob();
-    if (!blob) {
-      step.value = 'choose';
-      clientError.value = t('approvals.signature_required');
-      return;
-    }
-    image = new File([blob], 'signature.png', { type: 'image/png' });
-  } else if (method.value === 'upload') {
-    image = file.value;
+  const image = await picker.value?.getImage();
+  if (image === undefined) {
+    step.value = 'choose';
+    clientError.value = t('approvals.signature_required');
+    return;
   }
   emit('submit', { method: method.value, image });
 }
@@ -112,7 +63,6 @@ const summary = computed(() => ({
   count: props.seller?.items?.reduce((n, i) => n + Number(i.qty ?? 0), 0) ?? 0,
   amount: formatIDR(props.seller?.subtotal ?? 0),
 }));
-const today = new Date().toLocaleDateString();
 </script>
 
 <template>
@@ -123,39 +73,13 @@ const today = new Date().toLocaleDateString();
       </p>
 
       <!-- v-show (bukan v-if): kanvas harus tetap terpasang di langkah konfirmasi supaya goresannya masih bisa dibaca. -->
-      <div v-show="step === 'choose'" class="flex flex-col gap-4">
-        <div role="tablist" class="flex flex-wrap gap-1.5">
-          <button
-            v-for="m in METHODS"
-            :key="m"
-            type="button"
-            role="tab"
-            :data-testid="`method-${m}`"
-            :aria-selected="method === m"
-            class="rounded-full border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors"
-            :class="method === m ? 'border-brand bg-mint-100 text-brand-active' : 'border-line bg-white text-muted-4 hover:border-brand'"
-            @click="method = m"
-          >
-            {{ t(`approvals.method_${m}`) }}
-          </button>
-        </div>
-
-        <SignaturePad v-if="method === 'draw'" ref="pad" @change="(v) => (hasInk = v)" />
-
-        <div v-else-if="method === 'upload'" class="flex flex-col gap-2">
-          <label class="inline-flex w-fit cursor-pointer items-center gap-2 rounded-lg border border-line bg-white px-3.5 py-2 text-[13px] font-semibold hover:border-brand">
-            <i class="ph-duotone ph-upload-simple text-[17px]" aria-hidden="true"></i>
-            {{ t('approvals.upload_choose') }}
-            <input type="file" class="sr-only" accept="image/png,image/jpeg" data-testid="approval-file" @change="onFile" />
-          </label>
-          <p class="text-[12px] text-muted-3">{{ file ? t('approvals.upload_selected', { name: file.name }) : t('approvals.upload_hint') }}</p>
-        </div>
-
-        <div v-else class="flex flex-col items-start gap-3">
-          <p class="text-[13px] text-muted-4">{{ t('approvals.stamp_hint') }}</p>
-          <ApprovalStamp :seller="summary.seller" :approver="auth.user?.name || ''" :date="today" />
-        </div>
-      </div>
+      <ApprovalMethodPicker
+        v-show="step === 'choose'"
+        ref="picker"
+        v-model:method="method"
+        :seller-label="summary.seller"
+        @error="(m) => (clientError = m)"
+      />
 
       <div v-if="step === 'confirm'" class="flex flex-col gap-2" data-testid="approval-confirm-step">
         <h3 class="text-[14px] font-bold">{{ t('approvals.confirm_title') }}</h3>

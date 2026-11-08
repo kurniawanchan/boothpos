@@ -116,6 +116,20 @@ describe('OrderApprovalSection (059)', () => {
     expect(within(screen.getByTestId('approval-history-40')).queryByText(/dibatalkan/i)).toBeNull();
   });
 
+  it('marks history entries created by a bulk approval (064) and only those', async () => {
+    getApprovals.mockResolvedValue({
+      ...PARTIAL,
+      history: [
+        { id: 41, artist_id: 3, artist_name: 'Seller C', method: 'stamp', approver_name: 'Owner', approved_at: '2026-11-05T12:00:00+07:00', on_behalf: true, via_bulk: true, invalidated_at: null, invalidation_reason: null },
+        { id: 42, artist_id: 1, artist_name: 'Seller A', method: 'stamp', approver_name: 'Owner', approved_at: '2026-11-05T12:05:00+07:00', on_behalf: true, via_bulk: false, invalidated_at: null, invalidation_reason: null },
+      ],
+    });
+    mount();
+    await screen.findByTestId('approval-history');
+    expect(screen.getByTestId('approval-history-bulk-41')).toHaveTextContent(/lewat persetujuan massal/i);
+    expect(screen.queryByTestId('approval-history-bulk-42')).toBeNull();
+  });
+
   it('does not render a history block when the payload has none (non-admin)', async () => {
     mount();
     await screen.findByTestId('approval-overall');

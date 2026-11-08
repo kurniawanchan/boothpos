@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, defineAsyncComponent } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { listEvents } from '../api/events';
@@ -28,6 +28,9 @@ import PaymentProofsModal from '../components/sales/PaymentProofsModal.vue';
 import RowAttachments from '../components/sales/RowAttachments.vue';
 import ApprovalStatusIcon from '../components/sales/ApprovalStatusIcon.vue';
 import CopyTextButton from '../components/ui/CopyTextButton.vue';
+
+// 064 — dialog (dan kanvasnya) dimuat hanya saat pertama dibuka; bundel Sales tak membengkak (Constitution V).
+const BulkApproveModal = defineAsyncComponent(() => import('../components/sales/BulkApproveModal.vue'));
 
 // Dikeluarkan dari ReportsView.vue menjadi menu tersendiri — laporan
 // penjualan terbuka untuk semua peran (termasuk kasir), berbeda dari
@@ -363,6 +366,25 @@ async function doBulkVerify() {
   }
 }
 
+// --- persetujuan massal (064) -------------------------------------------------------------
+// Pilih transaksi → "Setujui massal (N)" → dialog (metode + gambar sekali, pratinjau server, konfirmasi, ringkasan).
+// Klien hanya mengirim id yang dipilih; server memutuskan seller mana yang boleh disetujui dan MELEWATI sisanya dengan
+// alasan. Tombol disembunyikan (bukan dinonaktifkan) bagi yang tak punya seller untuk disetujui (`can_approve_sellers`).
+const showBulkApprove = ref(false);
+const bulkApproveIds = ref([]);
+
+function openBulkApprove() {
+  bulkApproveIds.value = [...chosenOrderIds.value]; // foto pilihan saat dibuka: tak ada sisa dari pembukaan sebelumnya
+  showBulkApprove.value = true;
+}
+
+async function onBulkApproved() {
+  await load();
+  // Pilihan hanya dipertahankan untuk baris yang MASIH menunggu persetujuan (pola verifikasi massal).
+  const stillPending = new Set(transactions.value.filter((tx) => tx.approval && tx.approval.status !== 'full' && tx.approval.status !== 'voided').map((tx) => tx.key));
+  selected.value = new Set([...selected.value].filter((k) => stillPending.has(k)));
+}
+
 // --- aksi baris --------------------------------------------------------------------------
 // Klik nomor transaksi membuka detail transaksi (dan dari sana struk / pembatalan).
 const showItems = ref(false);
@@ -408,6 +430,10 @@ function showCustomerDetail(row) {
            mengembalikan semua event bila event_id tak dikirim). -->
       <BaseSelect class="w-56" v-model="eventId" :placeholder="t('reports.all_events')" :options="eventOptions" />
       <span class="flex-1"></span>
+      <BaseButton v-if="chosenOrderIds.length > 0 && auth.canDo('sales', 'approve') && auth.canApproveSellers" variant="secondary" data-testid="bulk-approve" @click="openBulkApprove">
+        <i class="ph-duotone ph-stamp text-[16px]" aria-hidden="true"></i>
+        {{ t('approvals.bulk_button', { count: chosenOrderIds.length }) }}
+      </BaseButton>
       <BaseButton v-if="chosenOrderIds.length > 0 && auth.canDo('sales', 'verify')" variant="secondary" data-testid="bulk-verify" @click="showBulkVerify = true">
         <i class="ph-duotone ph-seal-check text-[16px]" aria-hidden="true"></i>
         {{ t('payment_ledger.verify_bulk', { count: chosenOrderIds.length }) }}
@@ -670,6 +696,8 @@ function showCustomerDetail(row) {
       @close="showBulkVerify = false"
       @confirm="doBulkVerify"
     />
+
+    <BulkApproveModal v-if="showBulkApprove" :open="showBulkApprove" :order-ids="bulkApproveIds" @close="showBulkApprove = false" @applied="onBulkApproved" />
 
     <TransactionItemsModal :open="showItems" :order-id="itemsOrderId" @close="showItems = false" @changed="load" />
     <ReceiptModal :open="showReceipt" :order-id="receiptOrderId" @close="showReceipt = false" />

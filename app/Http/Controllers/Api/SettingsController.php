@@ -66,6 +66,9 @@ class SettingsController extends Controller
             // owner/admin (menu `settings`) yang diberi tahu — itu yang berwenang
             // menerapkannya; daftar migrasinya sendiri tidak pernah dikirim.
             'schema_update_required' => (bool) $request->user()?->canAccessMenu('settings') && SchemaStatus::pendingMigrations() !== [],
+            // 064 — batas penjualan per persetujuan massal. Tidak sensitif; dikirim agar dialog bisa memperingatkan SEBELUM
+            // mengirim apa pun. Server tetap penegaknya (BulkOrderApprovalRequest), angka ini hanya kemudahan.
+            'bulk_approve_max' => (int) config('approvals.bulk_max'),
         ]);
     }
 

@@ -30,6 +30,8 @@ export const useSettingsStore = defineStore('settings', {
     appName: DEFAULT_APP_NAME,
     // 035-po-row-actions — hanya true untuk owner/admin saat database tertinggal; server yang menentukan.
     schemaUpdateRequired: false,
+    // 064 — batas penjualan per persetujuan massal (kemudahan UI; server yang menegakkan). 200 = bawaan server.
+    bulkApproveMax: 200,
     loaded: false,
   }),
   getters: {
@@ -51,6 +53,7 @@ export const useSettingsStore = defineStore('settings', {
         this.storeLogoUrl = data.store_logo_url ?? null;
         this.appName = resolveAppName(data.app_name);
         this.schemaUpdateRequired = data.schema_update_required === true;
+        this.bulkApproveMax = Number.isInteger(data.bulk_approve_max) && data.bulk_approve_max > 0 ? data.bulk_approve_max : 200;
         applyThemeAccentColor(this.themeAccentColor);
       } finally {
         this.loaded = true;
