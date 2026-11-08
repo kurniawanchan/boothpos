@@ -498,6 +498,24 @@ One required approval per UNIQUE seller among a POS sale's lines (`order_items.a
 - **Not built, on purpose:** pre-order approval, withdraw/undo, per-store custom stamp, approval columns in the Sales Excel export, reminders, and gating settlement/finalize on approval status.
 - **Not verified in a real browser** (Constitution II, task T043 open): drawing on desktop (mouse/touchpad) and on an Android touch device, popover keyboard behaviour, phone-width layout.
 
+## Bulk approve transactions (feature 064, 2026-11-08)
+
+"Setujui massal (N)" on the Sales list approves many POS sales with ONE stamp / drawn signature / uploaded image. It is a **batch entry point over 059 — no new approval rules**. Rules a future change must not break:
+
+- **`OrderApprovalService` is still the ONLY writer.** `recordSeller()` (row + `order_approved` log) is shared by single `approve()` and `approveBatch()`. Never create `order_approvals` rows anywhere else.
+- **Preview, then apply.** `POST /orders/approvals/bulk/preview` is read-only and returns the confirmation numbers plus a `plan` (per-seller `items_hash`). `POST /orders/approvals/bulk` (multipart) re-evaluates EVERY id on the server; the echoed `plan` can only make an order be skipped as `changed`, never make an approval succeed (same property as single approval's `items_hash`). `order_ids` and `plan` travel as ONE JSON string each — nested multipart arrays for 200 sales blow past PHP's `max_input_vars` (1000).
+- **One definition of eligibility** (`OrderApprovalService::evaluate()`, used by preview and apply): `not_found` (ids resolved through the SCOPED `Order` model, so another mode/seller looks exactly like a missing id and `order_number` is null) → `voided` → `no_approvable_seller` → `already_approved` → (apply only) `changed` / `failed`. `approved_orders + skipped_total = selected = results.length`.
+- **One DB transaction per ORDER** (all its eligible sellers: owner/admin on behalf get all of them or none for that sale), independent across sales. A per-sale exception becomes `failed` with a generic message (detail only in the log). Response is always `200` once the shape is valid.
+- **The image is validated and stored ONCE per batch** (422 before any order is touched — nothing recorded, no file) and its `image_path` is shared by every row of the batch; deleted only if no row was created. Safe because approvals are append-only with no delete path; `can_view_image` is still per approval row, and the clone's `FileCopier` already makes one copy per distinct source.
+- **Traceability without a table**: nullable `order_approvals.bulk_ref` (UUID per batch; NULL = single approval) + `bulk_ref` in each `order_approved` log + one aggregate `order_bulk_approved` log written AFTER the per-order transactions (a summary of committed work — the one place a log is not in the same transaction as what it describes; failure to write it never fails the response). Owner/admin history carries `via_bulk`.
+- **Cap** `config('approvals.bulk_max')` (env `APPROVALS_BULK_MAX`, default 200), enforced in `BulkOrderApprovalRequest` on both endpoints and exposed to the SPA as `GET /settings/features` → `bulk_approve_max` (convenience only).
+- **Button** shows only with `auth.canDo('sales','approve')` AND `auth.canApproveSellers` (`/auth/me` → `can_approve_sellers`, server-computed by `OrderApprovalService::mayApproveAny()`). Hidden, never disabled.
+- **`ApprovalMethodPicker.vue`** (tabs + lazy `SignaturePad` + upload rules + stamp preview) is shared by `ApproveSellerModal` and `BulkApproveModal`. Callers MUST hide it with `v-show`, never `v-if`, between steps (unmounting the canvas loses the strokes). The preview reads names through one `OrderApprovalSummary::namesFor()` map — `BulkQueryCountTest` caught a per-order query without it.
+- **Measured (2026-11-08, test DB, in-process, single-seller stamp batches):** preview of 200 sales 0.06 s; applying 200 sales 1.58 s (~8 ms per sale). Browser/network time and large uploaded images are NOT included.
+- **Not built, on purpose:** per-seller narrowing inside the dialog, a different signature per sale, undo, pre-orders, queued processing, approval columns in the Sales export. Approval images are still not in backups (059).
+- **Not verified in a real browser** (T051 open): drawing with mouse/trackpad, Android touch, phone-width layout. jsdom has no canvas, so the drawn path is unit-tested only up to validation.
+- Test traps: `UploadedFile::fake()` reports its MIME from the extension — content-sniff cases need a real temp file; `rm` is interactive in this shell (use `rm -f`) and macOS has no `timeout`.
+
 ## Reopening a closed shift (feature 063, 2026-11-06)
 
 - **Owner role only, as a FIXED rule.** `POST /sessions/{session}/reopen` checks `$request->user()->role?->isOwner()` inline in `CashierSessionController::reopen()` (403 before any state is revealed). It is deliberately NOT a `MenuActions` action — a role-editor checkbox would imply it can be delegated — so the route sits in `MenuActionsRouteCoverageTest::EXEMPT` with that reason. Do not "fix" the exemption by adding `ability:session,...`.
@@ -515,7 +533,22 @@ One required approval per UNIQUE seller among a POS sale's lines (`order_items.a
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/063-reopen-closed-shift/plan.md`
+Active feature plan: `specs/064-bulk-approve-transactions/plan.md`
+(branch `094-bulk-approve-transactions`, from `develop`; spec dir number ≠ branch number) — one additive nullable column
+(`order_approvals.bulk_ref`), two routes, no new table. A **Bulk approve (N)** action on the Sales list approves many POS
+sales with ONE stamp / drawn signature / uploaded image — a batch entry point over feature 059, no new approval rules.
+`POST /orders/approvals/bulk/preview` (read-only: counts, sellers, amount, per-order skip reasons + a per-seller `items_hash`
+plan) then `POST /orders/approvals/bulk` (multipart; `order_ids` and `plan` as ONE JSON field each, `max_input_vars`-safe).
+`OrderApprovalService` stays the ONLY writer: `recordSeller()` is shared with single `approve()`; each ORDER is one
+transaction approving all its eligible sellers (owner/admin on behalf may approve several), independent across sales;
+ineligible ones are SKIPPED with a reason (`not_found|voided|already_approved|no_approvable_seller|changed|failed`),
+`approved + skipped = selected`. The image is validated and stored ONCE per batch and its path shared by the batch's rows.
+Traceability = `bulk_ref` UUID on each approval + `order_bulk_approved` aggregate log (no batch table). Cap
+`config('approvals.bulk_max')` = 200. Button hidden unless `can_approve_sellers` (new `/auth/me` boolean). The method picker
+is extracted from `ApproveSellerModal` into `ApprovalMethodPicker.vue` (keep the `v-show` canvas rule). Not built: per-seller
+narrowing in the dialog, per-sale signatures, undo, pre-orders, queued processing. See research.md D1–D10.
+
+Previous feature: `specs/063-reopen-closed-shift/plan.md`
 (branch `085-reopen-closed-shift`, from `develop`; spec dir number ≠ branch number) — one additive migration, one route.
 The **Owner role only** (`$user->role?->isOwner()`, inline in the controller; deliberately NOT a `MenuActions` action, so no
 role can be granted it — the route is in `MenuActionsRouteCoverageTest::EXEMPT`) can reopen a CLOSED cashier shift with a

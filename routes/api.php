@@ -264,6 +264,10 @@ Route::prefix('v1')->group(function () {
         Route::patch('/orders/{order}/payments/{payment}/method', [OrderController::class, 'changePaymentMethod'])->middleware('ability:sales,payment_method');
         Route::post('/orders/{order}/payments/{payment}/verify', [OrderController::class, 'verifyPayment'])->middleware('ability:sales,verify');
         Route::post('/orders/verify-payments', [OrderController::class, 'verifyPayments'])->middleware('ability:sales,verify');
+        // 064 — persetujuan massal dari daftar Sales (statis, sebelum '/orders/{order}'). Pratinjau hanya membaca,
+        // tapi tetap POST (badan JSON berisi ratusan id) dan karenanya wajib `ability` (MenuActionsRouteCoverageTest).
+        Route::post('/orders/approvals/bulk/preview', [OrderApprovalController::class, 'bulkPreview'])->middleware('ability:sales,approve');
+        Route::post('/orders/approvals/bulk', [OrderApprovalController::class, 'bulkStore'])->middleware('ability:sales,approve');
         // 054 (US9) — statis, sebelum '/orders/{order}'.
         Route::post('/orders/bulk-receipts', [OrderController::class, 'bulkReceipts'])->middleware('ability:sales,receipts');
         Route::get('/orders/{order}/receipt', [OrderController::class, 'receipt']);

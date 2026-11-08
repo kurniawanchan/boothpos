@@ -16,4 +16,15 @@ return [
     'invalidated_log' => 'Persetujuan seller :seller pada penjualan :number dibatalkan karena item berubah.',
     'behalf_suffix' => ', atas nama seller',
     'methods' => ['draw' => 'tanda tangan digambar', 'upload' => 'gambar diunggah', 'stamp' => 'stempel'],
+    'bulk_limit_exceeded' => 'Maksimal :max penjualan dalam satu persetujuan massal. Kurangi pilihan lalu coba lagi.',
+    'bulk_approved_log' => 'Persetujuan massal (:method) oleh :user: :approved dari :selected penjualan disetujui, :skipped dilewati.',
+    'bulk_via' => 'lewat persetujuan massal',
+    'skip_reasons' => [
+        'not_found' => 'Penjualan tidak ditemukan atau tidak tersedia bagi Anda.',
+        'voided' => 'Penjualan sudah dibatalkan.',
+        'already_approved' => 'Sudah disetujui.',
+        'no_approvable_seller' => 'Tidak ada seller yang bisa Anda setujui pada penjualan ini.',
+        'changed' => 'Penjualan berubah sejak pratinjau. Muat ulang dan tinjau lagi.',
+        'failed' => 'Gagal disetujui. Coba lagi.',
+    ],
 ];

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\OrderApprovalException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\BulkOrderApprovalRequest;
 use App\Http\Requests\StoreOrderApprovalRequest;
 use App\Models\Order;
 use App\Models\OrderApproval;
@@ -35,6 +36,38 @@ class OrderApprovalController extends Controller
         }
 
         return response()->json(['data' => OrderApprovalService::present($order->fresh(), $request->user())], 201);
+    }
+
+    /** 064 — pratinjau persetujuan massal: hanya baca, tidak menulis apa pun. */
+    public function bulkPreview(BulkOrderApprovalRequest $request, OrderApprovalService $service): JsonResponse
+    {
+        return response()->json(['data' => $service->previewBatch($request->orderIds(), $request->user())]);
+    }
+
+    /**
+     * 064 — terapkan persetujuan massal. Selalu 200 setelah validasi bentuk: masalah per penjualan adalah `skipped`
+     * dengan alasan (pola `verify-payments`/`bulk-email`), bukan galat HTTP. Gambar yang salah → 422 SEBELUM apa pun diproses.
+     */
+    public function bulkStore(BulkOrderApprovalRequest $request, OrderApprovalService $service): JsonResponse
+    {
+        // Tiap penjualan ±dua transaksi pendek; 200 penjualan bisa melewati batas 30 dtk PHP bawaan (pola ekspor Sales).
+        set_time_limit(120);
+
+        try {
+            $result = $service->approveBatch(
+                $request->orderIds(),
+                $request->validated('plan'),
+                (string) $request->validated('method'),
+                $request->file('image'),
+                $request->user(),
+            );
+        } catch (OrderApprovalException $e) {
+            return response()->json(['message' => $e->getMessage(), 'code' => $e->reason], $e->status);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
+        }
+
+        return response()->json(['data' => $result]);
     }
 
     /** `{approval}` di-scope ke `{order}` oleh route (scopeBindings): persetujuan penjualan lain → 404. */

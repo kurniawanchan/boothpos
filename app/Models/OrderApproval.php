@@ -19,6 +19,7 @@ class OrderApproval extends Model
     protected $fillable = [
         'order_id', 'artist_id', 'artist_name', 'method', 'image_path', 'image_mime', 'items_hash', 'items_snapshot',
         'approved_by', 'approver_name', 'on_behalf', 'approved_at', 'invalidated_at', 'invalidation_reason', 'active_slot',
+        'bulk_ref', // 064 — UUID satu aksi massal; NULL = persetujuan tunggal
     ];
 
     protected function casts(): array

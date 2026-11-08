@@ -42,6 +42,11 @@ export const useAuthStore = defineStore('auth', {
     /** 058 — seller pengguna dinonaktifkan: layar kosong + pemberitahuan, bukan tampilan penuh. */
     sellerInactive: (state) => !!state.user?.seller_scoped && state.user?.seller_active === false,
     /**
+     * 064 — punya seller yang bisa disetujui (dasar tombol "Setujui massal"). Dihitung server (satu definisi di
+     * OrderApprovalService); payload tanpa bidang ini (server lama) = tak ada informasi ⇒ tampilkan, server tetap menolak.
+     */
+    canApproveSellers: (state) => state.user?.can_approve_sellers !== false,
+    /**
      * 057 — izin AKSI per menu (kosmetik; server menegakkan). Dibaca dari `permissions` hasil GET /auth/me.
      * Payload tanpa `permissions` (server lama / sebelum fitur ini) = tak ada informasi pembatasan ⇒ tampilkan
      * (perilaku lama, semua tombol); server tetap menolak yang tak diizinkan. Layar hanya dirender untuk pengguna yang

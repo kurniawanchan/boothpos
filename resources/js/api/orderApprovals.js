@@ -29,3 +29,25 @@ export function getApprovalImageBlobUrl(orderId, approvalId) {
     .get(`/orders/${orderId}/approvals/${approvalId}/image`, { responseType: 'blob' })
     .then((r) => URL.createObjectURL(r.data));
 }
+
+// 064 — persetujuan massal dari daftar Sales. Server menentukan SEMUANYA per penjualan (hak, seller, batal, siklus,
+// kesegaran); klien hanya mengirim id yang dipilih, metode, gambar, dan `plan` (hash isi yang tadi ditinjau di
+// pratinjau — hanya bisa membuat sebuah penjualan DILEWATI, tak pernah membuatnya berhasil).
+
+/** Pratinjau (hanya baca): jumlah, seller, nilai, yang dilewati + alasannya, dan `plan` untuk langkah terapkan. */
+export function previewBulkApproval(orderIds) {
+  return client.post('/orders/approvals/bulk/preview', { order_ids: orderIds }).then((r) => r.data.data);
+}
+
+/**
+ * Terapkan. Multipart: `order_ids` dan `plan` dikirim sebagai SATU string JSON per kolom (array bersarang ratusan
+ * penjualan melewati `max_input_vars` PHP). Selalu 200 bila bentuk valid; masalah per penjualan ada di `results`.
+ */
+export function bulkApprove({ orderIds, plan, method, image = null }) {
+  const form = new FormData();
+  form.append('order_ids', JSON.stringify(orderIds));
+  form.append('plan', JSON.stringify(plan));
+  form.append('method', method);
+  if (image) form.append('image', image, image.name || 'approval.png');
+  return client.post('/orders/approvals/bulk', form).then((r) => r.data.data);
+}

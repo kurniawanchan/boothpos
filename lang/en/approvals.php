@@ -16,4 +16,15 @@ return [
     'invalidated_log' => 'Seller :seller\'s approval on sale :number was invalidated because the items changed.',
     'behalf_suffix' => ', on behalf of the seller',
     'methods' => ['draw' => 'drawn signature', 'upload' => 'uploaded image', 'stamp' => 'stamp'],
+    'bulk_limit_exceeded' => 'You can approve at most :max sales in one bulk action. Reduce the selection and try again.',
+    'bulk_approved_log' => 'Bulk approval (:method) by :user: :approved of :selected sales approved, :skipped skipped.',
+    'bulk_via' => 'via bulk',
+    'skip_reasons' => [
+        'not_found' => 'Sale not found or not available to you.',
+        'voided' => 'The sale is voided.',
+        'already_approved' => 'Already approved.',
+        'no_approvable_seller' => 'You have no seller to approve on this sale.',
+        'changed' => 'The sale changed since the preview. Reload and review again.',
+        'failed' => 'Could not be approved. Try again.',
+    ],
 ];

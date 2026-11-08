@@ -81,4 +81,42 @@ trait OrderApprovalFixture
 
         return collect($sellers)->firstWhere('artist_id', $artistId)['items_hash'];
     }
+
+    // ------------------------------------------------------------------
+    // 064 — persetujuan massal
+    // ------------------------------------------------------------------
+
+    /** @return array<int, \App\Models\Order> N penjualan seller tunggal (Indomie = seller A), nomor berbeda. */
+    protected function makeSalesOfA(array $w, int $n): array
+    {
+        $out = [];
+        for ($i = 0; $i < $n; $i++) {
+            $out[] = $w['sell']([$w['variants']['indomie']]);
+        }
+
+        return $out;
+    }
+
+    /** @param array<int,int> $ids */
+    protected function bulkPreview(array $ids)
+    {
+        return $this->postJson('/api/v1/orders/approvals/bulk/preview', ['order_ids' => $ids]);
+    }
+
+    /**
+     * Terapkan persetujuan massal seperti klien sungguhan: pratinjau dulu (kecuali `$plan` diberikan), lalu multipart
+     * dengan `order_ids`/`plan` sebagai satu string JSON per kolom.
+     *
+     * @param  array<int,int>  $ids
+     */
+    protected function bulkApply(array $ids, string $method = 'stamp', ?array $plan = null, $image = null)
+    {
+        $plan ??= $this->bulkPreview($ids)->assertOk()->json('data.plan');
+        $data = ['order_ids' => json_encode($ids), 'plan' => json_encode($plan), 'method' => $method];
+        if ($image !== null) {
+            $data['image'] = $image;
+        }
+
+        return $this->post('/api/v1/orders/approvals/bulk', $data, ['Accept' => 'application/json']);
+    }
 }

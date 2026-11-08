@@ -48,4 +48,6 @@ vi.mock('../resources/js/api/orderApprovals', () => ({
   getApprovals: vi.fn().mockResolvedValue({ order_id: 0, status: 'pending', total: 0, approved: 0, pending: 0, progress: '0/0', sellers: [] }),
   approveSeller: vi.fn(),
   getApprovalImageBlobUrl: vi.fn().mockResolvedValue('blob:approval'),
+  previewBulkApproval: vi.fn(),
+  bulkApprove: vi.fn(),
 }));

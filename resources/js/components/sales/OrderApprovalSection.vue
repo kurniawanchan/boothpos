@@ -201,7 +201,7 @@ async function submit({ method, image }) {
         <ul class="mt-2 flex flex-col gap-1.5">
           <li v-for="h in history" :key="h.id" class="flex flex-col gap-0.5 border-t border-dashed border-line-2 pt-1.5 first:border-t-0 first:pt-0" :data-testid="`approval-history-${h.id}`">
             <span class="font-semibold">{{ h.artist_name }} — {{ t('approvals.approved_by', { name: h.approver_name }) }}</span>
-            <span class="text-muted-3">{{ formatDateTime(h.approved_at) }} · {{ methodLabel(h.method) }}<template v-if="h.on_behalf"> · {{ t('approvals.on_behalf_badge') }}</template></span>
+            <span class="text-muted-3">{{ formatDateTime(h.approved_at) }} · {{ methodLabel(h.method) }}<template v-if="h.on_behalf"> · {{ t('approvals.on_behalf_badge') }}</template><template v-if="h.via_bulk"> · <span :data-testid="`approval-history-bulk-${h.id}`">{{ t('approvals.bulk_via') }}</span></template></span>
             <span v-if="h.invalidated_at" class="font-semibold text-warn-text">
               {{ t('approvals.history_invalidated', { reason: reasonLabel(h.invalidation_reason) }) }} · {{ formatDateTime(h.invalidated_at) }}
             </span>

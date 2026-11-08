@@ -147,6 +147,9 @@ class AuthController extends Controller
             // 057 — izin aksi per menu, hasil Role::resolvedActions(): SATU sumber dengan penegakan di server,
             // jadi layar tak pernah menampilkan tombol yang akan ditolak (dan sebaliknya).
             'permissions' => $user->role?->resolvedActions() ?? [],
+            // 064 — apakah pengguna punya seller yang bisa disetujuinya (dasar tombol "Setujui massal"). Dihitung di server
+            // oleh SATU definisi (OrderApprovalService), supaya SPA tak menebaknya dari nama peran.
+            'can_approve_sellers' => \App\Services\OrderApprovalService::mayApproveAny($user),
             'is_active' => $user->is_active,
             'language' => $user->language,
             'photo_url' => $this->imageUploadService->url($user->photo_path),
