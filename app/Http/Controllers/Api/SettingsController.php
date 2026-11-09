@@ -69,6 +69,8 @@ class SettingsController extends Controller
             // 064 — batas penjualan per persetujuan massal. Tidak sensitif; dikirim agar dialog bisa memperingatkan SEBELUM
             // mengirim apa pun. Server tetap penegaknya (BulkOrderApprovalRequest), angka ini hanya kemudahan.
             'bulk_approve_max' => (int) config('approvals.bulk_max'),
+            // 065 — batas pre-order per aksi massal. Hanya kemudahan UI; server tetap penegaknya (PreorderBulkRequest).
+            'preorder_bulk_max' => (int) config('preorders.bulk_max'),
         ]);
     }
 

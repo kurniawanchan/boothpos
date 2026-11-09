@@ -712,18 +712,37 @@ class PreorderService
         return true;
     }
 
-    public function transitionStatus(Preorder $preorder, string $newStatus, ?string $cancelReason, User $user): Preorder
+    /**
+     * 065 — SATU jawaban atas "kenapa pre-order ini tak bisa pindah ke status itu": dipakai transitionStatus()
+     * sendiri DAN pratinjau/aksi massal, jadi pesan dan aturannya tak mungkin berbeda. null = boleh.
+     * Stok untuk 'handed_over' sengaja TIDAK dicek di sini — ia dinilai di StockService::applyMovement()
+     * (dalam transaksi, dengan kunci baris); menyalinnya ke sini akan menjadi aturan kedua.
+     *
+     * @return array{code:string,message:string}|null
+     */
+    public function statusBlocker(Preorder $preorder, string $newStatus): ?array
     {
         if (! $preorder->canTransitionTo($newStatus)) {
-            throw ValidationException::withMessages([
-                'status' => __('preorders.invalid_status_transition', ['from' => $preorder->status, 'to' => $newStatus]),
-            ]);
+            return [
+                'code' => 'invalid_transition',
+                'message' => __('preorders.invalid_status_transition', ['from' => $preorder->status, 'to' => $newStatus]),
+            ];
         }
 
         if ($newStatus === 'handed_over' && $preorder->outstanding() > 0.01) {
-            throw ValidationException::withMessages([
-                'status' => __('preorders.not_fully_paid', ['outstanding' => $preorder->outstanding()]),
-            ]);
+            return [
+                'code' => 'not_fully_paid',
+                'message' => __('preorders.not_fully_paid', ['outstanding' => $preorder->outstanding()]),
+            ];
+        }
+
+        return null;
+    }
+
+    public function transitionStatus(Preorder $preorder, string $newStatus, ?string $cancelReason, User $user): Preorder
+    {
+        if ($blocker = $this->statusBlocker($preorder, $newStatus)) {
+            throw ValidationException::withMessages(['status' => $blocker['message']]);
         }
 
         return DB::transaction(function () use ($preorder, $newStatus, $cancelReason, $user) {
@@ -757,6 +776,51 @@ class PreorderService
 
             return $preorder->fresh(['items', 'payments.proofs', 'payments.recorder', 'payments.verifier', 'shipment', 'customer']);
         });
+    }
+
+    /**
+     * 065 — jawaban tunggal atas "kenapa penanda progres ini tak bisa diatur": dipakai setDispatchStatus()
+     * (jalur individual DAN massal). `already_done` = sudah di nilai itu; ini BUKAN penolakan di jalur individual
+     * (menandai ulang tak menggeser tanggal), hanya pelaporan di aksi massal — karena itu tak dilempar oleh setDispatchStatus().
+     *
+     * @return array{code:string,message:string}|null
+     */
+    public function dispatchBlocker(Preorder $preorder, string $target): ?array
+    {
+        if ($preorder->status === 'cancelled') {
+            return ['code' => 'cancelled', 'message' => __('preorders.dispatch_status_cancelled')];
+        }
+
+        // Pengiriman kurir hanya ada untuk Mail Order (fulfillment=courier);
+        // pesanan pickup diambil di booth, jadi "shipping" tak pernah berlaku.
+        if ($target === 'shipping' && $preorder->fulfillment !== 'courier') {
+            return ['code' => 'not_mail_order', 'message' => __('preorders.dispatch_status_shipping_mail_order_only')];
+        }
+
+        return null;
+    }
+
+    /**
+     * 065 — diekstrak dari PreorderController::updateDispatchStatus supaya endpoint individual dan aksi massal
+     * memakai SATU aturan (Constitution I). Perilaku identik: 409 untuk dibatalkan / shipping non-Mail Order.
+     *
+     * Tanggal mengikuti nilai TUJUAN, bukan riwayat klik: menandai ulang yang sudah aktif tidak menggeser
+     * tanggalnya (`?? now()`), mundur dari "shipping" menghapus tanggal pengiriman tapi menyimpan tanggal
+     * invoice, dan kembali ke "pending" menghapus keduanya. Tidak menyentuh stok, pembayaran, status, atau email.
+     */
+    public function setDispatchStatus(Preorder $preorder, string $target): Preorder
+    {
+        if ($blocker = $this->dispatchBlocker($preorder, $target)) {
+            throw ValidationException::withMessages(['dispatch_status' => $blocker['message']])->status(409);
+        }
+
+        $preorder->update([
+            'dispatch_status' => $target,
+            'invoice_sent_at' => $target === 'pending' ? null : ($preorder->invoice_sent_at ?? ($target === 'invoice_sent' ? now() : null)),
+            'shipping_at' => $target === 'shipping' ? ($preorder->shipping_at ?? now()) : null,
+        ]);
+
+        return $preorder;
     }
 
     /**

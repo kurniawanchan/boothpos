@@ -1,8 +1,9 @@
 <script setup>
-import { reactive, ref, computed, onMounted, onBeforeUnmount, watch, h, render, getCurrentInstance } from 'vue';
+import { reactive, ref, computed, onMounted, onBeforeUnmount, watch, h, render, getCurrentInstance, defineAsyncComponent, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { usePaginatedList } from '../composables/usePaginatedList';
+import { usePreorderSelection } from '../composables/usePreorderSelection';
 import {
   listPreorders,
   getPreorder,
@@ -31,6 +32,7 @@ import { listArtists } from '../api/artists';
 import { listEvents } from '../api/events';
 import { useToastStore } from '../stores/toast';
 import { useAuthStore } from '../stores/auth';
+import { useSettingsStore } from '../stores/settings';
 import PreorderInvoiceModal from '../components/preorder/PreorderInvoiceModal.vue';
 import ImageLightbox from '../components/ui/ImageLightbox.vue';
 import PreorderPaymentReceiptModal from '../components/preorder/PreorderPaymentReceiptModal.vue';
@@ -64,6 +66,8 @@ import PreorderPrintMenu from '../components/preorder/PreorderPrintMenu.vue';
 import PreorderRowActions from '../components/preorder/PreorderRowActions.vue';
 import PreorderDuplicateResultModal from '../components/preorder/PreorderDuplicateResultModal.vue';
 import PreorderSplitModal from '../components/preorder/PreorderSplitModal.vue';
+// 065 — dialog aksi massal dimuat malas (Constitution V): tak membebani bundel daftar bagi yang tak memakainya.
+const PreorderBulkModal = defineAsyncComponent(() => import('../components/preorder/bulk/PreorderBulkModal.vue'));
 
 const toast = useToastStore();
 const auth = useAuthStore();
@@ -133,6 +137,13 @@ const FULFILLMENT_LABEL = computed(() => ({
 }));
 
 const { items, meta, loading, load, setPage, setFilter, params } = usePaginatedList(listPreorders);
+
+// 065 — seleksi baris (per baris / satu halaman / semua yang cocok lintas halaman) ada di composable; aksi massal
+// lama (unduh/email/duplikat) tetap memakai Set `selectedIds` yang sama.
+const settingsStore = useSettingsStore();
+const selection = usePreorderSelection({ items, meta, params, max: computed(() => settingsStore.preorderBulkMax) });
+const selectedIds = selection.selectedIds;
+const toggleSelected = selection.toggle;
 const route = useRoute();
 const router = useRouter();
 
@@ -154,6 +165,8 @@ async function loadSummary() {
 }
 
 function applyFilter(patch) {
+  // 065 — filter/pencarian/urutan berubah: pilihan dikosongkan supaya hitungan terpilih selalu jujur.
+  selection.clear();
   setFilter(patch);
   loadSummary();
 }
@@ -778,16 +791,50 @@ async function setDispatchStatus(next) {
 }
 
 // --- Bulk download/email (022-preorder-invoice-crud-overhaul US5) ---------
-const selectedIds = ref(new Set());
 const bulkDocumentType = ref('invoice');
 const bulkDownloading = ref(false);
 const bulkEmailing = ref(false);
 
-function toggleSelected(id) {
-  const next = new Set(selectedIds.value);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
-  selectedIds.value = next;
+// 065 — aksi massal (status / penanda / pembayaran / pengiriman): dialog + hasil + ulangi.
+const bulkModalOpen = ref(false);
+const bulkAction = ref('status');
+const bulkDispatchTarget = ref('invoice_sent');
+let bulkNotDone = null; // id yang belum berhasil dari aksi terakhir → menjadi pilihan saat dialog ditutup
+
+function openBulk(action, dispatchTarget = 'invoice_sent') {
+  bulkAction.value = action;
+  bulkDispatchTarget.value = dispatchTarget;
+  bulkNotDone = null;
+  bulkModalOpen.value = true;
+}
+
+async function onBulkApplied(result) {
+  bulkNotDone = result.results.filter((r) => r.status !== 'succeeded').map((r) => r.preorder_id);
+  // Daftar + kartu ringkasan menyegar tanpa reload manual (FR-034); pilihan diperbarui saat dialog ditutup.
+  await load();
+  loadSummary();
+}
+
+function closeBulk() {
+  bulkModalOpen.value = false;
+  if (bulkNotDone !== null) {
+    selection.replace(bulkNotDone);
+    bulkNotDone = null;
+  }
+}
+
+async function retryBulk({ ids }) {
+  // "Ulangi yang ini": hanya yang belum berhasil menjadi pilihan; aksi yang sama dibuka lagi.
+  bulkNotDone = null;
+  selection.replace(ids);
+  bulkModalOpen.value = false;
+  await nextTick();
+  bulkModalOpen.value = true;
+}
+
+async function openBulkResultPreorder(id) {
+  closeBulk();
+  await openDetailById(id);
 }
 
 // 029-fix-bulk-invoice-logo — unduh massal merender KOMPONEN yang sama dengan
@@ -1456,8 +1503,29 @@ async function saveShipmentChanges() {
     <!-- 022-preorder-invoice-crud-overhaul (US5) — hanya muncul ketika ada
          baris terpilih (Edge Cases spec.md: bulk action tidak tersedia
          untuk 0 baris terpilih). -->
-    <div v-if="selectedIds.size > 0" class="flex flex-wrap items-center gap-2.5 rounded-card border border-mint-border bg-mint-50 px-4 py-3">
-      <span class="text-[12.5px] font-semibold text-brand-active">{{ t('preorders.selected_count', { count: selectedIds.size }) }}</span>
+    <div v-if="selectedIds.size > 0" class="flex flex-wrap items-center gap-2.5 rounded-card border border-mint-border bg-mint-50 px-4 py-3" data-testid="preorder-bulk-bar">
+      <span class="text-[12.5px] font-semibold text-brand-active" data-testid="selected-count">{{ t('preorders.selected_count', { count: selectedIds.size }) }}</span>
+      <button type="button" class="text-[12.5px] font-semibold text-muted-4 underline hover:text-ink" data-testid="clear-selection" @click="selection.clear()">
+        {{ t('preorder_bulk.clear') }}
+      </button>
+      <span v-if="selection.overLimit.value" class="text-[12px] font-medium text-warn-text" data-testid="selection-over-limit">
+        {{ t('preorder_bulk.limit', { max: settingsStore.preorderBulkMax, count: selectedIds.size }) }}
+      </span>
+      <!-- 065 — lima aksi massal, masing-masing hanya untuk peran yang boleh melakukan aksi individualnya (disembunyikan, bukan dinonaktifkan). -->
+      <template v-if="!selection.overLimit.value">
+        <BaseButton v-if="auth.canDo('preorders', 'status')" variant="secondary" size="sm" data-testid="bulk-btn-status" @click="openBulk('status')">
+          <i class="ph-duotone ph-arrows-clockwise text-[15px]" aria-hidden="true"></i>
+          {{ t('preorder_bulk.btn_status') }}
+        </BaseButton>
+        <BaseButton v-if="auth.canDo('preorders', 'dispatch')" variant="secondary" size="sm" data-testid="bulk-btn-invoice" @click="openBulk('dispatch', 'invoice_sent')">
+          <i class="ph-duotone ph-receipt text-[15px]" aria-hidden="true"></i>
+          {{ t('preorder_bulk.btn_invoice') }}
+        </BaseButton>
+        <BaseButton v-if="auth.canDo('preorders', 'dispatch')" variant="secondary" size="sm" data-testid="bulk-btn-shipping" @click="openBulk('dispatch', 'shipping')">
+          <i class="ph-duotone ph-truck text-[15px]" aria-hidden="true"></i>
+          {{ t('preorder_bulk.btn_shipping') }}
+        </BaseButton>
+      </template>
       <BaseSelect
         v-model="bulkDocumentType"
         class="w-48"
@@ -1483,6 +1551,20 @@ async function saveShipmentChanges() {
       </BaseButton>
     </div>
 
+    <!-- 065 — tawaran "pilih semua yang cocok": halaman penuh terpilih tetapi masih ada yang cocok di halaman lain. -->
+    <div v-if="selection.canOfferAllMatching.value || selection.matching.value" class="rounded-card border border-line-2 bg-surface-subtle px-4 py-2.5 text-[12.5px]" data-testid="select-all-banner">
+      <template v-if="selection.matching.value">
+        <span class="font-medium text-muted-4">
+          {{ selection.matching.value.capped
+            ? t('preorder_bulk.all_capped', { max: settingsStore.preorderBulkMax, total: selection.matching.value.total })
+            : t('preorder_bulk.all_selected', { count: selection.count.value }) }}
+        </span>
+      </template>
+      <button v-else type="button" class="font-semibold text-brand-active hover:underline" data-testid="select-all-matching" :disabled="selection.loadingAll.value" @click="selection.selectAllMatching()">
+        {{ t('preorder_bulk.select_all_matching', { total: selection.total.value }) }}
+      </button>
+    </div>
+
     <div class="overflow-hidden rounded-card border border-line-2 bg-white">
       <DataTable
         :columns="columns"
@@ -1494,6 +1576,18 @@ async function saveShipmentChanges() {
         :row-class="preorderRowClass"
         @sort="handleSort"
       >
+        <!-- 065 — kotak centang header: semua baris di halaman ini (keadaan sebagian bila sebagian terpilih). -->
+        <template #header-select>
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border-line-3"
+            :checked="selection.allOnPage.value"
+            :indeterminate.prop="selection.someOnPage.value"
+            :aria-label="t('preorder_bulk.select_page')"
+            data-testid="select-page"
+            @change="selection.togglePage()"
+          />
+        </template>
         <template #cell-select="{ row }">
           <input
             type="checkbox"
@@ -1728,6 +1822,17 @@ async function saveShipmentChanges() {
       </template>
     </BaseModal>
     <PreorderSplitModal :open="showSplit" :preorder="splitTarget" @close="showSplit = false" @done="onSplitDone" />
+    <PreorderBulkModal
+      v-if="bulkModalOpen"
+      :open="bulkModalOpen"
+      :action="bulkAction"
+      :dispatch-target="bulkDispatchTarget"
+      :order-ids="[...selectedIds]"
+      @close="closeBulk"
+      @applied="onBulkApplied"
+      @retry="retryBulk"
+      @open-preorder="openBulkResultPreorder"
+    />
     <PreorderDuplicateResultModal
       :open="showDuplicateResults"
       :results="duplicateResults"

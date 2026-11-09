@@ -105,3 +105,23 @@ export function splitPreorder(id, payload) {
 export function deletePreorderPayment(preorderId, paymentId) {
   return client.delete(`/preorders/${preorderId}/payments/${paymentId}`).then((r) => r.data);
 }
+
+// 065 — aksi massal pada daftar Pre-orders.
+// id SEMUA pre-order yang cocok dengan filter daftar (lintas halaman), dipotong di batas server.
+export function matchingPreorderIds(params = {}) {
+  return client.get('/preorders/matching-ids', { params }).then((r) => r.data);
+}
+
+// action: status | dispatch. Pratinjau murni baca.
+export function previewBulk(action, orderIds, params = {}) {
+  return client
+    .post(`/preorders/bulk/${action}/preview`, { order_ids: orderIds, params })
+    .then((r) => r.data.data);
+}
+
+// Server menilai ulang tiap pre-order pada keadaan terkininya.
+export function applyBulk(action, orderIds, params = {}) {
+  return client
+    .post(`/preorders/bulk/${action}/apply`, { order_ids: orderIds, params })
+    .then((r) => r.data.data);
+}

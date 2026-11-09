@@ -42,6 +42,9 @@ function onHeaderClick(col) {
             :class="{ 'cursor-pointer select-none hover:text-ink': col.sortable }"
             @click="onHeaderClick(col)"
           >
+            <!-- 065 — slot opsional `header-<key>` (mis. kotak centang pilih-semua). Bawaan = label seperti sebelumnya,
+                 jadi tabel yang tak memakainya tidak berubah. -->
+            <slot :name="`header-${col.key}`" :column="col">
             <span class="inline-flex items-center gap-1">
               {{ col.label }}
               <i
@@ -53,6 +56,7 @@ function onHeaderClick(col) {
                 :aria-label="sortKey === col.key ? t(`common.sorted_${sortDir}`) : t('common.sortable_column')"
               ></i>
             </span>
+            </slot>
           </th>
         </tr>
       </thead>

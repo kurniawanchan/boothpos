@@ -71,4 +71,20 @@ return [
 
     // Hapus pembayaran pre-order
     'payment_delete_not_allowed_status' => 'Pembayaran pada pre-order berstatus "Diserahkan" atau "Dibatalkan" tidak bisa dihapus lagi — transaksinya sudah ditutup.',
+
+    // 065 — aksi massal pada daftar Pre-orders (alasan dilewati/gagal; teks layar ada di locales/*.json)
+    'bulk_limit_exceeded' => 'Satu aksi massal dibatasi :max pre-order. Kurangi pilihan lalu coba lagi.',
+    'bulk_reason_not_found' => 'Pre-order tidak ditemukan atau tidak tersedia untuk Anda.',
+    'bulk_reason_invalid_transition' => 'Pre-order ini tidak bisa pindah ke status itu dari status sekarang.',
+    'bulk_reason_not_fully_paid' => 'Belum lunas, sehingga belum bisa diserahkan.',
+    'bulk_reason_insufficient_stock' => 'Stok tidak cukup untuk menyerahkan pre-order ini.',
+    'bulk_reason_cancelled' => 'Pre-order ini sudah dibatalkan.',
+    'bulk_reason_not_mail_order' => 'Hanya pre-order Mail Order yang bisa diproses.',
+    'bulk_reason_already_done' => 'Sudah berada di pengaturan ini — tidak diubah.',
+    'bulk_reason_rejected' => 'Tidak diizinkan untuk pre-order ini.',
+    'bulk_reason_failed' => 'Terjadi masalah pada pre-order ini. Tidak ada yang diubah. Coba lagi, atau buka untuk memperbaikinya satu per satu.',
+    'bulk_cancel_reason_required' => 'Alasan pembatalan wajib diisi.',
+    'bulk_status_log' => 'Massal: :number pindah dari :from ke :to.',
+    'bulk_dispatch_log' => 'Massal: penanda progres :number diatur ke :to.',
+    'bulk_operation_log' => 'Aksi massal (:action) oleh :user: :succeeded dari :selected pre-order berhasil, :skipped dilewati, :failed gagal.',
 ];
