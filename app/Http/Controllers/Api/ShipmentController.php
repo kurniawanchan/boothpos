@@ -5,11 +5,17 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Preorder;
 use App\Models\Shipment;
+use App\Services\ShipmentService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class ShipmentController extends Controller
 {
+    public function __construct(private readonly ShipmentService $shipmentService)
+    {
+    }
+
     public function store(Request $request, Preorder $preorder): JsonResponse
     {
         // CATATAN OTORISASI (dipertimbangkan, sengaja TIDAK ditambah) —
@@ -25,29 +31,20 @@ class ShipmentController extends Controller
         // gerbang peran di sini akan mematahkan test yang sudah ada dan
         // membalik keputusan desain yang sudah dibuat, bukan memperbaiki
         // bug. Dicatat di sini, bukan diam-diam diubah.
-        if ($preorder->fulfillment !== 'courier') {
-            return response()->json(['message' => __('preorders.not_courier_fulfillment')], 409);
+        // 065 — aturan (hanya Mail Order, satu pengiriman per pre-order, bidang wajib) kini di
+        // ShipmentService, dipakai bersama aksi massal. Urutan respons sama seperti sebelumnya:
+        // konflik 409 dinilai SEBELUM validasi bentuk 422.
+        if ($blocker = $this->shipmentService->blocker($preorder)) {
+            return response()->json(['message' => $blocker['message']], 409);
         }
 
-        if ($preorder->shipment) {
-            return response()->json(['message' => __('preorders.shipment_already_exists')], 409);
+        $validated = $request->validate(ShipmentService::STORE_RULES);
+
+        try {
+            $shipment = $this->shipmentService->createFor($preorder, $validated);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage()], $e->status);
         }
-
-        // 022-preorder-invoice-crud-overhaul (US2, FR-006) — city/postal_code
-        // dihapus; alamat cukup satu field (address_line), sama seperti
-        // Customer.address (fitur 020).
-        $validated = $request->validate([
-            'courier_name' => ['required', 'string', 'max:50'],
-            'tracking_number' => ['nullable', 'string', 'max:50'],
-            'shipping_cost' => ['sometimes', 'numeric', 'min:0'],
-            'recipient_name' => ['required', 'string', 'max:100'],
-            'recipient_phone' => ['required', 'string', 'max:30'],
-            'address_line' => ['required', 'string', 'max:255'],
-            'province' => ['nullable', 'string', 'max:100'],
-            'notes' => ['nullable', 'string'],
-        ]);
-
-        $shipment = $preorder->shipment()->create($validated);
 
         return response()->json($shipment, 201);
     }

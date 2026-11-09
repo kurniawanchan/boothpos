@@ -70,4 +70,20 @@ return [
 
     // Hapus pembayaran pre-order
     'payment_delete_not_allowed_status' => 'Payments of a "Handed over" or "Cancelled" pre-order can no longer be deleted — this transaction is closed.',
+
+    // 065 — aksi massal pada daftar Pre-orders (alasan dilewati/gagal; teks layar ada di locales/*.json)
+    'bulk_limit_exceeded' => 'A bulk action is limited to :max pre-orders. Reduce the selection and try again.',
+    'bulk_reason_not_found' => 'Pre-order not found or not available to you.',
+    'bulk_reason_invalid_transition' => 'This pre-order cannot move to that status from its current status.',
+    'bulk_reason_not_fully_paid' => 'Not fully paid yet, so it cannot be handed over.',
+    'bulk_reason_insufficient_stock' => 'Not enough stock to hand this pre-order over.',
+    'bulk_reason_cancelled' => 'This pre-order is cancelled.',
+    'bulk_reason_not_mail_order' => 'Only Mail Order pre-orders can do this.',
+    'bulk_reason_already_done' => 'Already at this setting — left unchanged.',
+    'bulk_reason_rejected' => 'Not allowed for this pre-order.',
+    'bulk_reason_failed' => 'Something went wrong with this pre-order. Nothing was changed. Try again, or open it to fix it individually.',
+    'bulk_cancel_reason_required' => 'A cancellation reason is required.',
+    'bulk_status_log' => 'Bulk: :number moved from :from to :to.',
+    'bulk_dispatch_log' => 'Bulk: progress marker of :number set to :to.',
+    'bulk_operation_log' => 'Bulk action (:action) by :user: :succeeded of :selected pre-orders done, :skipped skipped, :failed failed.',
 ];

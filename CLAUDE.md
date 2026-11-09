@@ -516,6 +516,19 @@ One required approval per UNIQUE seller among a POS sale's lines (`order_items.a
 - **Not verified in a real browser** (T051 open): drawing with mouse/trackpad, Android touch, phone-width layout. jsdom has no canvas, so the drawn path is unit-tested only up to validation.
 - Test traps: `UploadedFile::fake()` reports its MIME from the extension — content-sniff cases need a real temp file; `rm` is interactive in this shell (use `rm -f`) and macOS has no `timeout`.
 
+## Pre-order bulk actions (feature 065, 2026-11-09)
+
+Bulk selection plus bulk actions on the Pre-orders list: update status and mark invoice sent / shipping (BOTH = the existing `dispatch_status` marker, one action; three buttons). **Bulk add-payment and bulk create-shipments were built and then REMOVED at the product owner's request (2026-11-09)** — no routes, services branches, forms or tests remain for them; do not reintroduce without a new decision. **No migration, no new table.** Rules a future change must not break:
+
+- **Reuse by extraction, never by copy.** Each action loops the SAME writer as the individual one: `PreorderService::transitionStatus()` and `setDispatchStatus()`/`dispatchBlocker()` (EXTRACTED from `updateDispatchStatus`). `ShipmentService` (extracted from `ShipmentController::store`, owns `STORE_RULES`) stays as a harmless refactor used only by the individual endpoint. `PreorderService::statusBlocker()` is the one "why can't this move" answer used by `transitionStatus()` AND the preview. Never put a rule into the bulk layer.
+- **`PreorderBulkService` is only the orchestrator.** One scoped, eager-loaded query for all ids (other mode / other seller / missing all look the same: `not_found`, `preorder_number` null); per pre-order ONE outer `DB::transaction` that re-reads the row with `lockForUpdate()` (state at processing time, not the loaded copy) → service call → `preorder_bulk_*` audit row. A `ValidationException` becomes `skipped` (reason from the error KEY and the pre-order's state via `classify()`, never from message text; the message shown is the service's own); anything else becomes `failed` with a generic message (detail only in the log). `succeeded + skipped + failed = selected = results.length`, request order, always HTTP 200 once the body is valid. Status e-mail goes out AFTER each pre-order's commit and never fails the change.
+- **Routes** `POST /preorders/bulk/{status|dispatch}/{preview|apply}` + `GET /preorders/matching-ids` are registered in ONE loop over `action → ability` (`status`, `dispatch`) before `apiResource('preorders')`; `PreorderBulkRequest` holds shape/limit rules (all JSON, no `max_input_vars` concern). Cap `config('preorders.bulk_max')` (env `PREORDER_BULK_MAX`, 200), exposed as `preorder_bulk_max` in `GET /settings/features` (convenience only).
+- **Preview is read-only; apply re-judges everything.** There is deliberately no client "plan"/hash: each action's own rules (transition, remaining balance, shipment exists) already refuse a stale request. 
+- **Audit:** `preorder_bulk_status|dispatch` rows (entity type `Preorder`, old/new values, `bulk_ref`) inside each pre-order's transaction + one `preorder_bulk_operation` row AFTER the loop (summary of committed work; failing to write it never fails the response; only the chosen status / marker). **The individual status and marker actions still write NO audit row** (known gap, deliberately untouched).
+- **Frontend:** `usePreorderSelection` (page / indeterminate / "select all N matching" / clear; ids in a `Set`; the count is always the set size; filter/search/sort changes clear it, page changes do not), `DataTable`'s optional `header-<key>` slot, lazy `PreorderBulkModal` shell (configure → preview → review → processing → result) with `BulkStatusForm`/`BulkMarkerForm` and `BulkResultView`. Buttons are hidden (never disabled) per `auth.canDo('preorders', …)`. A dropped connection on apply shows "outcome unknown, safe to re-run" (not success, not failure); "Retry these" re-selects the non-successes and reopens the same action. The `watch(..., {immediate:true})` in the modal must stay BELOW the computeds it reads (TDZ crash caught by the first test run).
+- **Test trap:** an assertion like `x === 1 ? 1 : 1` slipped into a first draft and passed vacuously — the hand-over test now proves `not_fully_paid` and `insufficient_stock` with real data.
+- **Measured (2026-11-09, test DB, in-process, log mailer, BEFORE the payment/shipment removal):** 50 status changes applied in 0.37 s; preview of 200 pre-orders 0.02 s. A slow SMTP server was NOT simulated: status e-mail is synchronous per pre-order, so with real SMTP a large status batch could be much slower. **Not verified in a real browser** (T053 open): selection across pages, the two dialogs, retry, phone width.
+
 ## Reopening a closed shift (feature 063, 2026-11-06)
 
 - **Owner role only, as a FIXED rule.** `POST /sessions/{session}/reopen` checks `$request->user()->role?->isOwner()` inline in `CashierSessionController::reopen()` (403 before any state is revealed). It is deliberately NOT a `MenuActions` action — a role-editor checkbox would imply it can be delegated — so the route sits in `MenuActionsRouteCoverageTest::EXEMPT` with that reason. Do not "fix" the exemption by adding `ability:session,...`.
@@ -533,7 +546,21 @@ One required approval per UNIQUE seller among a POS sale's lines (`order_items.a
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/064-bulk-approve-transactions/plan.md`
+Active feature plan: `specs/065-preorder-bulk-actions/plan.md`
+(branch `095-preorder-bulk-actions`, from `develop`; spec dir number ≠ branch number) — NO migration. Bulk selection and
+two bulk actions on the Pre-orders list: update status, and mark invoice sent / shipping (both = the existing
+`dispatch_status` marker, one action). Bulk add-payment and create-shipments were built and then REMOVED at the product
+owner's request on 2026-11-09 (the spec, plan, research and contract files still describe them — read them with that
+amendment in mind). Each action loops the SAME writer the individual action uses (`PreorderService::transitionStatus`,
+and `setDispatchStatus`, EXTRACTED from the controller so both paths share it) — never copy a rule into the bulk layer.
+`PreorderBulkService` is only the orchestrator (one eager query through the scoped model, one outer transaction + row lock
+per pre-order, result shaping, audit). Routes: `POST /preorders/bulk/{status|dispatch}/preview|apply` (registered from one
+table so each has the individual action's `ability`) + `GET /preorders/matching-ids` (reuses `applyFilters()`). Preview is
+read-only; apply re-judges every pre-order on its current state (no client plan). Results: `succeeded|skipped|failed`,
+always `200`, counts add up to the selection. Audit: `preorder_bulk_*` rows with `bulk_ref` in the same transaction + one
+aggregate row; the individual status/marker actions still write none (known gap). Cap `config('preorders.bulk_max')` = 200.
+
+Previous feature: `specs/064-bulk-approve-transactions/plan.md`
 (branch `094-bulk-approve-transactions`, from `develop`; spec dir number ≠ branch number) — one additive nullable column
 (`order_approvals.bulk_ref`), two routes, no new table. A **Bulk approve (N)** action on the Sales list approves many POS
 sales with ONE stamp / drawn signature / uploaded image — a batch entry point over feature 059, no new approval rules.

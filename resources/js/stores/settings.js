@@ -32,6 +32,8 @@ export const useSettingsStore = defineStore('settings', {
     schemaUpdateRequired: false,
     // 064 — batas penjualan per persetujuan massal (kemudahan UI; server yang menegakkan). 200 = bawaan server.
     bulkApproveMax: 200,
+    // 065 — batas pre-order per aksi massal (kemudahan UI; server penegaknya).
+    preorderBulkMax: 200,
     loaded: false,
   }),
   getters: {
@@ -54,6 +56,7 @@ export const useSettingsStore = defineStore('settings', {
         this.appName = resolveAppName(data.app_name);
         this.schemaUpdateRequired = data.schema_update_required === true;
         this.bulkApproveMax = Number.isInteger(data.bulk_approve_max) && data.bulk_approve_max > 0 ? data.bulk_approve_max : 200;
+        this.preorderBulkMax = Number.isInteger(data.preorder_bulk_max) && data.preorder_bulk_max > 0 ? data.preorder_bulk_max : 200;
         applyThemeAccentColor(this.themeAccentColor);
       } finally {
         this.loaded = true;

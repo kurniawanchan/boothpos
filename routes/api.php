@@ -303,6 +303,19 @@ Route::prefix('v1')->group(function () {
         // apiResource('preorders', ...) (alasan sama dengan 'bulk-*' di atas).
         Route::post('/preorders/duplicate', [PreorderController::class, 'duplicate'])->middleware('ability:preorders,duplicate');
 
+        // 065 — aksi massal pada daftar Pre-orders. WAJIB sebelum apiResource('preorders', ...) (alasan sama dengan
+        // 'bulk-*' di atas). Dua rute (pratinjau + terapkan) per aksi, didaftarkan dari SATU tabel
+        // aksi → ability supaya tiap rute membawa ability yang SAMA dengan aksi individualnya dan
+        // MenuActionsRouteCoverageTest tetap puas. (Satu rute generik dengan cek di controller ditolak: middleware
+        // adalah titik penegakan proyek ini.)
+        Route::get('/preorders/matching-ids', [PreorderController::class, 'matchingIds']);
+        foreach (['status' => 'status', 'dispatch' => 'dispatch'] as $bulkAction => $bulkAbility) {
+            Route::post("/preorders/bulk/{$bulkAction}/preview", [PreorderController::class, 'bulkPreview'])
+                ->defaults('action', $bulkAction)->middleware("ability:preorders,{$bulkAbility}");
+            Route::post("/preorders/bulk/{$bulkAction}/apply", [PreorderController::class, 'bulkApply'])
+                ->defaults('action', $bulkAction)->middleware("ability:preorders,{$bulkAbility}");
+        }
+
         Route::apiResource('preorders', PreorderController::class)->only(['index', 'show']);
         Route::apiResource('preorders', PreorderController::class)->only(['store', 'update', 'destroy'])->middleware('ability:preorders');
         Route::patch('/preorders/{preorder}/status', [PreorderController::class, 'updateStatus'])->middleware('ability:preorders,status');

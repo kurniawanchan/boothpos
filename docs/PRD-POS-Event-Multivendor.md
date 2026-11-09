@@ -235,6 +235,15 @@ Atas permintaan pemilik produk, layar Pre-order mendapat dua aksi baru, tanpa no
 
 Kedua pre-order hasilnya mencatat asalnya ("Duplikat dari" / "Dipisah dari"). Lihat `specs/027-preorder-duplicate-split/`.
 
+**Catatan penambahan pasca-MVP — 2026-11-09 (aksi massal di daftar Pre-order)**
+
+Atas permintaan pemilik produk, daftar Pre-order mendapat pilihan massal (kotak pilih-semua di header dengan keadaan sebagian, "pilih semua N yang cocok dengan filter" lintas halaman, hitungan terpilih, Hapus pilihan) dan tiga tombol aksi massal: **ubah status**, **ubah progres invoice**, dan **ubah progres pengiriman** (dua nilai dari satu penanda yang sama). *Tambah pembayaran massal dan buat data pengiriman massal sempat dibangun lalu **dihapus atas permintaan pemilik produk (2026-11-09)**; tidak ada rutenya lagi.* Maksimal 200 pre-order per aksi. Tanpa nomor F- karena tidak mengubah state machine F2.3 maupun cakupan yang dicoret di 10.2:
+
+- **Tidak ada aturan baru.** Tiap aksi memanggil penulis yang SAMA dengan aksi individualnya (status, penanda) — aturan, efek samping (stok serah terima, pelunasan otomatis saat tiba, email status setelah commit), dan pesannya identik. Aksi yang tak boleh dilakukan secara individual (transisi tidak valid, "shipping" untuk Pickup) juga tak pernah terjadi massal.
+- **Pratinjau lalu terapkan.** Dialog menampilkan konfirmasi dari server (berapa yang diproses, berapa dilewati beserta alasannya) sebelum apa pun disimpan. Tiap pre-order dinilai sendiri pada keadaan terkininya dan diproses dalam transaksi sendiri (semua-atau-tidak-sama-sekali per pre-order); yang tak layak DILEWATI dengan alasan, yang mengalami galat tak terduga dilaporkan GAGAL dengan pesan umum, dan hitungan berhasil + dilewati + gagal selalu sama dengan jumlah terpilih. Hasil bisa diulang untuk yang belum berhasil dengan satu klik.
+- **Jejak audit:** tiap pre-order yang berubah mendapat baris `preorder_bulk_*` (pengguna, waktu, nilai lama/baru, `bulk_ref`) dalam transaksi yang sama, ditambah satu baris `preorder_bulk_operation` per aksi. Aksi individual status dan penanda memang belum menulis jejak apa pun (celah lama, tidak diubah di sini).
+- Hak per aksi sama dengan aksi individualnya (`preorders.status|dispatch`); tombol yang tak boleh dipakai disembunyikan. Tidak termasuk: pembayaran massal, data pengiriman massal, perubahan status rekaman pengiriman (dikemas/dikirim/diterima), pemrosesan latar belakang. Lihat `specs/065-preorder-bulk-actions/`.
+
 **Catatan penambahan pasca-MVP — 2026-10-04 (pembayaran sebagian / split payment)**
 
 Atas permintaan pemilik produk, pembayaran menjadi buku besar (ledger) yang disimpan satu per satu untuk **pre-order dan penjualan POS** (pembelian ke vendor tidak termasuk):

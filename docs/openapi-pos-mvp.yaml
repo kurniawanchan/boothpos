@@ -327,6 +327,11 @@ paths:
                     description: |
                       064 — batas penjualan per persetujuan massal (`config('approvals.bulk_max')`, bawaan 200). Terbuka untuk semua
                       peran; hanya kemudahan agar dialog bisa memperingatkan SEBELUM mengirim — server tetap penegaknya (422).
+                  preorder_bulk_max:
+                    type: integer
+                    description: |
+                      065 — batas pre-order per aksi massal (`config('preorders.bulk_max')`, env `PREORDER_BULK_MAX`, bawaan 200).
+                      Terbuka untuk semua peran; hanya kemudahan UI — server menegakkannya di setiap rute massal (422 menyebut batasnya).
 
   /settings/payment:
     get:
@@ -3081,6 +3086,87 @@ paths:
                       properties:
                         preorder_id: { type: integer }
                         status: { type: string, enum: [sent, skipped_no_email, skipped_not_configured, failed] }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /preorders/matching-ids:
+    get:
+      tags: [Preorder]
+      summary: Id semua pre-order yang cocok dengan filter daftar, lintas halaman (065-preorder-bulk-actions, US1)
+      description: |
+        Untuk "pilih semua N yang cocok dengan filter". Query string sama dengan `GET /preorders`
+        (`page`/`per_page` diabaikan; `sort_*` menentukan siapa yang masuk bila terpotong). Memakai
+        `applyFilters()` yang sama dengan daftar/ringkasan/tetangga — satu sumber filter. Hanya id (tanpa data
+        pre-order). Aturan mode DEMO/LIVE dan scope penjual berlaku. Dipotong di `preorder_bulk_max`.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ids: { type: array, items: { type: integer } }
+                  total: { type: integer, description: Jumlah yang cocok seluruhnya }
+                  capped: { type: boolean, description: true bila yang cocok lebih banyak dari yang dikembalikan }
+
+  /preorders/bulk/{action}/preview:
+    post:
+      tags: [Preorder]
+      summary: Pratinjau aksi massal pre-order — read-only (065-preorder-bulk-actions)
+      description: |
+        `action` = `status` (izin `preorders.status`) atau `dispatch` (`preorders.dispatch`, penanda invoice/pengiriman).
+        (Aksi massal tambah pembayaran dan buat data pengiriman sempat dibangun lalu DIHAPUS atas permintaan pemilik produk, 2026-11-09.) Tidak menulis apa pun (baris, log, stok, email).
+        `selected = eligible + skipped.length`. Untuk `status`, `params.status` boleh dikosongkan: respons memuat
+        `status_options` (status yang bisa dituju ≥ 1 pre-order terpilih beserta jumlahnya).
+        Id yang tak terlihat pengguna (mode lain, penjual lain, tak ada) sama-sama `not_found`.
+      parameters:
+        - { name: action, in: path, required: true, schema: { type: string, enum: [status, dispatch] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PreorderBulkRequest' }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/PreorderBulkPreview' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /preorders/bulk/{action}/apply:
+    post:
+      tags: [Preorder]
+      summary: Terapkan aksi massal pre-order (065-preorder-bulk-actions)
+      description: |
+        Setiap pre-order dinilai SENDIRI-SENDIRI pada keadaan terkininya dan diproses dalam transaksi + kunci baris
+        miliknya (semua-atau-tidak-sama-sekali per pre-order, termasuk baris audit `preorder_bulk_*`); satu yang
+        dilewati/gagal tidak memblokir atau membatalkan yang lain. Aturan, efek samping, dan pesan SAMA dengan aksi
+        individual (loop atas penulis yang sama: `transitionStatus`, `setDispatchStatus`). SELALU 200 setelah bentuk valid; `succeeded + skipped + failed = selected = results.length`,
+        urutan permintaan dipertahankan. Pembatalan wajib `cancel_reason`
+        sekali (422, tak ada yang ditulis). Email status dikirim setelah commit dan
+        tak pernah menggagalkan perubahan. Satu baris agregat `preorder_bulk_operation` ditulis setelah loop.
+      parameters:
+        - { name: action, in: path, required: true, schema: { type: string, enum: [status, dispatch] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PreorderBulkRequest' }
+      responses:
+        '200':
+          description: Hasil per pre-order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/PreorderBulkResult' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
 
   /preorders/duplicate:
@@ -6467,6 +6553,56 @@ components:
                   items: { type: string }
 
   schemas:
+    PreorderBulkRequest:
+      type: object
+      required: [order_ids]
+      properties:
+        order_ids: { type: array, items: { type: integer }, minItems: 1, description: "Maksimal preorder_bulk_max; unik" }
+        params:
+          type: object
+          description: |
+            status: {status: dp_paid|arrived|settled|handed_over|cancelled, cancel_reason} ·
+            dispatch: {dispatch_status: pending|invoice_sent|shipping}
+    PreorderBulkPreview:
+      type: object
+      properties:
+        action: { type: string }
+        selected: { type: integer }
+        eligible: { type: integer }
+        skipped:
+          type: array
+          items:
+            type: object
+            properties:
+              preorder_id: { type: integer }
+              preorder_number: { type: string, nullable: true }
+              reason: { type: string, enum: [not_found, invalid_transition, not_fully_paid, insufficient_stock, cancelled, not_mail_order, already_done, rejected, failed] }
+              message: { type: string }
+        status_options:
+          type: array
+          description: Hanya action=status
+          items: { type: object, properties: { status: { type: string }, count: { type: integer } } }
+    PreorderBulkResult:
+      type: object
+      properties:
+        action: { type: string }
+        bulk_ref: { type: string, format: uuid }
+        selected: { type: integer }
+        succeeded: { type: integer }
+        skipped: { type: integer }
+        failed: { type: integer }
+        skipped_by_reason: { type: object, additionalProperties: { type: integer } }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              preorder_id: { type: integer }
+              preorder_number: { type: string, nullable: true }
+              status: { type: string, enum: [succeeded, skipped, failed] }
+              reason: { type: string, enum: [not_found, invalid_transition, not_fully_paid, insufficient_stock, cancelled, not_mail_order, already_done, rejected, failed], description: "Hanya skipped/failed" }
+              message: { type: string, description: "Teks service apa adanya (sama dengan jalur individual); `failed` = pesan generik tanpa detail teknis" }
+              detail: { type: object, description: "Hanya succeeded: status / dispatch_status" }
     OrderApprovalSummary:
       type: object
       description: "059 — ringkasan untuk daftar Sales. `status` keseluruhan; `sellers[]` satu per seller unik."

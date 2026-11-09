@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Exports\GenericArrayExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DuplicatePreordersRequest;
+use App\Http\Requests\PreorderBulkRequest;
 use App\Http\Requests\SplitPreorderRequest;
 use App\Http\Requests\StorePaymentRequest;
 use App\Http\Requests\UpdatePaymentConfirmationRequest;
@@ -16,6 +17,7 @@ use App\Models\Payment;
 use App\Models\Preorder;
 use App\Models\PreorderNotification;
 use App\Services\ImageUploadService;
+use App\Services\PreorderBulkService;
 use App\Services\PreorderExportImportService;
 use App\Services\PreorderNotifier;
 use App\Services\PreorderService;
@@ -412,6 +414,37 @@ class PreorderController extends Controller
     }
 
     /**
+     * 065 — id SEMUA pre-order yang cocok dengan filter daftar saat ini (lintas halaman) untuk "pilih semua N yang
+     * cocok". Memakai applyFilters() yang SAMA dengan index()/summary()/neighbors() (satu sumber filter) dan hanya
+     * mengambil id (tanpa hydrate). Dipotong di `preorders.bulk_max`; `capped` = yang cocok lebih banyak dari yang
+     * dikembalikan. Aturan mode DEMO/LIVE dan scope penjual berlaku lewat model ber-scope.
+     */
+    public function matchingIds(Request $request): JsonResponse
+    {
+        $max = (int) config('preorders.bulk_max');
+        $query = $this->applyFilters(Preorder::query(), $request);
+
+        $total = (clone $query)->count();
+        $ids = $this->applySort($query, $request)->limit($max)->pluck('preorders.id')->map(fn ($id) => (int) $id)->all();
+
+        return response()->json(['ids' => $ids, 'total' => $total, 'capped' => $total > count($ids)]);
+    }
+
+    /** 065 — pratinjau aksi massal (read-only). Hak dijaga middleware `ability:` per rute; kelayakan per pre-order di service. */
+    public function bulkPreview(PreorderBulkRequest $request, string $action, PreorderBulkService $bulk): JsonResponse
+    {
+        return response()->json(['data' => $bulk->preview($action, $request->orderIds(), $request->validated('params') ?? [])]);
+    }
+
+    /** 065 — terapkan aksi massal. Selalu 200 setelah bentuk valid; hasil per pre-order ada di `results`. */
+    public function bulkApply(PreorderBulkRequest $request, string $action, PreorderBulkService $bulk): JsonResponse
+    {
+        return response()->json(['data' => $bulk->apply(
+            $action, $request->orderIds(), $request->validated('params') ?? [], $request->user(),
+        )]);
+    }
+
+    /**
      * 052-preorder-detail-prev-next — pre-order sebelum/sesudah `$preorder`
      * di daftar Pre-order, dengan filter dan urutan yang SAMA dengan index()
      * (applyFilters() + applySort() yang persis sama, jadi tetangga tidak
@@ -704,32 +737,13 @@ class PreorderController extends Controller
             'dispatch_status' => ['required', 'in:'.implode(',', Preorder::DISPATCH_STATUSES)],
         ]);
 
-        if ($preorder->status === 'cancelled') {
-            return response()->json([
-                'message' => __('preorders.dispatch_status_cancelled'),
-                'errors' => ['dispatch_status' => [__('preorders.dispatch_status_cancelled')]],
-            ], 409);
+        // 065 — aturan (dibatalkan → 409, shipping hanya Mail Order → 409, tanggal mengikuti nilai tujuan)
+        // kini di PreorderService::setDispatchStatus(), dipakai bersama aksi massal.
+        try {
+            $this->preorderService->setDispatchStatus($preorder, $validated['dispatch_status']);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], $e->status);
         }
-
-        // Pengiriman kurir hanya ada untuk Mail Order (fulfillment=courier);
-        // pesanan pickup diambil di booth, jadi "shipping" tak pernah berlaku.
-        if ($validated['dispatch_status'] === 'shipping' && $preorder->fulfillment !== 'courier') {
-            return response()->json([
-                'message' => __('preorders.dispatch_status_shipping_mail_order_only'),
-                'errors' => ['dispatch_status' => [__('preorders.dispatch_status_shipping_mail_order_only')]],
-            ], 409);
-        }
-
-        // Tanggal mengikuti nilai TUJUAN, bukan riwayat klik: menandai ulang
-        // yang sudah aktif tidak menggeser tanggalnya (`?? now()`), mundur
-        // dari "shipping" menghapus tanggal pengiriman tapi menyimpan tanggal
-        // invoice, dan kembali ke "pending" menghapus keduanya.
-        $target = $validated['dispatch_status'];
-        $preorder->update([
-            'dispatch_status' => $target,
-            'invoice_sent_at' => $target === 'pending' ? null : ($preorder->invoice_sent_at ?? ($target === 'invoice_sent' ? now() : null)),
-            'shipping_at' => $target === 'shipping' ? ($preorder->shipping_at ?? now()) : null,
-        ]);
 
         return response()->json($this->present(
             // Eager-load sama persis dengan show() — present() menyembunyikan
