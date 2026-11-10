@@ -358,9 +358,9 @@ class PreorderController extends Controller
     {
         abort_unless($request->user()->isOwnerOrAdmin(), 403, __('preorders.not_authorized'));
 
-        $rows = $this->exportImportService->export($request->only([
-            'status', 'event_id', 'customer_id', 'fulfillment', 'dispatch_status', 'search', 'date_from', 'date_to',
-        ]));
+        // 066 — kunci filter daftar (Preorder::LIST_FILTER_KEYS) + rentang tanggal khusus ekspor; satu sumber
+        // dengan daftar, jadi filter baru otomatis ikut terekspor.
+        $rows = $this->exportImportService->export($request->only([...Preorder::LIST_FILTER_KEYS, 'date_from', 'date_to']));
 
         return Excel::download(new GenericArrayExport($rows), 'preorders.xlsx');
     }
@@ -555,57 +555,9 @@ class PreorderController extends Controller
      */
     private function applyFilters(Builder $query, Request $request): Builder
     {
-        return $query
-            // Array-capable, same convention as ProductController::index()'s
-            // artist_id/category_id (005-ux-enhancements-dashboard US1):
-            // $request->array() normalizes both the new `status[]=a&status[]=b`
-            // (multi-select filter, "can filter multiple / combine
-            // conditions") and the old scalar `status=a` into an array, so
-            // this is backward compatible with any existing caller.
-            // array_filter drops empty strings so an empty-but-present param
-            // doesn't turn whereIn([]) into "match nothing".
-            ->when(count(array_filter($request->array('status'))) > 0, fn ($q) => $q->whereIn('status', array_filter($request->array('status'))))
-            // Penanda manual invoice-terkirim/pengiriman-berjalan — pola
-            // array yang sama dengan status/fulfillment di atas, sehingga
-            // list, summary, dan export ikut terfilter tanpa kode tambahan.
-            ->when(count(array_filter($request->array('dispatch_status'))) > 0, fn ($q) => $q->whereIn('dispatch_status', array_filter($request->array('dispatch_status'))))
-            ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
-            ->when($request->filled('customer_id'), fn ($q) => $q->where('customer_id', $request->integer('customer_id')))
-            ->when(count(array_filter($request->array('fulfillment'))) > 0, fn ($q) => $q->whereIn('fulfillment', array_filter($request->array('fulfillment'))))
-            // 007-preorder-import-export-notify (US1) — parsial, tidak peka
-            // huruf besar/kecil, terhadap nama pelanggan (research.md R1).
-            // Diperluas (permintaan produk owner berikutnya) supaya juga
-            // cocok terhadap nomor pre-order itu sendiri dan nama/SKU item
-            // DI DALAM pre-order tsb — satu kotak pencarian, tiga sumber,
-            // bukan tiga kotak terpisah.
-            ->when($request->filled('search'), function ($q) use ($request) {
-                $term = $request->string('search')->value();
-                // Requested: also match the outstanding balance — a cashier
-                // often only remembers "the one still owing around 135rb",
-                // not the PO number or customer name. `outstanding` isn't a
-                // real column (Preorder::outstanding() computes it in PHP),
-                // so it's matched here via the same total_amount-minus-
-                // paid_amount expression, cast to text so a LIKE substring
-                // search works the same way it does for the other fields.
-                // Digits-only, so typing with Rupiah punctuation ("135.000",
-                // "Rp 135.000") still matches — the stored amount itself
-                // never contains separators once cast to text.
-                $digitsOnly = preg_replace('/\D+/', '', $term);
-                $q->where(function ($qq) use ($term, $digitsOnly) {
-                    $qq->where('preorder_number', 'like', "%{$term}%")
-                        ->orWhereHas('customer', fn ($cq) => $cq->where('name', 'like', "%{$term}%"))
-                        ->orWhereHas('items', fn ($iq) => $iq->where('name_snapshot', 'like', "%{$term}%")
-                            ->orWhere('sku_snapshot', 'like', "%{$term}%"));
-
-                    if ($digitsOnly !== '') {
-                        $qq->orWhereRaw('CAST((total_amount - paid_amount) AS CHAR) LIKE ?', ["%{$digitsOnly}%"]);
-                    }
-                });
-            })
-            ->when(count(array_filter($request->array('artist_id'))) > 0, fn ($q) => $q->whereHas(
-                'items',
-                fn ($iq) => $iq->whereIn('artist_id', array_filter($request->array('artist_id')))
-            ));
+        // 066 — rantai filter hidup di SATU tempat (Preorder::scopeMatchingListFilters),
+        // dipakai juga oleh ekspor. Jangan menambah filter di sini.
+        return $query->matchingListFilters($request->only(Preorder::LIST_FILTER_KEYS));
     }
 
     /**
@@ -672,19 +624,9 @@ class PreorderController extends Controller
      */
     private function sellersFor(Preorder $preorder): array
     {
-        $sellers = [];
-
-        foreach ($preorder->items as $item) {
-            $artist = $item->artist;
-
-            if (! $artist || isset($sellers[$artist->id])) {
-                continue;
-            }
-
-            $sellers[$artist->id] = ['id' => $artist->id, 'name' => $artist->name];
-        }
-
-        return array_values($sellers);
+        // 066 — definisi "penjual sebuah pre-order" kini satu: Preorder::sellers()
+        // (juga dipakai ekspor, supaya sel `sellers` selalu sama dengan kolom list).
+        return $preorder->sellers();
     }
 
     private function presentNotification(?\App\Models\PreorderNotification $notification): ?array

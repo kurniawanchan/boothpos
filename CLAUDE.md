@@ -529,6 +529,21 @@ Bulk selection plus bulk actions on the Pre-orders list: update status and mark 
 - **Test trap:** an assertion like `x === 1 ? 1 : 1` slipped into a first draft and passed vacuously — the hand-over test now proves `not_fully_paid` and `insufficient_stock` with real data.
 - **Measured (2026-11-09, test DB, in-process, log mailer, BEFORE the payment/shipment removal):** 50 status changes applied in 0.37 s; preview of 200 pre-orders 0.02 s. A slow SMTP server was NOT simulated: status e-mail is synchronous per pre-order, so with real SMTP a large status batch could be much slower. **Not verified in a real browser** (T053 open): selection across pages, the two dialogs, retry, phone width.
 
+## Pre-order filters (customer, category) and export columns (feature 066, 2026-11-10)
+
+Two multi-select filters on the Pre-orders list and four export-only columns. **No migration, no new route.** Rules a future change must not break:
+
+- **ONE filter chain: `Preorder::scopeMatchingListFilters(Builder, array)` + `Preorder::LIST_FILTER_KEYS`.** `PreorderController::applyFilters()` is a one-line delegation (so list, summary, neighbors, matching-ids and bulk preview/apply share it) and `PreorderExportImportService::export()` calls the same scope. The export used to carry its own hand-copied, narrower chain (search = customer name only, no `artist_id`), so a file could differ from the screen. **Never add a second filter chain; add the filter to the scope and its key to `LIST_FILTER_KEYS`** — `export()`'s controller whitelist is `[...LIST_FILTER_KEYS, 'date_from', 'date_to']` (dates are export-only, the list never had them). `PreorderExportFilterParityTest` fails when list and file diverge.
+- **Deliberate behaviour change (owner-flagged):** the export's `search` now equals the list's (PO number, customer name, item name/SKU, outstanding digits) and the export honours `artist_id[]`.
+- **`customer_id` is now an array** (`customer_id[]=1&customer_id[]=2`, OR-ed; the old scalar still works through `Arr::wrap`). **`category_id[]`** = nested EXISTS `items → variant → product.category_id`: current category (not a snapshot), `withTrashed()` on variant AND product so history stays findable (only soft-delete is lifted — `DataModeScope` still applies, which is what keeps DEMO/LIVE apart), one row per pre-order, returned whole. Mutation-checked: dropping `withTrashed()` turns `test_a_soft_deleted_variant_or_product_still_matches…` red.
+- **Export-only columns:** `preorder_number` (first), `sellers` (after `customer_name`), `total_amount` (after `discount`), `status` (before `dispatch_status`); `created_at`/`updated_at` stay last. Importer reads by column NAME → ignores them, `template()` omits them, and an import still ALWAYS starts at `ordered` and recomputes totals (`test_a_full_export_file_with_the_new_columns_reimports…` writes bogus values into them). `PreorderExportImportTest::EXPORT_HEADINGS` pins the layout — it changed on purpose, not by drift.
+- **`sellers` = `Preorder::sellers()`** (moved out of `PreorderController::sellersFor()`): distinct `items.artist`, first-appearance order, joined with ` | ` (names contain commas). It is loaded WITHOUT `withTrashed()` exactly like the list, so a soft-deleted seller is absent from both (the cell always equals the Seller column). Callers must eager-load `items.artist` — `test_export_query_count_does_not_grow…` fails if not (mutation-checked).
+- **UI:** `CustomerFilterSelect` wraps `BaseMultiSelect` in its new opt-in `remote` mode (no local filtering; emits `search`, `''` on open so the first page appears without typing). It remembers `id → name` of selected customers (a later search may not return them) and shows the NAME only — phone/e-mail come back from `GET /customers` but must not reach the filter. Category options come from `GET /categories`. `qa-tests/setup.js` now has a default partial mock of `api/categories` (`listCategories` only) because four test files render `PreordersView`.
+- **Shipping flag filter (`shipping_flag[]`, added after the first cut):** the amber "Mail Order — missing shipping cost or customer address" row highlight (`PreordersView::needsShippingAttention`) is now filterable through the same scope. `no_cost` = `shipping_cost <= 0`, `no_address` = customer address null/blank (`TRIM`), OR-ed, `fulfillment = 'courier'` only (pickup is never flagged), unknown values dropped (not "match nothing"); values live in `Preorder::SHIPPING_FLAGS`. If you change what the row highlight means, change the scope in the same commit — the two definitions must stay equal.
+- **Test traps found:** an unfiltered list satisfied two of the first category tests (no decoy row ⇒ vacuous pass — each now has a different-category decoy); PHPUnit here needs `#[DataProvider]`, the `@dataProvider` docblock is ignored (`ArgumentCountError`); `cp`/`rm` are interactive in this shell — use `command cp -f` when restoring a file after a mutation check (a refused `cp` leaves the mutation in place).
+- **Infra note:** a full disk (97 %) crashed `boothpos-mysql-1` mid-`migrate` during this feature; `docker compose up -d mysql` recovered cleanly (InnoDB crash recovery). `docker builder prune` reported 0 B reclaimed — free space came from elsewhere, so watch `df -h /` before blaming code.
+- **Not verified in a real browser** (see quickstart.md): the two dropdowns, the export file opened in Excel, phone width.
+
 ## Reopening a closed shift (feature 063, 2026-11-06)
 
 - **Owner role only, as a FIXED rule.** `POST /sessions/{session}/reopen` checks `$request->user()->role?->isOwner()` inline in `CashierSessionController::reopen()` (403 before any state is revealed). It is deliberately NOT a `MenuActions` action — a role-editor checkbox would imply it can be delegated — so the route sits in `MenuActionsRouteCoverageTest::EXEMPT` with that reason. Do not "fix" the exemption by adding `ability:session,...`.
@@ -546,7 +561,20 @@ Bulk selection plus bulk actions on the Pre-orders list: update status and mark 
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/065-preorder-bulk-actions/plan.md`
+Active feature plan: `specs/066-preorder-filter-export-columns/plan.md`
+(branch `096-preorder-filter-export-columns`, from `develop`; spec dir number ≠ branch number) — NO migration, no new
+route. Pre-orders list gets two multi-select filters, Customer (`customer_id[]`, was scalar) and product Category
+(`category_id[]`, via items → variant → product, soft-deleted included, each pre-order once and returned whole); the
+pre-order export gets four export-only columns: `preorder_number` (first), `sellers` (distinct names, ` | `-joined),
+`status` (raw), `total_amount` (2 decimals) — ignored by import, absent from the template. Structural move: the list's
+private `applyFilters()` and the export's hand-copied filter chain become ONE scope, `Preorder::scopeMatchingListFilters()`
+(+ `LIST_FILTER_KEYS`), so list, summary, neighbors, matching-ids, bulk and export cannot diverge; consequence (deliberate,
+flagged): export search now equals list search (was customer name only) and the export honours `artist_id`. Seller-name
+derivation moves from `PreorderController::sellersFor()` to one `Preorder` method used by list and export. UI: Customer
+options by remote search (opt-in `remote` mode on `BaseMultiSelect` + thin `CustomerFilterSelect`, label = name only),
+Category options from `GET /categories`. `PreorderExportImportTest` layout pins change deliberately. See research.md D1–D8.
+
+Previous feature: `specs/065-preorder-bulk-actions/plan.md`
 (branch `095-preorder-bulk-actions`, from `develop`; spec dir number ≠ branch number) — NO migration. Bulk selection and
 two bulk actions on the Pre-orders list: update status, and mark invoice sent / shipping (both = the existing
 `dispatch_status` marker, one action). Bulk add-payment and create-shipments were built and then REMOVED at the product

@@ -10,7 +10,6 @@ use App\Models\ProductVariant;
 use App\Support\Couriers;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -42,7 +41,9 @@ use Maatwebsite\Excel\Facades\Excel;
  * tanggal harus konsisten dengan statusnya, dan tanggal yang kosong untuk
  * status aktif diisi "sekarang".
  *
- * `created_at`/`updated_at` HANYA diekspor (EXPORT_ONLY), untuk dibaca.
+ * `created_at`/`updated_at` HANYA diekspor (EXPORT_ONLY), untuk dibaca. 066: begitu pula `preorder_number`, `sellers`,
+ * `total_amount` dan `status` (disisipkan di tengah tata letak ekspor; importer membaca per NAMA kolom jadi posisinya bebas).
+ *
  * Mengimpor tidak pernah menulisnya — waktu pembuatan pesanan hasil impor
  * adalah waktu impor itu sendiri, supaya jejak audit tidak bisa dipalsukan
  * lewat spreadsheet. Kolom ini ada di berkas hasil ekspor, jadi importer
@@ -64,34 +65,29 @@ class PreorderExportImportService
 
     public function export(array $filters): array
     {
-        // Tombol "Export .xlsx" meneruskan filter list apa adanya, dan filter
-        // status/fulfillment/dispatch_status di list berbentuk ARRAY
-        // (status[]=a&status[]=b, di-OR-kan) — sama seperti
-        // PreorderController::applyFilters(). Nilai tunggal lama tetap diterima.
-        $listOf = fn (string $key) => array_values(array_filter(
-            Arr::wrap($filters[$key] ?? []),
-            fn ($v) => $v !== null && $v !== '',
-        ));
-
+        // 066 — ekspor memakai scope filter YANG SAMA dengan daftar (Preorder::scopeMatchingListFilters): status/
+        // dispatch_status/fulfillment/artist_id/category_id/customer_id berbentuk ARRAY (di-OR-kan), `search` sama dengan
+        // kotak pencarian layar. Dulu rantai filternya disalin tangan di sini dan lebih sempit (pencarian hanya nama
+        // pelanggan, tanpa artist_id), sehingga berkas bisa berisi baris yang berbeda dari layar. Jangan salin lagi.
+        // Hanya rentang tanggal buat yang tetap lokal: daftar tidak pernah punya filter itu.
         $query = Preorder::query()
             // 050: `items.variant` (withTrashed — varian yang di-soft-delete tetap punya nama untuk dibaca) dimuat SEKALI di sini;
             // memanggil relasinya di dalam map() tanpa ini akan menjadi satu query per pre-order.
-            ->with(['customer', 'event', 'items.variant' => fn ($q) => $q->withTrashed()])
-            ->when($listOf('status') !== [], fn ($q) => $q->whereIn('status', $listOf('status')))
-            ->when(! empty($filters['event_id']), fn ($q) => $q->where('event_id', $filters['event_id']))
-            ->when(! empty($filters['customer_id']), fn ($q) => $q->where('customer_id', $filters['customer_id']))
-            ->when($listOf('fulfillment') !== [], fn ($q) => $q->whereIn('fulfillment', $listOf('fulfillment')))
-            ->when($listOf('dispatch_status') !== [], fn ($q) => $q->whereIn('dispatch_status', $listOf('dispatch_status')))
-            ->when(! empty($filters['search']), fn ($q) => $q->whereHas(
-                'customer',
-                fn ($cq) => $cq->where('name', 'like', '%'.$filters['search'].'%')
-            ))
+            // 066: `items.artist` untuk kolom `sellers` — SENGAJA tanpa withTrashed(), persis seperti list, supaya sel itu
+            // selalu sama dengan kolom Penjual di layar (penjual yang di-soft-delete tidak tampil di keduanya).
+            ->with(['customer', 'event', 'items.artist', 'items.variant' => fn ($q) => $q->withTrashed()])
+            ->matchingListFilters($filters)
             ->when(! empty($filters['date_from']), fn ($q) => $q->whereDate('created_at', '>=', $filters['date_from']))
             ->when(! empty($filters['date_to']), fn ($q) => $q->whereDate('created_at', '<=', $filters['date_to']))
             ->orderByDesc('created_at');
 
         return $query->get()->map(fn (Preorder $p) => [
+            // 066 — HANYA-EKSPOR: nomor PO sama dengan yang tampil di list; kolom pertama supaya satu baris langsung dikenali.
+            'preorder_number' => $p->preorder_number,
             'customer_name' => $p->customer?->name,
+            // 066 — HANYA-EKSPOR: penjual unik tiap item, urut kemunculan pertama (definisi yang sama dengan kolom Penjual di
+            // list: Preorder::sellers()), dipisah " | " karena nama penjual bisa berkoma (alasan yang sama dengan variant_names).
+            'sellers' => collect($p->sellers())->pluck('name')->implode(' | '),
             'event_name' => $p->event?->name,
             'fulfillment' => $p->fulfillment === 'courier' ? 'mail order' : 'pickup',
             'pickup_day' => $this->pickupDayToLabel($p),
@@ -106,7 +102,13 @@ class PreorderExportImportService
             'courier_name' => $p->courier_name,
             'expected_date' => $p->expected_date?->toDateString(),
             'discount' => number_format((float) $p->discount, 2, '.', ''),
+            // 066 — HANYA-EKSPOR: total akhir pesanan (item − diskon + ongkir), angka yang sama dengan kolom Total di list;
+            // diimpor TIDAK PERNAH dibaca — importer menghitung ulang total dari harga item.
+            'total_amount' => number_format((float) $p->total_amount, 2, '.', ''),
             'notes' => $p->notes,
+            // 066 — HANYA-EKSPOR: status utama pre-order (nilai mentah seperti dispatch_status). Impor tetap SELALU memulai
+            // pesanan di `ordered`; kolom ini tidak mengubah itu.
+            'status' => $p->status,
             'dispatch_status' => $p->dispatch_status,
             // ISO 8601 + offset: tak ambigu (zona waktu aplikasi = UTC, sedangkan
             // layar menampilkan waktu lokal) dan dibaca balik persis oleh impor.

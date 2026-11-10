@@ -51,3 +51,11 @@ vi.mock('../resources/js/api/orderApprovals', () => ({
   previewBulkApproval: vi.fn(),
   bulkApprove: vi.fn(),
 }));
+
+// 066 — PreordersView memuat pilihan kategori (GET /categories) saat dibuka untuk filter barunya. Empat file tes lama
+// merender layar itu tanpa tahu hal ini; tanpa default ini tiap tes memukul jaringan sungguhan. Hanya `listCategories`
+// yang diganti (ekspor lain tetap asli); tes yang memakai vi.mock('api/categories') sendiri menimpa default ini.
+vi.mock('../resources/js/api/categories', async (importOriginal) => ({
+  ...(await importOriginal()),
+  listCategories: vi.fn().mockResolvedValue({ data: [] }),
+}));

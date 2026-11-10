@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/vue';
+import { render, screen, waitFor, fireEvent } from '@testing-library/vue';
 import { createI18n } from 'vue-i18n';
 import BaseMultiSelect from '../../resources/js/components/ui/BaseMultiSelect.vue';
 import idMessages from '../../resources/js/locales/id.json';
@@ -69,5 +69,21 @@ describe('BaseMultiSelect', () => {
   it('shows a count when more than one specific option is selected', async () => {
     renderMultiSelect({ modelValue: [1, 2] });
     expect(screen.getByText('2 dipilih')).toBeInTheDocument();
+  });
+  // 066 — BUG: daftar panjang tidak bisa di-scroll karena listener scroll di window (capture) menutup panel
+  // pada scroll APA PUN, termasuk scroll di dalam daftarnya sendiri. Sama dengan perbaikan BaseSelect (036).
+  it('stays open while its own list scrolls, but still closes when the page scrolls', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    renderMultiSelect();
+
+    await user.click(screen.getByRole('button'));
+    const listbox = await screen.findByRole('listbox');
+
+    await fireEvent.scroll(listbox.querySelector('.overflow-y-auto'));
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+    await fireEvent.scroll(document);
+    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
   });
 });

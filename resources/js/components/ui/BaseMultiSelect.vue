@@ -23,8 +23,14 @@ const props = defineProps({
   placeholder: { type: String, default: '' },
   allLabel: { type: String, default: '' },
   disabled: { type: Boolean, default: false },
+  // 066 — opt-in. Daftar yang bisa melebihi satu halaman (pelanggan) tidak bisa
+  // disaring di klien: dengan `remote`, komponen TIDAK menyaring `options`
+  // sendiri, melainkan memancarkan `search` (teks mentah; '' saat panel dibuka
+  // supaya pemanggil memuat halaman pertama lagi) dan pemanggil mengganti
+  // `options`. Default false → perilaku 8+ pemanggil lama tidak berubah.
+  remote: { type: Boolean, default: false },
 });
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'search']);
 
 const id = useId();
 const rootEl = ref(null);
@@ -41,6 +47,7 @@ const effectiveAllLabel = computed(() => props.allLabel || t('common.all'));
 const isAllSelected = computed(() => props.modelValue.length === 0);
 
 const filteredOptions = computed(() => {
+  if (props.remote) return props.options;
   const term = search.value.trim().toLowerCase();
   if (!term) return props.options;
   return props.options.filter((o) => o.label.toLowerCase().includes(term));
@@ -72,6 +79,7 @@ function open() {
   search.value = '';
   activeIndex.value = -1;
   updatePanelPosition();
+  if (props.remote) emit('search', '');
   nextTick(() => panelEl.value?.querySelector('input')?.focus());
 }
 function close() {
@@ -97,7 +105,13 @@ function onClickOutside(e) {
   const clickedPanel = panelEl.value && panelEl.value.contains(e.target);
   if (isOpen.value && !clickedTrigger && !clickedPanel) close();
 }
-function onScrollOrResize() {
+// BUG YANG DITEMUKAN & DIPERBAIKI (066): listener scroll di bawah dipasang di window dengan capture,
+// jadi ia juga menangkap scroll DI DALAM daftar ini sendiri — panel menutup begitu pengguna mulai
+// menggulir daftar yang panjang (mis. banyak kategori), sehingga opsi di bawah tak terjangkau.
+// Sama dengan perbaikan BaseSelect (036): scroll yang berasal dari dalam panel diabaikan;
+// scroll halaman dan resize tetap menutup (posisi panel `fixed` akan salah kalau tidak).
+function onScrollOrResize(e) {
+  if (e?.type === 'scroll' && e.target instanceof Node && panelEl.value?.contains(e.target)) return;
   if (isOpen.value) close();
 }
 watch(isOpen, (open) => {
@@ -158,6 +172,7 @@ onBeforeUnmount(() => {
             type="text"
             :placeholder="t('common.search_placeholder')"
             class="h-9 w-full rounded-md border border-line px-2.5 text-[13.5px] outline-none focus:border-brand"
+            @input="remote && emit('search', search)"
           />
         </div>
         <div class="overflow-y-auto p-1">

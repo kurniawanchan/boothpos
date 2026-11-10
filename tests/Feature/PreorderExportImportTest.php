@@ -30,13 +30,20 @@ class PreorderExportImportTest extends TestCase
         'dispatch_status', 'invoice_sent_at', 'shipping_at',
     ];
 
-    /** HEADINGS + kolom hanya-ekspor `variant_names` tepat sesudah `products` (050). */
+    /**
+     * HEADINGS + kolom hanya-ekspor: `variant_names` tepat sesudah `products` (050), dan (066) `preorder_number` di
+     * kolom pertama, `sellers` sesudah `customer_name`, `total_amount` sesudah `discount`, `status` sebelum
+     * `dispatch_status`. Perubahan tata letak ini DISENGAJA (importer membaca per NAMA kolom, jadi posisi bebas).
+     */
     private const EXPORT_HEADINGS = [
-        'customer_name', 'event_name', 'fulfillment', 'pickup_day',
+        'preorder_number', 'customer_name', 'sellers', 'event_name', 'fulfillment', 'pickup_day',
         'products', 'variant_names', 'quantities', 'unit_prices',
-        'shipping_cost', 'courier_name', 'expected_date', 'discount', 'notes',
-        'dispatch_status', 'invoice_sent_at', 'shipping_at',
+        'shipping_cost', 'courier_name', 'expected_date', 'discount', 'total_amount', 'notes',
+        'status', 'dispatch_status', 'invoice_sent_at', 'shipping_at',
     ];
+
+    /** Kolom hanya-ekspor yang tidak boleh dibaca importer maupun muncul di template. */
+    private const EXPORT_ONLY_KEYS = ['preorder_number', 'sellers', 'variant_names', 'total_amount', 'status', 'created_at', 'updated_at'];
 
     private function makeVariant(string $sku, float $sellPrice = 100000, ?string $variantName = null): \App\Models\ProductVariant
     {
@@ -307,9 +314,9 @@ class PreorderExportImportTest extends TestCase
         $this->assertNotNull($row['created_at']);
         $this->assertNotNull($row['updated_at']);
         // created_at/updated_at hanya untuk dibaca — bukan bagian dari kolom impor.
-        // 050 — `variant_names` (hanya-ekspor) disisipkan tepat sesudah `products`; kolom impor lain tetap berurutan.
+        // 050/066 — kolom hanya-ekspor disisipkan di tempatnya (lihat EXPORT_HEADINGS); kolom impor lain tetap berurutan.
         $this->assertSame(self::EXPORT_HEADINGS, array_slice(array_keys($row), 0, count(self::EXPORT_HEADINGS)));
-        $this->assertSame(self::HEADINGS, array_values(array_diff(array_keys($row), ['variant_names', 'created_at', 'updated_at'])));
+        $this->assertSame(self::HEADINGS, array_values(array_diff(array_keys($row), self::EXPORT_ONLY_KEYS)));
         $this->assertSame(['created_at', 'updated_at'], array_slice(array_keys($row), count(self::EXPORT_HEADINGS)));
     }
 
@@ -595,6 +602,155 @@ class PreorderExportImportTest extends TestCase
         $this->actingAsOwner();
 
         $this->assertNotContains('variant_names', array_keys($this->exportService()->template()[0]));
+    }
+
+    // --- 066-preorder-filter-export-columns (US3) -------------------------------
+
+    private function variantOf(string $sku, Artist $artist): \App\Models\ProductVariant
+    {
+        $product = Product::factory()->create(['artist_id' => $artist->id, 'category_id' => Category::factory()->create()->id, 'is_preorder' => true]);
+
+        return $product->variants()->create(['sku' => $sku, 'sell_price' => 100000, 'cost_price' => 50000, 'current_stock' => 0]);
+    }
+
+    /** @return array<string, array> baris GET /preorders (halaman yang sama dengan layar) berkunci nomor PO */
+    private function listRowsByNumber(): array
+    {
+        return collect($this->getJson('/api/v1/preorders?per_page=100')->assertOk()->json('data'))->keyBy('preorder_number')->all();
+    }
+
+    public function test_the_four_new_columns_equal_what_the_list_shows(): void
+    {
+        $this->actingAsOwner();
+        $variant = $this->makeVariant('NCOL0001', 100000);
+        // Diskon + ongkir: total ≠ subtotal, jadi tes ini gagal kalau yang diekspor subtotal.
+        $this->postJson('/api/v1/preorders', [
+            'customer_id' => Customer::factory()->create()->id, 'fulfillment' => 'courier',
+            'shipping_cost' => 15000, 'discount' => 5000,
+            'items' => [['variant_id' => $variant->id, 'qty' => 1]],
+        ])->assertCreated();
+
+        $row = $this->exportService()->export([])[0];
+        $listed = $this->listRowsByNumber()[$row['preorder_number']];
+
+        $this->assertSame($listed['preorder_number'], $row['preorder_number']);
+        $this->assertSame($listed['status'], $row['status']);
+        $this->assertSame('110000.00', $row['total_amount']);
+        $this->assertSame($listed['total_amount'], $row['total_amount']);
+        $this->assertSame(implode(' | ', array_column($listed['sellers'], 'name')), $row['sellers']);
+    }
+
+    public function test_status_is_exported_raw_for_every_status_and_matches_the_list(): void
+    {
+        $this->actingAsOwner();
+        $variant = $this->makeVariant('NCST0001');
+        $statuses = ['ordered', 'dp_paid', 'arrived', 'settled', 'handed_over', 'cancelled'];
+        foreach ($statuses as $status) {
+            $pre = $this->makeMultiItemPreorder([$variant]);
+            Preorder::whereKey($pre['id'])->update(['status' => $status]);
+        }
+
+        $listed = $this->listRowsByNumber();
+        $rows = collect($this->exportService()->export([]));
+
+        $this->assertCount(6, $rows);
+        $this->assertEqualsCanonicalizing($statuses, $rows->pluck('status')->all());
+        foreach ($rows as $row) {
+            $this->assertSame($listed[$row['preorder_number']]['status'], $row['status']);
+        }
+    }
+
+    public function test_sellers_lists_each_distinct_seller_once_in_item_order_and_keeps_commas_readable(): void
+    {
+        $this->actingAsOwner();
+        $neko = Artist::factory()->create(['name' => 'Neko, Inc.']);
+        $mochi = Artist::factory()->create(['name' => 'Mochi Studio']);
+        $this->makeMultiItemPreorder([$this->variantOf('NSEL0001', $neko)]);
+        // Dua item dari Neko + satu dari Mochi → Neko sekali, urut kemunculan pertama.
+        $this->makeMultiItemPreorder([
+            $this->variantOf('NSEL0002', $neko), $this->variantOf('NSEL0003', $mochi), $this->variantOf('NSEL0004', $neko),
+        ]);
+
+        $bySku = collect($this->exportService()->export([]))->keyBy('products');
+
+        $this->assertSame('Neko, Inc.', $bySku['NSEL0001']['sellers']);
+        $this->assertSame('Neko, Inc. | Mochi Studio', $bySku['NSEL0002,NSEL0003,NSEL0004']['sellers']);
+    }
+
+    public function test_sellers_is_empty_without_items_and_equals_the_list_when_a_seller_was_soft_deleted(): void
+    {
+        $this->actingAsOwner();
+        $gone = Artist::factory()->create(['name' => 'Seller Dihapus']);
+        $kept = Artist::factory()->create(['name' => 'Seller Aktif']);
+        $withGone = $this->makeMultiItemPreorder([$this->variantOf('NSDL0001', $gone), $this->variantOf('NSDL0002', $kept)]);
+        $empty = $this->makeMultiItemPreorder([$this->variantOf('NSDL0003', $kept)]);
+        \App\Models\PreorderItem::where('preorder_id', $empty['id'])->delete();
+        $gone->delete();
+
+        $listed = $this->listRowsByNumber();
+        $rows = collect($this->exportService()->export([]))->keyBy('preorder_number');
+
+        // Selaras dengan kolom Penjual di layar (relasi yang sama, tanpa withTrashed): yang terhapus tidak tampil di keduanya.
+        $numberWithGone = Preorder::findOrFail($withGone['id'])->preorder_number;
+        $this->assertSame(implode(' | ', array_column($listed[$numberWithGone]['sellers'], 'name')), $rows[$numberWithGone]['sellers']);
+        $this->assertSame('Seller Aktif', $rows[$numberWithGone]['sellers']);
+
+        $numberEmpty = Preorder::findOrFail($empty['id'])->preorder_number;
+        $this->assertSame('', $rows[$numberEmpty]['sellers']);
+    }
+
+    public function test_the_new_columns_add_no_personal_contact_data(): void
+    {
+        $this->actingAsOwner();
+        $this->makeMultiItemPreorder([$this->makeVariant('NPII0001')]);
+
+        $keys = array_keys($this->exportService()->export([])[0]);
+
+        foreach (['phone', 'email', 'address', 'social_handle', 'customer_phone', 'customer_email'] as $forbidden) {
+            $this->assertNotContains($forbidden, $keys);
+        }
+    }
+
+    public function test_the_template_lists_none_of_the_export_only_columns(): void
+    {
+        $this->actingAsOwner();
+
+        $keys = array_keys($this->exportService()->template()[0]);
+
+        $this->assertSame(self::HEADINGS, $keys);
+        foreach (self::EXPORT_ONLY_KEYS as $exportOnly) {
+            $this->assertNotContains($exportOnly, $keys);
+        }
+    }
+
+    public function test_a_full_export_file_with_the_new_columns_reimports_without_errors_and_ignores_them(): void
+    {
+        $this->actingAsOwner();
+        $seller = Artist::factory()->create(['name' => 'Seller Roundtrip']);
+        $this->makeMultiItemPreorder([$this->variantOf('NRTA0001', $seller)], [2]);
+        $this->makeMultiItemPreorder([$this->variantOf('NRTB0001', $seller)], [1]);
+        $rows = $this->exportService()->export([]);
+        $this->assertCount(2, $rows);
+        \App\Models\PreorderItem::query()->delete();
+        Preorder::query()->delete();
+
+        // Nilai kolom hanya-ekspor dirusak: tidak boleh mengubah, membuat, atau menggagalkan apa pun.
+        $broken = collect($rows)->map(fn ($r) => array_merge($r, [
+            'preorder_number' => 'PO-PALSU', 'sellers' => 'SIAPA SAJA', 'status' => 'handed_over', 'total_amount' => '1.00',
+        ]))->all();
+        $path = $this->writeXlsx(array_merge([array_keys($broken[0])], array_map('array_values', $broken)));
+
+        $upload = fn () => new UploadedFile($path, 'preorders.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+        $dry = $this->postJson('/api/v1/preorders/import', ['file' => $upload(), 'dry_run' => true]);
+        $dry->assertOk();
+        $this->assertEmpty($dry->json('row_errors'));
+
+        $this->postJson('/api/v1/preorders/import', ['file' => $upload()])->assertStatus(201)->assertJsonPath('created_count', 2);
+        $created = Preorder::orderBy('id')->get();
+        $this->assertCount(2, $created);
+        $this->assertSame(['ordered', 'ordered'], $created->pluck('status')->all());      // impor selalu mulai `ordered`
+        $this->assertNotContains('PO-PALSU', $created->pluck('preorder_number')->all());  // nomor dibuat sistem
+        $this->assertSame(['100000.00', '200000.00'], $created->pluck('total_amount')->sort()->values()->all());
     }
 
     private function writeXlsx(array $rows): string
