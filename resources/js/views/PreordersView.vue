@@ -29,6 +29,7 @@ import { getPaymentProofBlobUrl, verifyPayment } from '../api/payments';
 import { lookupVariants } from '../api/products';
 import { getCustomer } from '../api/customers';
 import { listArtists } from '../api/artists';
+import { listCategories } from '../api/categories';
 import { listEvents } from '../api/events';
 import { useToastStore } from '../stores/toast';
 import { useAuthStore } from '../stores/auth';
@@ -56,6 +57,7 @@ import BaseMultiSelect from '../components/ui/BaseMultiSelect.vue';
 import BaseTextarea from '../components/ui/BaseTextarea.vue';
 import EmptyState from '../components/ui/EmptyState.vue';
 import CustomerSearchDropdown from '../components/preorder/CustomerSearchDropdown.vue';
+import CustomerFilterSelect from '../components/preorder/CustomerFilterSelect.vue';
 import ConfirmDialog from '../components/ui/ConfirmDialog.vue';
 import AddPaymentModal from '../components/payment/AddPaymentModal.vue';
 import PaymentConfirmationModal from '../components/payment/PaymentConfirmationModal.vue';
@@ -181,6 +183,12 @@ onMounted(async () => {
   artists.value = (await listArtists({ per_page: 100, is_active: true })).data;
 });
 
+// 066 (US2) — pilihan filter kategori produk, sama seperti penjual: satu muatan, label lokal.
+const categories = ref([]);
+onMounted(async () => {
+  categories.value = (await listCategories({ per_page: 100 })).data;
+});
+
 // 021-preorder-form-updates (US3, research.md Decision 9) — form New
 // Preorder TIDAK PERNAH punya pemilih event sebelum fitur ini; ditambah
 // di sini karena hari-jemput (di bawah) butuh event untuk menurunkan
@@ -224,10 +232,20 @@ const statusFilter = ref([]);
 const fulfillmentFilter = ref([]);
 const artistFilter = ref([]);
 const dispatchFilter = ref([]);
+// 066 — filter pelanggan (id, pilihan dimuat lewat pencarian server) dan kategori produk; [] = "Semua".
+const customerFilter = ref([]);
+const categoryFilter = ref([]);
+// 066 — bendera "Mail Order tanpa ongkir / alamat" (needsShippingAttention) sebagai filter; [] = semua.
+const shippingFlagFilter = ref([]);
 const statusOptions = computed(() => Object.entries(STATUS_LABEL.value).map(([value, label]) => ({ value, label })));
 const dispatchOptions = computed(() => Object.entries(DISPATCH_LABEL.value).map(([value, label]) => ({ value, label })));
 const fulfillmentOptions = computed(() => Object.entries(FULFILLMENT_LABEL.value).map(([value, label]) => ({ value, label })));
 const sellerOptions = computed(() => artists.value.map((a) => ({ value: a.id, label: a.name })));
+const shippingFlagOptions = computed(() => [
+  { value: 'no_cost', label: t('preorders.flag_no_cost') },
+  { value: 'no_address', label: t('preorders.flag_no_address') },
+]);
+const categoryOptions = computed(() => categories.value.map((c) => ({ value: c.id, label: c.name })));
 
 function applyPreorderFilters() {
   applyFilter({
@@ -235,6 +253,9 @@ function applyPreorderFilters() {
     fulfillment: fulfillmentFilter.value.length ? fulfillmentFilter.value : undefined,
     artist_id: artistFilter.value.length ? artistFilter.value : undefined,
     dispatch_status: dispatchFilter.value.length ? dispatchFilter.value : undefined,
+    customer_id: customerFilter.value.length ? customerFilter.value : undefined,
+    category_id: categoryFilter.value.length ? categoryFilter.value : undefined,
+    shipping_flag: shippingFlagFilter.value.length ? shippingFlagFilter.value : undefined,
   });
 }
 
@@ -1477,6 +1498,26 @@ async function saveShipmentChanges() {
         class="w-48"
         :options="sellerOptions"
         :all-label="t('preorders.all_sellers')"
+        @update:model-value="applyPreorderFilters"
+      />
+      <CustomerFilterSelect
+        v-model="customerFilter"
+        class="w-48"
+        :all-label="t('preorders.all_customers')"
+        @update:model-value="applyPreorderFilters"
+      />
+      <BaseMultiSelect
+        v-model="categoryFilter"
+        class="w-48"
+        :options="categoryOptions"
+        :all-label="t('preorders.all_categories')"
+        @update:model-value="applyPreorderFilters"
+      />
+      <BaseMultiSelect
+        v-model="shippingFlagFilter"
+        class="w-60"
+        :options="shippingFlagOptions"
+        :all-label="t('preorders.all_shipping_flags')"
         @update:model-value="applyPreorderFilters"
       />
       <span class="flex-1"></span>

@@ -5,8 +5,9 @@ import { createI18n } from 'vue-i18n';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import PreordersView from '../../resources/js/views/PreordersView.vue';
 import { useAuthStore } from '../../resources/js/stores/auth';
-import { listPreorders, getPreorder, getPreorderNeighbors, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices, bulkPreorderInvoices, updatePreorderDispatchStatus, getPreorderInvoice, duplicatePreorders, splitPreorder, deletePreorderPayment, createPreorderPayment } from '../../resources/js/api/preorders';
+import { listPreorders, getPreorder, getPreorderNeighbors, getPreorderSummary, updatePreorder, deletePreorder, bulkEmailPreorderInvoices, bulkPreorderInvoices, updatePreorderDispatchStatus, getPreorderInvoice, duplicatePreorders, splitPreorder, deletePreorderPayment, createPreorderPayment, exportPreorders } from '../../resources/js/api/preorders';
 import { listArtists } from '../../resources/js/api/artists';
+import { listCategories } from '../../resources/js/api/categories';
 import { listCustomers, getCustomer } from '../../resources/js/api/customers';
 import { lookupVariants } from '../../resources/js/api/products';
 import { listEvents } from '../../resources/js/api/events';
@@ -2039,5 +2040,118 @@ describe('PreordersView — sel satu baris: nomor & total (053 US1)', () => {
     await user.click(screen.getByRole('button', { name: 'PO-0010' }));
 
     await waitFor(() => expect(getPreorder).toHaveBeenCalledWith(10));
+  });
+});
+
+/**
+ * 066-preorder-filter-export-columns (US1, US2, US4) — filter Pelanggan dan Kategori produk pada daftar pre-order,
+ * dan ekspor yang meneruskan filter yang sama (params reaktif usePaginatedList).
+ */
+describe('PreordersView — customer and category filters (066)', () => {
+  const CATEGORIES = [{ id: 5, name: 'Keychain' }, { id: 6, name: 'Sticker' }];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listArtists.mockResolvedValue({ data: ARTISTS });
+    listEvents.mockResolvedValue({ data: [] });
+    listCategories.mockResolvedValue({ data: CATEGORIES });
+    listCustomers.mockResolvedValue({ data: [{ id: 7, name: 'Siti Aminah' }, { id: 8, name: 'Budi Santoso' }] });
+    listPreorders.mockResolvedValue({ data: ROWS, meta: { current_page: 1, per_page: 25, total: 2, last_page: 1 } });
+    getPreorderSummary.mockResolvedValue({ transaction_count: 2, by_status: [], grand_total: '0.00', total_outstanding: '0.00' });
+  });
+
+  async function user() {
+    const { default: userEvent } = await import('@testing-library/user-event');
+
+    return userEvent.setup();
+  }
+
+  it('sends the chosen customer ids (array) to the list and the summary, back on page 1, and clears when unchosen', async () => {
+    const u = await user();
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    await u.click(screen.getByText('Semua pelanggan'));
+    await u.click(await screen.findByRole('option', { name: 'Siti Aminah' }));
+
+    await waitFor(() => expect(listPreorders).toHaveBeenCalledWith(expect.objectContaining({ customer_id: [7], page: 1 })));
+    await waitFor(() => expect(getPreorderSummary).toHaveBeenCalledWith(expect.objectContaining({ customer_id: [7] })));
+
+    // Pilihan kedua → dua id (di-OR-kan server); lalu keduanya dilepas → filter hilang.
+    await u.click(await screen.findByRole('option', { name: 'Budi Santoso' }));
+    await waitFor(() => expect(listPreorders).toHaveBeenCalledWith(expect.objectContaining({ customer_id: [7, 8] })));
+    await u.click(screen.getByRole('option', { name: 'Siti Aminah' }));
+    await u.click(screen.getByRole('option', { name: 'Budi Santoso' }));
+    await waitFor(() => expect(listPreorders).toHaveBeenLastCalledWith(expect.objectContaining({ customer_id: undefined })));
+  });
+
+  it('sends the chosen category ids (array) to the list and the summary', async () => {
+    const u = await user();
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+    await waitFor(() => expect(listCategories).toHaveBeenCalled());
+
+    await u.click(screen.getByText('Semua kategori'));
+    await u.click(await screen.findByRole('option', { name: 'Keychain' }));
+
+    await waitFor(() => expect(listPreorders).toHaveBeenCalledWith(expect.objectContaining({ category_id: [5], page: 1 })));
+    await waitFor(() => expect(getPreorderSummary).toHaveBeenCalledWith(expect.objectContaining({ category_id: [5] })));
+
+    await u.click(screen.getByRole('option', { name: 'Keychain' }));
+    await waitFor(() => expect(listPreorders).toHaveBeenLastCalledWith(expect.objectContaining({ category_id: undefined })));
+  });
+
+  it('empties the bulk selection when either new filter changes, like every other filter', async () => {
+    const u = await user();
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    await u.click(within(screen.getByText('PO-0010').closest('tr')).getByRole('checkbox'));
+    expect(await screen.findByTestId('clear-selection')).toBeInTheDocument();
+
+    await u.click(screen.getByText('Semua kategori'));
+    await u.click(await screen.findByRole('option', { name: 'Sticker' }));
+
+    await waitFor(() => expect(screen.queryByTestId('clear-selection')).not.toBeInTheDocument());
+  });
+
+  it('exports with the same customer, category and seller filters that are active on screen', async () => {
+    const u = await user();
+    URL.createObjectURL = vi.fn(() => 'blob:preorders');
+    URL.revokeObjectURL = vi.fn();
+    exportPreorders.mockResolvedValue(new Blob(['x']));
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+    await waitFor(() => expect(listArtists).toHaveBeenCalled());
+
+    await u.click(screen.getByText('Semua penjual'));
+    await u.click(await screen.findByRole('option', { name: 'Artist A' }));
+    await u.click(screen.getByText('Semua pelanggan'));
+    await u.click(await screen.findByRole('option', { name: 'Siti Aminah' }));
+    await u.click(screen.getByText('Semua kategori'));
+    await u.click(await screen.findByRole('option', { name: 'Keychain' }));
+
+    await u.click(screen.getByRole('button', { name: /Ekspor \.xlsx/ }));
+
+    await waitFor(() => expect(exportPreorders).toHaveBeenCalledWith(
+      expect.objectContaining({ artist_id: [1], customer_id: [7], category_id: [5] }),
+    ));
+  });
+  it('filters by the shipping-cost / address flag, one or both causes, sent as shipping_flag[]', async () => {
+    const u = await user();
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    await u.click(screen.getByText('Semua bendera ongkir/alamat'));
+    await u.click(await screen.findByRole('option', { name: 'Ongkir belum diisi' }));
+    await waitFor(() => expect(listPreorders).toHaveBeenCalledWith(expect.objectContaining({ shipping_flag: ['no_cost'], page: 1 })));
+    await waitFor(() => expect(getPreorderSummary).toHaveBeenCalledWith(expect.objectContaining({ shipping_flag: ['no_cost'] })));
+
+    await u.click(screen.getByRole('option', { name: 'Alamat pelanggan belum diisi' }));
+    await waitFor(() => expect(listPreorders).toHaveBeenCalledWith(expect.objectContaining({ shipping_flag: ['no_cost', 'no_address'] })));
+
+    await u.click(screen.getByRole('option', { name: 'Ongkir belum diisi' }));
+    await u.click(screen.getByRole('option', { name: 'Alamat pelanggan belum diisi' }));
+    await waitFor(() => expect(listPreorders).toHaveBeenLastCalledWith(expect.objectContaining({ shipping_flag: undefined })));
   });
 });
