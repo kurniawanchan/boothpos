@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<title>Panduan Lengkap Manajemen Stok Restoran</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 18mm 16mm; }
+  :root { --ink:#111827; --mut:#4b5563; --line:#d1d5db; --pri:#4338ca; --soft:#eef2ff; --warn:#fff7ed; --warnb:#f59e0b; --ok:#ecfdf5; --okb:#10b981; --bad:#fef2f2; --badb:#e11d48; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: var(--ink); font-size: 10.5pt; line-height: 1.5; margin: 0; }
+  h1 { font-size: 26pt; margin: 0 0 6px; line-height: 1.15; }
+  h2 { font-size: 17pt; color: var(--pri); border-bottom: 2px solid var(--pri); padding-bottom: 4px; margin: 0 0 12px; break-before: page; }
+  h2.nb { break-before: auto; margin-top: 22px; }
+  h3 { font-size: 12.5pt; margin: 18px 0 6px; break-after: avoid; }
+  h4 { font-size: 11pt; margin: 12px 0 4px; break-after: avoid; }
+  p { margin: 6px 0; }
+  .label { display:inline-block; border:1.5px solid var(--ink); padding:2px 10px; font-weight:700; font-size:9pt; letter-spacing:.06em; }
+  .cover { min-height: 235mm; display:flex; flex-direction:column; justify-content:center; }
+  .cover .sub { font-size: 13pt; color: var(--mut); margin: 8px 0 28px; }
+  .meta td { padding: 3px 14px 3px 0; color: var(--mut); font-size: 10pt; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0 12px; font-size: 9.5pt; }
+  th, td { border: 1px solid var(--line); padding: 5px 8px; vertical-align: top; text-align: left; }
+  th { background: #f3f4f6; }
+  tr { break-inside: avoid; }
+  .note, .warn, .ok, .bad { border-left: 4px solid; padding: 8px 12px; margin: 10px 0; border-radius: 3px; break-inside: avoid; }
+  .note { background: var(--soft); border-color: var(--pri); }
+  .warn { background: var(--warn); border-color: var(--warnb); }
+  .ok { background: var(--ok); border-color: var(--okb); }
+  .bad { background: var(--bad); border-color: var(--badb); }
+  .role { display:inline-block; font-size:8.5pt; font-weight:700; padding:1px 8px; border-radius:10px; margin-right:6px; vertical-align:middle; }
+  .adm { background:#e0e7ff; color:#3730a3; } .stf { background:#d1fae5; color:#065f46; } .both { background:#fde68a; color:#78350f; }
+  figure { margin: 10px 0 14px; break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid var(--line); border-radius: 4px; display:block; }
+  figure.tall img { width: 78%; margin: 0 auto; }
+  figcaption { font-size: 9pt; color: var(--mut); margin-top: 4px; }
+  figcaption b { color: var(--ink); }
+  .req { border: 2px dashed var(--warnb); background: var(--warn); padding: 14px; text-align:center; font-weight:700; margin: 10px 0 14px; break-inside: avoid; }
+  ol, ul { margin: 6px 0 6px 20px; padding: 0; } li { margin: 2px 0; }
+  .flow { display:flex; flex-wrap:wrap; align-items:stretch; gap:6px; margin: 12px 0; }
+  .flow div { flex: 1 1 22%; background: var(--soft); border:1.5px solid var(--pri); border-radius:8px; padding:6px 8px; font-size:9pt; text-align:center; position:relative; }
+  .flow div b { display:block; color: var(--pri); }
+  .flow .arr { flex: 0 0 auto; background:none; border:none; font-size:14pt; padding:0; align-self:center; color:var(--pri); }
+  .ill { font-size:8.5pt; font-weight:700; color:#9a3412; background:#ffedd5; padding:1px 8px; border-radius:4px; }
+  code { background:#f3f4f6; padding:0 4px; border-radius:3px; font-size:9pt; }
+  .toc li { margin: 1px 0; }
+  .pagehead { font-size:8.5pt; color: var(--mut); break-after: avoid; }
+  figure.narrow img { width: 58%; margin: 0 auto; }
+  figure.mid img { width: 82%; margin: 0 auto; }
+</style>
+</head>
+<body>
+
+<!-- ====================== SAMPUL ====================== -->
+<section class="cover">
+  <div><span class="label">INTERNAL</span></div>
+  <h1 style="margin-top:22px">Panduan Lengkap<br>Manajemen Stok Restoran</h1>
+  <div class="sub">Panduan Konfigurasi Produk, Material, Resep, Modifier, Vendor, dan Purchase Order</div>
+  <table class="meta" style="width:auto; border:none">
+    <tr><td style="border:none">Sistem</td><td style="border:none">BoothPOS (varian restoran) — web back-office</td></tr>
+    <tr><td style="border:none">Tanggal</td><td style="border:none">7 November 2026</td></tr>
+    <tr><td style="border:none">Cakupan fitur</td><td style="border:none">Spesifikasi 087–093 (stok bahan, modifier, resep, stok menu berbasis resep, produk sebagai bahan)</td></tr>
+    <tr><td style="border:none">Pembaca</td><td style="border:none">Pemilik, administrator, dan staf operasional yang mengelola stok</td></tr>
+  </table>
+  <div class="note" style="margin-top:26px">
+    <b>Cara membaca dokumen ini.</b> Label menu dan tombol ditulis <b>persis seperti di layar (bahasa Inggris)</b> karena itu yang dilihat pengguna.
+    Screenshot diambil dari aplikasi nyata (instalasi Warkop WJM 3, mode LIVE); nama pengguna di pojok kanan atas sengaja disamarkan.
+    Karena saldo bahan di instalasi itu sebagian besar masih 0, <b>angka perhitungan memakai tabel yang diberi tanda <span class="ill">ILUSTRASI</span></b>:
+    rumusnya dari kode aplikasi, angkanya contoh.
+    Bagian yang tidak bisa dibuktikan dari layar atau kode ditulis <b>“belum terverifikasi”</b>; gambar yang belum ada ditulis <b>[SCREENSHOT REQUIRED]</b>.
+  </div>
+  <p class="pagehead">Peran dalam dokumen ini: <span class="role adm">ADMIN</span> pemilik/admin — konfigurasi awal dan perubahan struktur;
+  <span class="role stf">STAF</span> staf operasional (peran Inventory) — pembelian, penerimaan, pemantauan harian;
+  <span class="role both">KEDUANYA</span>.</p>
+</section>
+
+<!-- ====================== DAFTAR ISI ====================== -->
+<section>
+<h2 style="break-before:page">Daftar Isi</h2>
+<ol class="toc">
+  <li>Pendahuluan</li>
+  <li>Memahami Konsep Manajemen Stok</li>
+  <li>Konfigurasi Stok Awal (A Material · B Produk · C Resep · D Varian dan Modifier)</li>
+  <li>Memahami Stok Produk dan Stok Material (termasuk 3 contoh perhitungan)</li>
+  <li>Manajemen Vendor</li>
+  <li>Manajemen Purchase Order</li>
+  <li>Alur Kerja Stok Harian</li>
+  <li>Skenario Lengkap dari Awal sampai Akhir</li>
+  <li>Pemecahan Masalah dan Praktik Terbaik</li>
+  <li>Panduan Ringkas (Quick Reference)</li>
+</ol>
+<p class="pagehead">Urutan bab mengikuti urutan kerja yang benar (material → vendor → produk → modifier → resep → stok awal → PO → penjualan → pemantauan), bukan urutan menu di sidebar.
+Di sidebar, Material dan Vendor ada di menu <b>Purchase</b>, sedangkan Produk dan Stok ada di <b>Inventory</b>; modifier ada di <b>Restaurant → Restaurant Setup</b>.</p>
+</section>
+
+<!-- ====================== 1. PENDAHULUAN ====================== -->
+<section>
+<h2>1. Pendahuluan</h2>
+<h3>1.1 Gambaran umum</h3>
+<p>Sistem stok BoothPOS mencatat <b>setiap perubahan stok sebagai riwayat yang tidak dihapus</b> (menu <b>Inventory → Stock</b>, subjudul “Every stock change is recorded and auditable”). Saldo adalah jumlah dari riwayat itu, dihitung <b>per outlet</b>.</p>
+
+<h3>1.2 Stok Produk vs Stok Material</h3>
+<table>
+  <tr><th></th><th>Stok Produk</th><th>Stok Material</th></tr>
+  <tr><td><b>Apa itu</b></td><td>Jumlah barang jadi yang dijual, dihitung per <b>varian</b> (mis. satu botol minuman).</td><td>Jumlah bahan/pendukung yang dipakai membuat menu (mie, telur, sayur, kemasan).</td></tr>
+  <tr><td><b>Dibuat di</b></td><td>Inventory → Products</td><td>Purchase → Materials</td></tr>
+  <tr><td><b>Riwayat di</b></td><td>Inventory → Stock, tab <b>Products</b></td><td>Inventory → Stock, tab <b>Materials</b></td></tr>
+  <tr><td><b>Bertambah lewat</b></td><td>Stock adjustment, impor Excel, transfer antar-outlet</td><td>Penerimaan PO (status Received), Adjust stock, impor Excel</td></tr>
+  <tr><td><b>Berkurang saat</b></td><td>Pesanan selesai (menu stok varian)</td><td>Pesanan selesai yang memakai resep atau pilihan modifier bertaut bahan</td></tr>
+</table>
+
+<h3>1.3 Empat jenis stok yang harus dibedakan</h3>
+<table>
+  <tr><th>Jenis</th><th>Siapa yang menyimpan angkanya</th><th>Bagaimana dibaca</th></tr>
+  <tr><td><b>Stok produk (varian)</b></td><td>Saldo varian (kolom STOCK di form produk)</td><td>Dikurangi saat varian terjual. Hanya untuk varian yang <b>Track stock</b>-nya menyala dan <b>tidak</b> berresep.</td></tr>
+  <tr><td><b>Stok berbasis resep</b></td><td>Tidak ada saldo sendiri — dihitung dari saldo bahan resep</td><td>“Porsi tersedia” = bahan paling terbatas (Bab 4.A).</td></tr>
+  <tr><td><b>Stok berbasis modifier</b></td><td>Saldo bahan yang tertaut ke pilihan modifier</td><td>Dikurangi saat pilihan itu dipesan dan pesanan selesai.</td></tr>
+  <tr><td><b>Stok produk-sebagai-bahan</b></td><td>Saldo varian produk itu (<b>satu saldo bersama</b>)</td><td>Dikurangi baik oleh penjualan langsung maupun pemakaian di resep produk lain.</td></tr>
+</table>
+
+<h3>1.4 Peta ketergantungan konfigurasi</h3>
+<p>Setiap langkah bergantung pada langkah sebelumnya. Jangan melompat: resep tidak bisa dibuat sebelum bahannya ada, PO tidak bisa dibuat sebelum vendor dan bahannya ada.</p>
+<div class="flow">
+  <div><b>1 Material</b>Purchase → Materials</div><div class="arr">→</div>
+  <div><b>2 Vendor</b>Purchase → Vendors<br>+ Vendor prices</div><div class="arr">→</div>
+  <div><b>3 Produk</b>Inventory → Products</div><div class="arr">→</div>
+  <div><b>4 Varian / Modifier</b>form produk;<br>grup di Restaurant Setup</div><div class="arr">→</div>
+  <div><b>5 Resep</b>halaman detail produk</div><div class="arr">→</div>
+  <div><b>6 Stok awal</b>Adjust stock / PO</div><div class="arr">→</div>
+  <div><b>7 Purchase Order</b>draft → ordered → received</div><div class="arr">→</div>
+  <div><b>8 Penjualan POS</b>pesanan selesai memotong stok</div><div class="arr">→</div>
+  <div><b>9 Pemantauan</b>Stock, Materials, Reports</div>
+</div>
+
+<h3>1.5 Dampak aktivitas utama pada stok</h3>
+<table>
+  <tr><th>Aktivitas</th><th>Stok Produk</th><th>Stok Material</th></tr>
+  <tr><td>Terima PO (status Received)</td><td>Tidak berubah (PO hanya memuat baris <b>Material</b> dan <b>Service</b>)</td><td>Bertambah, di <b>outlet PO</b></td></tr>
+  <tr><td>Jual produk berresep</td><td>“Porsi tersedia” turun (dihitung ulang)</td><td>Bahan resep berkurang saat pesanan selesai</td></tr>
+  <tr><td>Jual produk dengan pilihan modifier bertaut bahan</td><td>Tergantung <b>Stock source</b> produk (Bab 3.B)</td><td>Bahan pilihan berkurang (jumlah × qty pilihan × qty baris)</td></tr>
+  <tr><td>Produk dipakai sebagai bahan</td><td>Saldo bersama berkurang</td><td>Tidak ada saldo material ganda</td></tr>
+  <tr><td>Void / refund pesanan</td><td>Kembali sesuai riwayat</td><td>Kembali sesuai riwayat (bukan resep saat ini)</td></tr>
+</table>
+</section>
+
+<!-- ====================== 2. KONSEP ====================== -->
+<section>
+<h2>2. Memahami Konsep Manajemen Stok</h2>
+<table>
+  <tr><th style="width:17%">Konsep</th><th>Arti di aplikasi</th><th style="width:30%">Contoh restoran</th></tr>
+  <tr><td><b>Product</b></td><td>Item menu yang dijual (tab <b>Menu items</b>; ada juga Raw materials, Semi-finished, Packaging, Retail items, Modifiers &amp; combos).</td><td>Indomie Kuah, Rp 8.000</td></tr>
+  <tr><td><b>Variant</b></td><td>Varian satu produk, masing-masing punya SKU, harga, stok, status Active. Produk tanpa varian tetap punya satu varian bernama <b>Standard</b>.</td><td>Ayam Penyet / Ayam Bakar; ukuran</td></tr>
+  <tr><td><b>Modifier</b></td><td>Grup pilihan tambahan (Choose one / beberapa), dengan aturan <b>Must be chosen</b>, min/max qty, selisih harga, dan <b>Materials used</b> (bahan yang terpotong bila dipilih).</td><td>Rasa Kuah: Soto, Ayam Bawang, Kari Ayam</td></tr>
+  <tr><td><b>Material</b></td><td>Bahan atau barang pendukung dengan <b>Kind</b> (Raw material, Semi-finished, Packaging) dan <b>Unit</b>. Dibeli lewat PO.</td><td>Telur (butir), Sayur (gram)</td></tr>
+  <tr><td><b>Recipe</b></td><td>Daftar bahan per porsi untuk satu varian, boleh dipecah per pilihan modifier (blok). Satu varian boleh punya banyak resep aktif; semuanya dijumlahkan.</td><td>1 Indomie + 1 Telur + 50 g Sayur</td></tr>
+  <tr><td><b>Use as ingredient</b></td><td>Penanda produk agar variannya bisa dipilih sebagai bahan di resep produk lain, dengan <b>satu saldo bersama</b>.</td><td>Telur yang juga dijual satuan</td></tr>
+  <tr><td><b>Vendor</b></td><td>Pemasok. Harga per material disimpan di <b>Vendor prices</b>; vendor <b>Preferred</b> menjadi acuan harga modal.</td><td>Toko Grosir A</td></tr>
+  <tr><td><b>Purchase Order</b></td><td>Dokumen pembelian: vendor + outlet + baris Material/Service. Status: Draft → Ordered → Received → Paid (atau Cancelled).</td><td>PO 50 butir telur</td></tr>
+</table>
+<div class="note"><b>Aturan inti yang membedakan sistem ini dari stok “biasa”:</b>
+<ul>
+<li>Stok bahan resep dan modifier dipotong <b>saat pesanan selesai</b>, bukan saat pesanan masuk ke tab atau saat resep disimpan.</li>
+<li>Stok menu berresep <b>dihitung</b>, bukan disimpan; varian yang berresep otomatis berhenti memakai stok variannya sendiri.</li>
+<li>Menambah stok (PO, koreksi +, transfer masuk) <b>selalu boleh</b>; mengurangi stok sampai minus ditolak, kecuali oleh penjualan dan waste.</li>
+</ul></div>
+</section>
+
+<!-- ====================== 3. KONFIGURASI ====================== -->
+<section>
+<h2>3. Konfigurasi Stok Awal</h2>
+<p><span class="role adm">ADMIN</span> Seluruh bab ini dikerjakan sekali di awal dan diubah bila menu berubah. Urutannya wajib: A → B → C → D (modifier dibuat sebelum resep bermodifier).</p>
+
+<h3>A. Manajemen Material</h3>
+<p class="pagehead">Menu: Purchase → Materials · <span class="role adm">ADMIN</span></p>
+<figure>
+  <img src="img/f01_materials.png">
+  <figcaption><b>Gambar 3.1 — Purchase → Materials.</b> (1) Add material, (2) kolom STOCK = saldo <b>outlet yang dipilih di bilah atas</b> (0 bila belum ada saldo di outlet itu, tidak pernah total semua outlet), (3) Usage: bahan ini dipakai modifier mana saja + riwayat, (4) Adjust stock, (5) Vendor prices.</figcaption>
+</figure>
+<h4>Membuat material</h4>
+<ol>
+  <li>Buka <b>Purchase → Materials</b>, klik <b>Add material</b> (1).</li>
+  <li>Isi <b>Material code</b> (wajib, <i>permanen setelah dibuat</i>) dan <b>Material name</b> (wajib).</li>
+  <li>Pilih <b>Material kind</b>: Raw material, Semi-finished, atau Packaging. Kind dipakai untuk filter dan laporan, tidak mengubah cara stok dihitung.</li>
+  <li>Pilih <b>Unit</b> dari daftar: pcs, butir, bungkus, sachet, porsi, lembar, ikat, pack, box, botol, kaleng, gram, kg, ml, liter, meter (atau isi satuan lain lewat “Lainnya…”).</li>
+  <li><b>Notes</b> opsional; biarkan <b>Active</b> tercentang; klik <b>Save</b>.</li>
+</ol>
+<figure class="narrow">
+  <img src="img/f02_material_new.png">
+  <figcaption><b>Gambar 3.2 — Form New material.</b> (1) kode, (2) nama, (3) jenis, (4) satuan, (5) Save.</figcaption>
+</figure>
+<div class="warn"><b>Yang tidak ada di aplikasi:</b> tidak ada kolom SKU terpisah maupun kategori bahan — <b>Material code</b> berfungsi sebagai SKU, dan pengelompokan hanya lewat <b>Material kind</b>. Tidak ada saklar “inventory item” terpisah: <b>setiap material otomatis dilacak stoknya</b> per outlet.</div>
+<div class="warn"><b>Pilih satuan terkecil yang dipakai resep.</b> Resep memotong stok dalam satuan material itu. Kalau resep memakai 50 gram sayur, material Sayur harus bersatuan <b>gram</b> (bukan kg), dan PO-nya dihitung dalam gram juga.</div>
+
+<h4>Memberi stok awal / koreksi stok material</h4>
+<p>Klik <b>Adjust stock</b> (4) pada baris material.</p>
+<figure class="narrow">
+  <img src="img/f03_material_adjust.png">
+  <figcaption><b>Gambar 3.3 — Adjust stock.</b> (1) Outlet yang dikoreksi, (2) Change (+/−): angka positif menambah, negatif mengurangi, (3) Reason: alasan, tersimpan di riwayat, (4) Save.</figcaption>
+</figure>
+<table>
+  <tr><th>Aktivitas</th><th>Stok Produk</th><th>Stok Material (contoh <span class="ill">ILUSTRASI</span>)</th></tr>
+  <tr><td>Adjust stock Telur, Change +50, Reason “Stok awal”</td><td>Tidak berubah</td><td>0 → 50 butir (riwayat tipe Adjustment, tertulis “sebelum → sesudah”)</td></tr>
+  <tr><td>Adjust stock Telur, Change −60 saat saldo 50</td><td>—</td><td><b>Ditolak</b>: pengurangan manual tidak boleh membuat saldo minus</td></tr>
+</table>
+
+<h4>Membaca informasi stok material</h4>
+<ul>
+  <li><b>Daftar Materials</b>: kolom STOCK (saldo outlet terpilih) dan VENDORS (jumlah vendor yang punya harga).</li>
+  <li><b>Usage → Used by</b>: modifier dan pilihan yang memakai bahan ini; <b>History</b>: riwayat pergerakan bahan.</li>
+  <li><b>Inventory → Stock → tab Materials</b>: buku besar semua bahan — kolom CHANGE, BEFORE → AFTER, REFERENCE / REASON, BY, TIME (Bab 4.B).</li>
+</ul>
+<figure class="mid">
+  <img src="img/f05_material_usage.png">
+  <figcaption><b>Gambar 3.4 — Usage.</b> (1) Used by = pilihan modifier yang memakai bahan ini (kosong = belum dipakai modifier), (2) History = riwayat bahan.</figcaption>
+</figure>
+
+<h3>B. Konfigurasi Produk</h3>
+<p class="pagehead">Menu: Inventory → Products · <span class="role adm">ADMIN</span> (peran Inventory juga memegang menu Products)</p>
+<figure>
+  <img src="img/f09_products.png">
+  <figcaption><b>Gambar 3.5 — Inventory → Products</b> (dicari “Indomie”). (1) Add item, (2) tab Menu items, (3) Raw materials, (4) Packaging, (5) Edit → membuka halaman detail produk.</figcaption>
+</figure>
+<h4>Membuat produk</h4>
+<ol>
+  <li><b>Inventory → Products → Add item</b>. Isi <b>Item name</b>, <b>Menu category</b>, <b>Owner outlet</b>, dan centang <b>Active at outlets</b> yang menjual item ini.</li>
+  <li>Isi <b>Base price</b> (harga belum termasuk pajak). Kode produk dibuat otomatis oleh server.</li>
+  <li>Atur varian di bagian <b>Variants &amp; prices</b> (lihat di bawah), lalu <b>Save item</b>.</li>
+</ol>
+<h4>Produk tanpa varian vs dengan varian</h4>
+<table>
+  <tr><th></th><th>Tanpa varian</th><th>Dengan varian</th></tr>
+  <tr><td>Struktur</td><td>Satu varian <b>Standard</b> otomatis</td><td>Beberapa varian, masing-masing SKU + harga + stok sendiri</td></tr>
+  <tr><td>Stok (jika Track stock)</td><td>Satu saldo</td><td>Satu saldo <b>per varian</b></td></tr>
+  <tr><td>Cocok untuk</td><td>Menu satu ukuran</td><td>Ukuran, jenis kemasan, paket</td></tr>
+</table>
+<p>Di form <b>Edit item</b> tiap varian punya: <b>COST PRICE</b>, <b>BASE PRICE</b>, <b>STOCK</b>, <b>ACTIVE</b>, <b>Low-stock alert</b>, dan kotak <b>Track stock</b>. Varian yang pernah terjual atau punya stok <b>hanya bisa dinonaktifkan</b>; yang belum punya riwayat boleh dihapus permanen (ikon tempat sampah).</p>
+<figure class="tall">
+  <img src="img/f11_product_edit.png">
+  <figcaption><b>Gambar 3.6 — Edit item (bagian bawah).</b> (1) Track stock per varian, (2) kolom STOCK, (3) Link a group (modifier), (4) <b>Stock source</b>, (5) <b>Use as ingredient</b>.</figcaption>
+</figure>
+<h4>Pengaturan inventori produk dan dampaknya</h4>
+<table>
+  <tr><th>Pengaturan</th><th>Arti</th><th>Dampak ke stok</th></tr>
+  <tr><td><b>Track stock</b> (per varian)</td><td>Varian punya saldo stok</td><td>Mati = menu “dibuat saat dipesan”, tidak ada stok fisik dan tidak ada penolakan karena stok.</td></tr>
+  <tr><td><b>Stock source = Variant</b></td><td>Stok dihitung per varian (bawaan)</td><td>Saldo varian berkurang saat terjual; bahan pilihan modifier tetap ikut terpotong.</td></tr>
+  <tr><td><b>Stock source = Modifier</b></td><td>Stok varian dihentikan</td><td>Hanya bahan pilihan modifier yang dipotong; angka kartu POS menampilkan perkiraan porsi dari saldo bahan pilihan (tidak pernah memblokir penjualan).</td></tr>
+  <tr><td><b>Use as ingredient</b></td><td>Varian produk boleh dipilih di resep produk lain</td><td>Satu saldo bersama (Bab 4.C, Contoh 3).</td></tr>
+  <tr><td><b>Retail item</b></td><td>Dijual tanpa dapur</td><td>Tidak mengubah cara stok.</td></tr>
+</table>
+<div class="note"><b>Varian yang punya resep aktif</b> otomatis berhenti memakai stok variannya sendiri — jumlah yang tersedia dihitung dari bahan resep. Riwayat Stock memuat contoh penolkan saldo varian semacam itu, tercatat sebagai Adjustment dengan alasan “Stok varian dinolkan: menu beresep memakai stok bahan (fitur 092)” (terlihat di Gambar 4.1).</div>
+
+<h4>Produk sebagai bahan (<i>Use as ingredient</i>)</h4>
+<ol>
+  <li><span class="role adm">ADMIN</span> Buka <b>Edit item</b> produk yang ingin dipakai sebagai bahan (mis. Telur yang juga dijual satuan).</li>
+  <li>Pada bagian Stock source, centang <b>Use as ingredient</b> (5), simpan.</li>
+  <li>Varian produk itu kini muncul di pilihan bahan pada laci Recipe (Bab 3.C).</li>
+</ol>
+<p><b>Syarat dan larangan</b> (dari spesifikasi 093; pesan galat sistem dalam kurung):</p>
+<ul>
+  <li>Syarat Track stock untuk bisa ditandai: <b>belum terverifikasi</b> (tidak tertulis di spesifikasi FR-001; lihat laporan akhir). Praktiknya, nyalakan Track stock pada varian yang akan dipakai sebagai bahan.</li>
+  <li><b>Tidak boleh berputar</b>: produk yang sendiri berresep tidak bisa ditandai bahan, dan produk bahan tidak boleh berresep (<code>recipe_ingredient_recursive</code>, 422).</li>
+  <li>Jumlah bahan produk <b>harus bilangan bulat dan tanpa susut</b> (<code>recipe_ingredient_whole_quantity</code>, 422).</li>
+  <li>Produk yang masih dirujuk resep <b>tidak bisa dinonaktifkan, dihapus, atau dimatikan Track stock-nya</b> (<code>ingredient_in_use</code>, 409).</li>
+  <li>Mematikan penanda tidak menghapus resep lama: resep lama tetap utuh dan tetap memotong stok; produk itu hanya hilang dari pilihan resep baru.</li>
+</ul>
+<div class="req">[SCREENSHOT REQUIRED: Recipe → daftar pilihan “Choose an ingredient” yang menampilkan produk bertanda Use as ingredient]<br>
+<span style="font-weight:400">Alasan: pada data LIVE saat ini tidak ada produk yang ditandai, dan daftar tidak terbuka pada pengambilan otomatis. Ambil manual setelah satu produk ditandai.</span></div>
+</section>
+
+<section>
+<h3>C. Konfigurasi Resep</h3>
+<p class="pagehead">Menu: Inventory → Products → (pilih produk) → bagian <b>Recipe (BOM)</b> → Add recipe · <span class="role adm">ADMIN</span> / pemegang izin <b>menu.recipe.edit</b></p>
+<figure class="tall">
+  <img src="img/f10_product_detail.png">
+  <figcaption><b>Gambar 3.7 — Halaman detail produk.</b> (1) Edit item, (2) STOCK SOURCE, (3) Manage variants, (4) Manage modifiers, (5) <b>Add recipe</b> — status awal “No recipe yet”.</figcaption>
+</figure>
+<figure>
+  <img src="img/f12_recipe.png">
+  <figcaption><b>Gambar 3.8 — Laci Recipe.</b> (1) Recipe name, (2) Portions = jumlah porsi yang dihasilkan satu resep, (3) Modifier: “No modifier (base recipe)” atau satu pilihan modifier, (4) + Add ingredient, (5) + Add ingredient table (blok untuk varian/modifier lain), (6) Save recipe.</figcaption>
+</figure>
+<ol>
+  <li>Klik <b>Add recipe</b> pada halaman detail produk.</li>
+  <li>Isi <b>Recipe name</b> (terisi otomatis dengan nama produk) dan <b>Portions</b> (1 bila bahan di bawah adalah kebutuhan <b>satu</b> porsi).</li>
+  <li>Pilih <b>Variant</b> yang memakai resep ini dan <b>Modifier</b>: biarkan <b>No modifier (base recipe)</b> untuk resep dasar.</li>
+  <li>Klik <b>+ Add ingredient</b>, pilih bahan di <b>Choose an ingredient</b> — daftar memuat <b>material</b> dan <b>produk yang ditandai Use as ingredient</b> — lalu isi <b>QTY</b>. Kolom UOM terisi dari satuan bahan; <b>SHRINKAGE %</b> (susut) hanya untuk material, bukan produk bahan.</li>
+  <li>Untuk menambah blok bagi varian lain atau pilihan modifier tertentu, klik <b>+ Add ingredient table</b>.</li>
+  <li>Isi <b>Change note</b> bila perlu, klik <b>Save recipe</b>.</li>
+</ol>
+<h4>Cara resep menentukan stok</h4>
+<table>
+  <tr><th>Hal</th><th>Aturan</th></tr>
+  <tr><td>Kebutuhan per porsi</td><td><code>jumlah ÷ (1 − susut%) ÷ Portions</code>. Rumus yang sama dipakai untuk menghitung kapasitas dan memotong stok.</td></tr>
+  <tr><td>Kapan stok dipotong</td><td>Saat pesanan <b>selesai</b> (laci Recipe menuliskannya: “Ingredient stock is deducted when an order is completed, not when the recipe is saved”).</td></tr>
+  <tr><td>Beberapa bahan</td><td>Semua baris dipotong sekaligus; porsi tersedia ditentukan bahan <b>paling terbatas</b>.</td></tr>
+  <tr><td>Beberapa resep pada satu varian</td><td>Semua resep aktif dijumlahkan (kebutuhan dan harga modal).</td></tr>
+  <tr><td>Blok bermodifier</td><td>Hanya dipotong bila pilihan itu dipesan (× jumlah pilihan). Blok ini <b>tidak ikut</b> menghitung porsi tersedia di kartu menu — hanya blok dasar.</td></tr>
+  <tr><td>Tanggal berlaku</td><td><b>Effective from</b>: resep baru mulai berlaku pada tanggal itu (boleh mundur paling lama 30 hari).</td></tr>
+  <tr><td>Biaya</td><td>Laci menampilkan Portion cost, Food cost, Gross margin. Bila ada bahan tanpa harga: “Cost is incomplete…”; biaya baru lengkap setelah <b>Vendor prices</b> terisi (Bab 5).</td></tr>
+</table>
+<table>
+  <tr><th>Aktivitas</th><th>Stok Produk</th><th>Stok Material <span class="ill">ILUSTRASI</span></th></tr>
+  <tr><td>Simpan resep</td><td>Kartu menu memakai “porsi tersedia”; saldo varian tidak lagi dipakai (kapan persisnya saldo lama dinolkan: belum terverifikasi)</td><td>Tidak berubah</td></tr>
+  <tr><td>Jual 1 Indomie Kuah (selesai)</td><td>Porsi tersedia turun</td><td>Indomie −1, Telur −1, Sayur −50 g</td></tr>
+</table>
+
+<h3>D. Varian dan Modifier</h3>
+<h4>Kapan memakai varian, kapan modifier</h4>
+<table>
+  <tr><th></th><th>Varian</th><th>Modifier</th></tr>
+  <tr><td>Sifat</td><td>Barang/ukuran yang <b>berbeda</b>, punya SKU dan harga dasar sendiri</td><td>Pilihan <b>tambahan atau kustomisasi</b> pada satu barang yang sama</td></tr>
+  <tr><td>Stok</td><td>Saldo sendiri per varian (bila Track stock dan tanpa resep)</td><td>Tidak punya saldo; hanya <b>memotong bahan</b> yang tertaut</td></tr>
+  <tr><td>Harga</td><td>Base price per varian</td><td><b>Price difference (Rp)</b> per pilihan (boleh 0 atau negatif)</td></tr>
+  <tr><td>Contoh</td><td>Ayam Penyet / Ayam Bakar</td><td>Rasa Kuah, Level Pedas, Suhu Minuman</td></tr>
+</table>
+<p><b>Aturan praktis:</b> bila pelanggan memilih <i>barang yang berbeda</i> dan Anda ingin saldo stoknya terpisah → varian. Bila pilihan itu hanya menentukan <i>bahan apa yang terpakai</i> pada menu yang sama → modifier.</p>
+
+<h4>Membuat grup modifier dan menautkan bahan</h4>
+<p class="pagehead">Menu: Restaurant → Restaurant Setup → tab Modifiers · <span class="role adm">ADMIN</span></p>
+<figure>
+  <img src="img/f18_modifier_list.png">
+  <figcaption><b>Gambar 3.9 — Restaurant Setup → Modifiers.</b> (1) tab Modifiers, (2) New modifier group, (3) <b>Attach</b> = menautkan grup ke produk/kategori, (4) Edit. Kolom “ATTACHED TO” menunjukkan berapa produk/kategori yang memakai grup.</figcaption>
+</figure>
+<figure class="tall">
+  <img src="img/f19_modifier_group_edit.png">
+  <figcaption><b>Gambar 3.10 — Edit modifier group “Indomie Kuah”</b> (data nyata). (1) Selection type (Choose one), (2) Must be chosen, (3) tiap Option name (Soto, Ayam Bawang, Kari Ayam) dengan Price difference, (4) Min/Max quantity — berapa kali satu pesanan boleh memilih opsi itu (1 dan 1 = dipilih atau tidak), (5) <b>Materials used</b> — bahan yang terpotong bila opsi dipilih (di instalasi ini masing-masing opsi bertaut 1 bahan).</figcaption>
+</figure>
+<ol>
+  <li><b>Restaurant → Restaurant Setup → Modifiers → New modifier group</b>. Isi <b>Group name</b>, <b>Selection type</b> (Choose one / beberapa), centang <b>Must be chosen</b> bila wajib.</li>
+  <li>Klik <b>Add option</b> untuk tiap pilihan: nama, Price difference, Min/Max quantity.</li>
+  <li>Pada tiap opsi, buka <b>Materials used</b> dan pilih material beserta jumlah per porsi. Rincian layar ini <b>belum terverifikasi</b> dalam screenshot (lipatan tidak terbuka saat pengambilan otomatis).</li>
+  <li>Simpan, lalu tautkan grup ke produk lewat <b>Attach</b> atau di halaman detail produk: <b>Manage modifiers → Link a group</b>.</li>
+</ol>
+<figure class="tall">
+  <img src="img/f14_product_modifiers.png">
+  <figcaption><b>Gambar 3.11 — Manage modifiers pada produk.</b> (1) REQUIRED, (2) MIN/MAX per produk, (3) Link a group. Isi grup (opsi dan harga) hanya diubah di Restaurant Setup.</figcaption>
+</figure>
+<h4>Bagaimana pilihan modifier memotong stok</h4>
+<ul>
+  <li>Potongan = <b>jumlah bahan per porsi × jumlah pilihan dipilih × qty baris pesanan</b>.</li>
+  <li>Terjadi saat pesanan selesai; selama tab masih terbuka bahan tidak bergerak.</li>
+  <li>Bahan pilihan modifier <b>tidak memblokir penjualan</b> bila saldo kurang: pesanan tetap jalan, saldo bisa minus, dan layar menampilkan peringatan (<code>material_warnings</code>). Berbeda dengan bahan <b>resep</b> yang menolak pesanan (Bab 4.A).</li>
+  <li>Opsi dengan Max quantity &gt; 1 dan opsi grup “tiap pilihan = 1 porsi” memengaruhi harga dan potongan per satuan jumlah.</li>
+</ul>
+<table>
+  <tr><th>Aktivitas</th><th>Stok Produk</th><th>Stok Material <span class="ill">ILUSTRASI</span></th></tr>
+  <tr><td>Jual 1 Indomie Kuah rasa Soto</td><td>Tergantung Stock source (Variant/Modifier)</td><td>Hanya bahan yang tertaut ke “Soto” berkurang</td></tr>
+  <tr><td>Hapus bahan yang masih dipetakan pilihan aktif</td><td>—</td><td>Ditolak (409)</td></tr>
+</table>
+</section>
+
+<!-- ====================== 4. MEMAHAMI STOK ====================== -->
+<section>
+<h2>4. Memahami Stok Produk dan Stok Material</h2>
+
+<h3>A. Stok Produk</h3>
+<h4>Stok manual vs stok berbasis resep</h4>
+<table>
+  <tr><th></th><th>Stok manual (varian)</th><th>Stok berbasis resep</th></tr>
+  <tr><td>Kondisi</td><td>Varian tanpa resep, Track stock menyala</td><td>Varian punya resep aktif</td></tr>
+  <tr><td>Sumber angka</td><td>Saldo varian (kolom STOCK)</td><td>Dihitung dari bahan blok <b>dasar</b> resep</td></tr>
+  <tr><td>Cara berubah</td><td>Adjustment, impor, transfer, penjualan</td><td>Berubah mengikuti saldo bahan</td></tr>
+  <tr><td>Bila tidak cukup</td><td>Ditolak 409 (stok tidak cukup)</td><td>Ditolak 409 <code>insufficient_recipe_stock</code></td></tr>
+</table>
+<h4>Rumus porsi tersedia</h4>
+<p><code>porsi tersedia = min atas semua bahan dari  lantai((saldo outlet − tahanan) ÷ kebutuhan per porsi)</code></p>
+<p><b>Tahanan</b> = kebutuhan resep seluruh pesanan <b>yang masih terbuka</b> (tab belum selesai) di outlet yang sama. Tahanan mencegah dua tab sama-sama “mengambil” sisa bahan yang sama sebelum salah satunya selesai. Angka porsi dikirim server ke kartu POS (web dan Android); klien tidak menghitung ulang, jadi angka web dan tablet identik.</p>
+<ul>
+  <li><b>Variant vs modifier:</b> varian lain dari produk yang sama punya perhitungan sendiri; blok resep bermodifier tidak mengurangi “porsi tersedia”, tetapi tetap dipotong saat dipesan.</li>
+</ul>
+
+<h3>B. Stok Material</h3>
+<p>Buku besar bahan ada di <b>Inventory → Stock → tab Materials</b>; riwayat produk di tab <b>Products</b>.</p>
+<figure>
+  <img src="img/f15_stock_products.png">
+  <figcaption><b>Gambar 4.1 — Inventory → Stock, tab Products.</b> (1) Stock adjustment, (2) tab Materials, (3) TYPE (Adjustment, Used as ingredient, dst.), (4) BEFORE → AFTER, (5) REFERENCE / REASON.</figcaption>
+</figure>
+<figure>
+  <img src="img/f16_stock_materials.png">
+  <figcaption><b>Gambar 4.2 — Stock → tab Materials.</b> Pada data LIVE saat ini belum ada pergerakan (“No movements yet”); setelah PO diterima atau penjualan terjadi, baris muncul dengan kolom yang sama seperti tab Products. Baris tab Products di Gambar 4.1 (alasan “Stok varian dinolkan…”) adalah contoh nyata catatan sistem.</figcaption>
+</figure>
+<table>
+  <tr><th>Peristiwa</th><th>Tipe riwayat bahan</th><th>Arah</th></tr>
+  <tr><td>PO diterima</td><td>purchase</td><td>+ (di outlet PO)</td></tr>
+  <tr><td>Pesanan selesai (resep atau modifier)</td><td>sale</td><td>− (boleh jadi minus)</td></tr>
+  <tr><td>Void / refund</td><td>return</td><td>+ (sesuai riwayat jual)</td></tr>
+  <tr><td>Dibatalkan sebagai waste</td><td>waste</td><td>− (boleh jadi minus)</td></tr>
+  <tr><td>Adjust stock</td><td>adjustment</td><td>+ atau − (− tidak boleh sampai minus)</td></tr>
+  <tr><td>Pindah antar-outlet</td><td>belum terverifikasi untuk bahan</td><td>Fitur <b>Stock transfers</b> ada di Inventory → Stock; apakah mencakup bahan belum dipastikan</td></tr>
+</table>
+<p><b>Produk sebagai bahan</b> tidak punya baris di buku besar <i>material</i>; pemakaiannya tercatat di riwayat <i>produk</i> dengan tipe <b>Used as ingredient</b> (<code>recipe_sale</code>), memuat nomor pesanan dan “untuk {menu}”.</p>
+
+<h3>C. Contoh perhitungan</h3>
+<p><span class="ill">ILUSTRASI</span> Semua angka di bawah adalah contoh; rumusnya identik dengan aplikasi.</p>
+
+<h4>Contoh 1 — Indomie Kuah (resep berbahan material)</h4>
+<p>Resep 1 porsi: Indomie 1 bungkus, Telur 1 butir, Sayur 50 gram. Saldo awal outlet: Indomie 40, Telur 25, Sayur 1.200 gram.</p>
+<table>
+  <tr><th>Bahan</th><th>Saldo</th><th>Kebutuhan/porsi</th><th>lantai(saldo ÷ kebutuhan)</th></tr>
+  <tr><td>Indomie</td><td>40 bungkus</td><td>1</td><td>40</td></tr>
+  <tr><td>Telur</td><td>25 butir</td><td>1</td><td>25</td></tr>
+  <tr><td>Sayur</td><td>1.200 g</td><td>50</td><td><b>24</b> ← paling terbatas</td></tr>
+</table>
+<p><b>Porsi tersedia = min(40, 25, 24) = 24</b>, dibatasi Sayur (kartu menampilkan “Limited by: Sayur”).</p>
+<table>
+  <tr><th>Peristiwa</th><th>Indomie</th><th>Telur</th><th>Sayur</th><th>Porsi tersedia</th></tr>
+  <tr><td>Awal</td><td>40</td><td>25</td><td>1.200</td><td>24</td></tr>
+  <tr><td>Tab terbuka: 2 porsi (belum selesai)</td><td>40 (tahanan 2)</td><td>25 (tahanan 2)</td><td>1.200 (tahanan 100)</td><td>min(38, 23, 22) = 22</td></tr>
+  <tr><td>Tab itu selesai</td><td>38</td><td>23</td><td>1.100</td><td>22</td></tr>
+  <tr><td>Jual 3 porsi lagi (selesai)</td><td>35</td><td>20</td><td>950</td><td>19</td></tr>
+</table>
+
+<h4>Contoh 2 — Rasa Kuah (modifier bertaut bahan)</h4>
+<p>Grup modifier “Rasa Kuah” (Choose one, Must be chosen) dengan tiga opsi: Soto → bahan Indomie Soto, Ayam Bawang → Indomie Ayam Bawang, Kari Ayam → Indomie Kari; masing-masing 1 bungkus per porsi. (Nama bahan di contoh mengikuti daftar Materials pada Gambar 3.1; pemetaan tepatnya per opsi belum terverifikasi dari layar.) Saldo awal: Soto 10, Ayam Bawang 8, Kari 6.</p>
+<table>
+  <tr><th>Pesanan selesai</th><th>Indomie Soto</th><th>Indomie Ayam Bawang</th><th>Indomie Kari</th></tr>
+  <tr><td>Awal</td><td>10</td><td>8</td><td>6</td></tr>
+  <tr><td>2 × Indomie Kuah rasa Soto</td><td><b>8</b></td><td>8</td><td>6</td></tr>
+  <tr><td>1 × Indomie Kuah rasa Kari Ayam</td><td>8</td><td>8</td><td><b>5</b></td></tr>
+  <tr><td>Ayam Bawang tidak dipesan</td><td>8</td><td>8 (tidak berubah)</td><td>5</td></tr>
+</table>
+<p>Rumus potongan: <code>jumlah bahan × qty pilihan × qty baris</code> (2 porsi × 1 = 2 untuk Soto). Bila Soto tinggal 1 dan pelanggan memesan 3, pesanan <b>tetap diterima</b>, Soto menjadi −2, dan kasir melihat peringatan stok minus. Pantau bahan minus di Reports → Materials (status <b>Negative</b>).</p>
+
+<h4>Contoh 3 — Produk sebagai bahan (satu saldo bersama)</h4>
+<p>Produk <b>Indomie Goreng</b> (stok 100 bungkus) dan <b>Telur</b> (stok 200 butir) keduanya ditandai <b>Use as ingredient</b> dan juga dijual satuan. Resep Indomie Kuah (1 porsi): 1 Indomie Goreng + 1 Telur (produk, bukan material).</p>
+<table>
+  <tr><th>Peristiwa</th><th>Indomie Goreng</th><th>Telur</th><th>Catatan</th></tr>
+  <tr><td>Awal</td><td>100</td><td>200</td><td>Kartu Indomie Kuah = 100 (dibatasi Goreng)</td></tr>
+  <tr><td>Jual 1 Indomie Kuah (selesai)</td><td>99</td><td>199</td><td>Riwayat Telur: <i>Used as ingredient</i> −1 “untuk Indomie Kuah” + nomor pesanan</td></tr>
+  <tr><td>Jual 3 Telur langsung</td><td>99</td><td>196</td><td>Riwayat Telur: sale −3</td></tr>
+  <tr><td>Tab terbuka berisi 5 Indomie Kuah</td><td>94 tersedia</td><td>191 tersedia untuk penjualan langsung</td><td>Tahanan juga menjaga penjualan langsung</td></tr>
+  <tr><td>Coba jual langsung 192 Telur</td><td></td><td>Ditolak 409 <code>insufficient_stock_reserved</code></td><td></td></tr>
+  <tr><td>Tab itu di-void</td><td>kembali</td><td>kembali</td><td>Kembali sesuai riwayat, walau resep diubah</td></tr>
+</table>
+<div class="ok"><b>Cara menghindari hitungan ganda:</b>
+<ul>
+<li><b>Jangan membuat material “Telur” lagi</b> bila Telur sudah dijual sebagai produk bahan. Satu barang fisik = satu saldo, di tempat yang satu.</li>
+<li>Jangan menambah stok di dua tempat. Tambah lewat saldo produk (Stock adjustment); saldo itu otomatis menjadi bahan resep.</li>
+<li>Tidak ada buku besar material untuk produk bahan, jadi tidak ada saldo kembar yang bisa tidak cocok.</li>
+<li>Penjualan langsung dan pemakaian resep memakai kunci dan urutan potong yang sama; dua terminal yang menyelesaikan pesanan atas sisa 1 butir menghasilkan <b>tepat satu</b> yang berhasil, saldo 0, tidak minus (uji keserentakan spesifikasi 093 lulus; verifikasi di perangkat belum dilakukan).</li>
+</ul></div>
+</section>
+
+<!-- ====================== 5. VENDOR ====================== -->
+<section>
+<h2>5. Manajemen Vendor</h2>
+<p class="pagehead">Menu: Purchase → Vendors · <span class="role adm">ADMIN</span> membuat; <span class="role stf">STAF</span> memakai</p>
+<h4>Membuat vendor</h4>
+<ol>
+  <li><b>Purchase → Vendors → Add vendor</b>.</li>
+  <li>Isi <b>Vendor code</b> (wajib, permanen setelah dibuat) dan <b>Vendor name</b> (wajib).</li>
+  <li>Isi <b>Phone</b>, <b>Email</b>, <b>Notes</b> bila ada; biarkan <b>Active</b>; klik <b>Save</b>.</li>
+</ol>
+<figure class="narrow">
+  <img src="img/f06_vendor_new.png">
+  <figcaption><b>Gambar 5.1 — Form New vendor.</b> (1) kode, (2) nama, (3) telepon, (4) Save. Data kontak vendor adalah data pribadi bila berupa perorangan: isi seperlunya dan jangan salin ke dokumen lain.</figcaption>
+</figure>
+<h4>Mengaitkan vendor dengan material (Vendor prices)</h4>
+<p>Tidak ada layar “vendor → daftar material”. Keterkaitan dibuat <b>dari sisi material</b>: <b>Purchase → Materials → Vendor prices</b> pada material tersebut → <b>Add vendor price</b> (vendor + harga).</p>
+<figure class="mid">
+  <img src="img/f04_vendor_prices.png">
+  <figcaption><b>Gambar 5.2 — Vendor prices.</b> (1) Aturan acuan harga: vendor bertanda <b>Preferred</b> menjadi acuan biaya (bom_cost); bila tidak ada yang Preferred, <b>harga termurah</b> dipakai sebagai perkiraan. (2) Add vendor price.</figcaption>
+</figure>
+<table>
+  <tr><th>Informasi vendor</th><th>Dipakai untuk</th></tr>
+  <tr><td>Vendor + harga per material</td><td>Harga modal bahan di resep (Portion cost, Food cost), dan pembuatan draft PO otomatis dari Reports → Materials (baris tanpa harga vendor ditolak per baris dengan alasan <code>no_vendor</code>)</td></tr>
+  <tr><td>Vendor di PO</td><td>Header PO; satu PO = satu vendor</td></tr>
+</table>
+<h4>Melihat riwayat pembelian</h4>
+<p>Riwayat per vendor berupa daftar PO: <b>Purchase → Purchase Orders</b>, filter status. Rekap pembelian ada di <b>Reports → tab Purchases</b>.</p>
+<figure>
+  <img src="img/f20_report_purchases.png">
+  <figcaption><b>Gambar 5.3 — Reports → Purchases.</b> (1) tab Purchases. Isi laporan belum terverifikasi karena belum ada PO pada data LIVE.</figcaption>
+</figure>
+<div class="warn"><b>Belum terverifikasi:</b> filter “per vendor” pada daftar PO tidak terlihat di layar (hanya filter outlet dan tab status); gunakan pencarian/tab status dan kolom VENDOR untuk menelusuri.</div>
+</section>
+
+<!-- ====================== 6. PO ====================== -->
+<section>
+<h2>6. Manajemen Purchase Order</h2>
+<p class="pagehead">Menu: Purchase → Purchase Orders · <span class="role stf">STAF</span> membuat dan menerima · hak mengubah status oleh peran Inventory <b>belum terverifikasi</b></p>
+<figure>
+  <img src="img/f07_po_list.png">
+  <figcaption><b>Gambar 6.1 — Purchase Orders.</b> (1) New PO, (2) Draft, (3) Ordered, (4) Received; tab lain: All, Paid, Cancelled. Data LIVE belum punya PO (“No purchase orders yet”).</figcaption>
+</figure>
+<h3>6.1 Siklus status</h3>
+<div class="flow">
+  <div><b>Draft</b>boleh diubah dan dihapus</div><div class="arr">→</div>
+  <div><b>Ordered</b>dikirim ke vendor</div><div class="arr">→</div>
+  <div><b>Received</b>barang diterima — <u>stok bertambah</u></div><div class="arr">→</div>
+  <div><b>Paid</b>lunas</div>
+</div>
+<p>Draft dan Ordered dapat dibatalkan (<b>Cancelled</b>, dengan alasan). Dari Received hanya bisa ke Paid; dari Paid atau Cancelled tidak ada lanjutan.</p>
+<h3>6.2 Membuat PO</h3>
+<figure>
+  <img src="img/f08_po_new.png">
+  <figcaption><b>Gambar 6.2 — New PO.</b> (1) Vendor, (2) Outlet tujuan (stok masuk ke outlet ini), (3) Add Line, (4) jenis baris Material atau Service, (5) Qty, (6) Unit Price, (7) Save. Total dihitung otomatis.</figcaption>
+</figure>
+<ol>
+  <li>Klik <b>New PO</b> (1).</li>
+  <li>Pilih <b>Vendor</b> dan <b>Outlet</b>. Outlet menentukan <b>di mana stok bertambah</b> saat PO diterima.</li>
+  <li>Pada <b>Line items</b> pilih jenis <b>Material</b>, pilih bahan, isi <b>Qty</b> (dalam satuan material) dan <b>Unit Price</b>. Klik <b>Add Line</b> untuk baris berikutnya.</li>
+  <li>Klik <b>Save</b>: PO tersimpan sebagai <b>Draft</b>. Isi baris hanya dapat diubah selama Draft.</li>
+  <li>Ubah status ke <b>Ordered</b> saat PO dikirim ke vendor.</li>
+</ol>
+<div class="req">[SCREENSHOT REQUIRED: Purchase Orders → detail PO → tombol ubah status (Ordered / Received / Cancelled) dan pencatatan pembayaran]<br>
+<span style="font-weight:400">Alasan: tidak ada PO pada data LIVE dan pembuatan PO uji tidak dilakukan agar tidak mengubah data nyata.</span></div>
+<h3>6.3 Menerima barang</h3>
+<ol>
+  <li>Saat barang tiba, buka PO berstatus <b>Ordered</b>, ubah status ke <b>Received</b>.</li>
+  <li>Sistem menambah saldo <b>setiap baris Material</b> sebesar Qty di <b>outlet PO</b>, mencatat riwayat bertipe <b>purchase</b> yang merujuk baris PO.</li>
+  <li>Verifikasi: buka <b>Stock → Materials</b> (baris purchase, BEFORE → AFTER) dan kolom STOCK di Materials dengan outlet yang sama.</li>
+</ol>
+<table>
+  <tr><th>Aktivitas <span class="ill">ILUSTRASI</span></th><th>Stok Produk</th><th>Stok Material</th></tr>
+  <tr><td>PO Draft 50 butir Telur @ Rp 2.000, status Ordered</td><td>—</td><td>Tidak berubah (barang belum datang)</td></tr>
+  <tr><td>Status Received</td><td>Tidak berubah</td><td>Telur 25 → <b>75</b> di outlet PO</td></tr>
+  <tr><td>Baris <b>Service</b> (mis. ongkir)</td><td>—</td><td>Tidak ada pergerakan stok</td></tr>
+</table>
+<div class="warn"><b>Penerimaan sebagian (partial receiving) tidak didukung.</b> Status Received berlaku untuk seluruh PO sekaligus; seluruh baris Material masuk penuh. Bila barang datang kurang, jangan ubah ke Received dulu; atau terima penuh lalu koreksi selisih dengan <b>Adjust stock</b> (Reason: “Selisih penerimaan PO &lt;nomor&gt;”). Kondisi ini terbaca dari kode penerimaan; tidak ada layar penerimaan per baris.</div>
+<div class="warn"><b>PO tidak membeli produk jadi.</b> Baris PO hanya <b>Material</b> atau <b>Service</b>. Stok produk bertambah lewat <b>Stock adjustment</b>, impor Excel, atau transfer.</div>
+<h3>6.4 Pembayaran dan riwayat</h3>
+<p>PO yang sudah <b>Received</b> dapat dicatat pembayarannya; saat total terbayar ≥ total PO, status otomatis menjadi <b>Paid</b>. PO tidak boleh dihapus bila sudah ada pembayaran atau sudah dipakai sebagai sumber BOM; hanya status <b>Draft</b> yang dapat dihapus.</p>
+</section>
+
+<!-- ====================== 7. HARIAN ====================== -->
+<section>
+<h2>7. Alur Kerja Stok Harian</h2>
+<p><span class="role stf">STAF</span> Peran Inventory memegang menu Products, Stock, Vendors, Materials, dan Purchase Orders. <b>Menu Reports tidak termasuk peran Inventory</b> (menu Reports hanya untuk Owner/Admin); staf memantau lewat daftar Materials dan Stock, atau meminta Admin membuka Reports → Materials.</p>
+<table>
+  <tr><th style="width:5%">#</th><th style="width:24%">Langkah</th><th>Cara</th><th style="width:12%">Peran</th></tr>
+  <tr><td>1</td><td>Pilih outlet yang benar</td><td>Bilah atas → pemilih outlet. Semua saldo yang tampil adalah saldo outlet itu.</td><td><span class="role both">KEDUANYA</span></td></tr>
+  <tr><td>2</td><td>Cek stok produk dan bahan</td><td><b>Materials</b> (kolom STOCK) dan <b>Products</b> (kartu produk, “WJM3 Available”); detail di <b>Stock</b>.</td><td><span class="role stf">STAF</span></td></tr>
+  <tr><td>3</td><td>Pantau ketersediaan bahan</td><td>Di POS, kartu menu berresep menampilkan porsi tersedia dan bahan pembatas (“Limited by …”).</td><td><span class="role stf">STAF</span></td></tr>
+  <tr><td>4</td><td>Kenali bahan menipis</td><td><b>Reports → Materials → Position &amp; risk</b>: status Negative / Out / Running out / OK / Unused. “Running out” = sisa hari &lt; ambang (bawaan 3 hari; Usage 7 hari; target stok 7 hari).</td><td><span class="role adm">ADMIN</span> (Reports)</td></tr>
+  <tr><td>5</td><td>Beli ke vendor</td><td>Buat PO manual (Bab 6) atau tombol <b>Create draft POs</b> di laporan (draft per vendor, perlu satu outlet terpilih dan harga vendor).</td><td><span class="role stf">STAF</span></td></tr>
+  <tr><td>6</td><td>Terima barang</td><td>Ubah PO ke Received; cek baris purchase di Stock → Materials.</td><td><span class="role stf">STAF</span></td></tr>
+  <tr><td>7</td><td>Pantau pemotongan dari penjualan</td><td>Stock → Materials/Products: tipe sale / Used as ingredient, referensi nomor pesanan.</td><td><span class="role stf">STAF</span></td></tr>
+  <tr><td>8</td><td>Periksa konsistensi</td><td>Bandingkan saldo di Materials dengan baris BEFORE → AFTER terakhir di Stock; saldo sama dengan jumlah riwayat.</td><td><span class="role stf">STAF</span></td></tr>
+  <tr><td>9</td><td>Tangani selisih fisik</td><td><b>Adjust stock</b> (material) atau <b>Stock adjustment</b> (produk) dengan <b>Reason</b> yang jelas; tidak ada hapus riwayat, hanya koreksi tercatat.</td><td><span class="role stf">STAF</span> / <span class="role adm">ADMIN</span></td></tr>
+</table>
+<figure>
+  <img src="img/f17_report_materials.png">
+  <figcaption><b>Gambar 7.1 — Reports → Materials.</b> (1) Position &amp; risk, (2) Usage, (3) kartu status (Running out, dst.), (4) Create draft POs, (5) pengaturan jendela pemakaian, target stok, dan ambang. Pada data LIVE saat ini semua bahan belum bergerak, jadi kartu berisi 0.</figcaption>
+</figure>
+<div class="note"><b>Aturan penting saat membaca laporan:</b> laju pakai harian dihitung dari konsumsi (penjualan, retur, waste) dibagi <b>hari jual</b> outlet; koreksi dan pindah stok <b>bukan</b> konsumsi. Bahan yang hanya muncul di resep tanpa penjualan berstatus “Unused”.</div>
+<table>
+  <tr><th>Tugas</th><th><span class="role adm">ADMIN</span></th><th><span class="role stf">STAF</span></th></tr>
+  <tr><td>Buat material, vendor, produk, grup modifier, resep</td><td>Ya</td><td>Resep: dengan izin menu.recipe.edit (peran Inventory memilikinya); produk/material/vendor: menu tersedia, kebijakan internal menentukan</td></tr>
+  <tr><td>Buat PO, ubah ke Received</td><td>Ya</td><td>Buat PO: ya (menu Purchase Orders). Ubah status: belum terverifikasi</td></tr>
+  <tr><td>Reports → Materials, Create draft POs</td><td>Ya</td><td>Tidak (menu Reports)</td></tr>
+  <tr><td>Adjust stock / Stock adjustment</td><td>Ya</td><td>Ya (menu Stock dan Materials)</td></tr>
+</table>
+</section>
+
+<!-- ====================== 8. SKENARIO ====================== -->
+<section>
+<h2>8. Skenario Lengkap dari Awal sampai Akhir</h2>
+<p><span class="ill">ILUSTRASI</span> Seluruh angka adalah contoh hitungan; tidak ada data yang dibuat di sistem untuk bab ini. Screenshot langkah yang relevan sudah ada di bab sebelumnya dan dirujuk di kolom kanan.</p>
+<p><b>Skenario:</b> Warkop menjual <b>Indomie Kuah</b> dengan modifier <b>Rasa Kuah</b> (Soto / Ayam Bawang / Kari Ayam). Resep dasar: 1 Indomie (sesuai rasa lewat modifier) + 1 Telur + 50 g Sayur. Telur juga dijual satuan.</p>
+<table>
+  <tr><th style="width:4%">#</th><th style="width:30%">Langkah</th><th>Isian kunci</th><th style="width:14%">Rujukan</th></tr>
+  <tr><td>1</td><td>Buat material</td><td>Sayur (gram, Raw material); Indomie Soto/Ayam Bawang/Kari (bungkus, Packaging)</td><td>Gbr 3.1–3.2</td></tr>
+  <tr><td>2</td><td>Buat vendor</td><td>“Toko Grosir A” + Vendor prices: Sayur Rp 20/gram (Preferred)</td><td>Gbr 5.1–5.2</td></tr>
+  <tr><td>3</td><td>Konfigurasi produk</td><td>Indomie Kuah, Rp 8.000, varian Standard, Stock source = Variant</td><td>Gbr 3.5–3.6</td></tr>
+  <tr><td>4</td><td>Varian &amp; modifier</td><td>Grup “Rasa Kuah” (Choose one, Must be chosen), 3 opsi, tiap opsi → 1 bungkus Indomie rasa itu; Link ke produk</td><td>Gbr 3.9–3.11</td></tr>
+  <tr><td>5</td><td>Produk sebagai bahan</td><td>Telur: Use as ingredient dinyalakan (stok 200 butir, bukan material)</td><td>Gbr 3.6</td></tr>
+  <tr><td>6</td><td>Buat resep</td><td>Blok dasar: Telur (produk) 1, Sayur (material) 50 gram; Portions 1</td><td>Gbr 3.8</td></tr>
+  <tr><td>7</td><td>Hitung porsi awal</td><td>Sayur 1.200 g (via Adjust stock), Telur 200: min(200, 24) = <b>24</b> porsi</td><td>Bab 4.C</td></tr>
+  <tr><td>8</td><td>Buat PO</td><td>PO Sayur 1.000 gram @ Rp 20, outlet WJM 3, Draft → Ordered</td><td>Gbr 6.2</td></tr>
+  <tr><td>9</td><td>Terima PO</td><td>Received: Sayur 1.200 → 2.200</td><td>Bab 6.3</td></tr>
+  <tr><td>10</td><td>Transaksi POS</td><td>5 × Indomie Kuah: 3 Soto, 2 Kari (satu pesanan selesai)</td><td>—</td></tr>
+  <tr><td>11</td><td>Verifikasi potongan</td><td>Lihat tabel di bawah</td><td>Gbr 4.1–4.2</td></tr>
+  <tr><td>12</td><td>Saldo akhir</td><td>Lihat tabel di bawah</td><td>Gbr 7.1</td></tr>
+</table>
+<h3>Saldo sebelum dan sesudah tiap transaksi</h3>
+<table>
+  <tr><th>Tahap</th><th>Sayur (g)</th><th>Telur</th><th>Indomie Soto</th><th>Indomie Kari</th><th>Porsi tersedia</th></tr>
+  <tr><td>Setelah stok awal (langkah 7)</td><td>1.200</td><td>200</td><td>20</td><td>20</td><td>24 (Sayur)</td></tr>
+  <tr><td>PO dibuat / Ordered (langkah 8)</td><td>1.200</td><td>200</td><td>20</td><td>20</td><td>24</td></tr>
+  <tr><td>PO Received (langkah 9)</td><td>2.200</td><td>200</td><td>20</td><td>20</td><td><b>44</b> (Sayur 2.200÷50)</td></tr>
+  <tr><td>Pesanan 5 porsi selesai (langkah 10)</td><td>2.200 − 250 = <b>1.950</b></td><td>200 − 5 = <b>195</b></td><td>20 − 3 = <b>17</b></td><td>20 − 2 = <b>18</b></td><td><b>39</b> (1.950÷50)</td></tr>
+</table>
+<table>
+  <tr><th>Yang bergerak (langkah 10)</th><th>Stok Produk</th><th>Stok Material</th><th>Riwayat</th></tr>
+  <tr><td>Resep dasar</td><td>Telur 200 → 195 (saldo bersama)</td><td>Sayur −250 g</td><td>Telur: Used as ingredient −5; Sayur: sale −250</td></tr>
+  <tr><td>Modifier</td><td>—</td><td>Soto −3, Kari −2</td><td>sale pada masing-masing bahan</td></tr>
+</table>
+<div class="note">Bila pesanan bersamaan (tab lain terbuka) menahan 4 porsi, porsi tersedia pada langkah akhir menjadi 39 − 4 = 35 sampai tab itu selesai atau dibatalkan.</div>
+</section>
+
+<!-- ====================== 9. TROUBLESHOOTING ====================== -->
+<section>
+<h2>9. Pemecahan Masalah dan Praktik Terbaik</h2>
+<table>
+  <tr><th style="width:21%">Masalah</th><th style="width:38%">Kemungkinan penyebab</th><th>Solusi</th></tr>
+  <tr><td>Stok produk tidak cocok dengan ketersediaan bahan</td><td>Varian beresep memakai porsi hitungan, bukan saldo varian; ada tahanan dari tab terbuka; resep hanya blok dasar yang dihitung.</td><td>Baca “Limited by” di kartu; cek tab terbuka di outlet itu; pastikan outlet yang dilihat benar.</td></tr>
+  <tr><td>Stok material tidak berkurang setelah penjualan</td><td>Pesanan masih tab terbuka (potong saat selesai); produk tanpa resep dan modifier tanpa bahan; atau varian dengan Track stock mati.</td><td>Selesaikan pesanan; buka Stock → Materials untuk baris sale; periksa <b>Materials used</b> dan Recipe.</td></tr>
+  <tr><td>Pilihan modifier tidak memotong bahan yang diharapkan</td><td><b>Materials used</b> opsi itu kosong atau salah bahan; grup belum di-Link ke produk; nama bahan mirip tertukar.</td><td>Materials → Usage → Used by untuk melihat opsi yang memakai bahan; perbaiki di Restaurant Setup → Edit modifier group.</td></tr>
+  <tr><td>Stok produk berresep salah</td><td>Beberapa resep aktif terjumlah; Effective from di masa depan; satuan bahan (gram vs kg) salah; resep arsip hasil migrasi.</td><td>Periksa daftar resep di halaman detail; cek satuan UOM; ubah resep di tempat (tidak ada versi baru).</td></tr>
+  <tr><td>Produk bertanda bahan punya stok “aneh”</td><td>Saldo dipakai ganda oleh penjualan langsung dan resep; tahanan dari tab terbuka; stok awal diisi dua kali (produk dan material).</td><td>Pakai satu saldo; telusuri riwayat produk (tipe Used as ingredient); jangan buat material kembar.</td></tr>
+  <tr><td>PO tidak menambah stok</td><td>Status masih Draft/Ordered (stok baru bertambah saat <b>Received</b>); baris bertipe Service; outlet yang dilihat berbeda dari outlet PO.</td><td>Ubah ke Received; periksa jenis baris; samakan pemilih outlet dengan outlet PO.</td></tr>
+  <tr><td>Stok material minus</td><td>Pemotongan lewat modifier/waste diizinkan minus (tidak memblokir penjualan); stok awal belum diisi.</td><td>Tambah stok (PO Received atau Adjust stock + ); menambah dari angka minus selalu diizinkan. Cari akar penyebab di Reports → Materials (Negative).</td></tr>
+  <tr><td>Stok produk dan material tampak tidak konsisten</td><td>Beda outlet; kolom STOCK produk memakai saldo varian sedangkan bahan menurut resep; riwayat difilter.</td><td>Bandingkan outlet yang sama; bersihkan filter tanggal/tipe di Stock.</td></tr>
+  <tr><td>Resep ditolak 409 “insufficient_recipe_stock” saat jual</td><td>Salah satu bahan resep tidak cukup di outlet itu (setelah tahanan).</td><td>Tambah stok bahan, atau kurangi qty pesanan; pesan muncul menyebut bahan untuk pengguna login.</td></tr>
+</table>
+<h3>Praktik terbaik</h3>
+<ol>
+  <li>Ikuti urutan konfigurasi pada peta ketergantungan; jangan membuat resep sebelum bahan, satuan, dan vendor price siap.</li>
+  <li>Satu barang fisik = satu saldo. Jangan duplikasi material dan produk bahan.</li>
+  <li>Tetapkan satuan material = satuan resep (gram, bukan kg bila resep dalam gram).</li>
+  <li>Selalu isi <b>Reason</b> saat koreksi stok; jangan koreksi untuk “menyembunyikan” stok minus tanpa mencari sebab.</li>
+  <li>Isi <b>Vendor prices</b> dan tandai satu <b>Preferred</b> agar harga modal tidak “incomplete”.</li>
+  <li>Terima PO hanya setelah barang benar-benar tiba; barang kurang → koreksi selisih tercatat.</li>
+  <li>Lakukan stok opname berkala, lalu cocokkan lewat Adjust stock.</li>
+  <li>Setelah mengubah resep atau grup modifier, uji dengan satu pesanan nyata dan periksa riwayat Stock.</li>
+</ol>
+</section>
+
+<!-- ====================== 10. QUICK REF ====================== -->
+<section>
+<h2>10. Panduan Ringkas (Quick Reference)</h2>
+<table>
+  <tr><th>Urut</th><th>Menu</th><th>Tujuan</th><th>Kapan dipakai</th><th>Dampak ke stok</th></tr>
+  <tr><td>1</td><td>Purchase → Materials</td><td>Daftar bahan, satuan, koreksi, vendor price</td><td>Awal, bahan baru</td><td>Adjust stock mengubah saldo bahan outlet</td></tr>
+  <tr><td>2</td><td>Purchase → Vendors (+ Vendor prices)</td><td>Pemasok dan harga</td><td>Sebelum PO dan resep berbiaya</td><td>Tidak mengubah stok; memengaruhi harga modal</td></tr>
+  <tr><td>3</td><td>Inventory → Products</td><td>Produk, varian, Track stock, Stock source, Use as ingredient</td><td>Menu baru/berubah</td><td>Menentukan stok mana yang dipakai</td></tr>
+  <tr><td>4</td><td>Restaurant → Restaurant Setup → Modifiers</td><td>Grup pilihan + Materials used</td><td>Sebelum resep bermodifier</td><td>Memotong bahan saat pilihan dipesan</td></tr>
+  <tr><td>5</td><td>Produk → Recipe (BOM)</td><td>Bahan per porsi</td><td>Setelah bahan dan modifier ada</td><td>Menghitung porsi tersedia; memotong saat selesai</td></tr>
+  <tr><td>6</td><td>Inventory → Stock</td><td>Buku besar; Stock adjustment</td><td>Stok awal, koreksi, audit</td><td>Mengubah saldo produk; riwayat tak terhapus</td></tr>
+  <tr><td>7</td><td>Purchase → Purchase Orders</td><td>Pembelian dan penerimaan</td><td>Restok</td><td>Received: bahan Material bertambah di outlet PO</td></tr>
+  <tr><td>8</td><td>POS (Counter/Kasir)</td><td>Penjualan</td><td>Operasional</td><td>Pesanan selesai memotong bahan</td></tr>
+  <tr><td>9</td><td>Reports → Materials · Stock</td><td>Pantau risiko habis, saran beli</td><td>Harian/mingguan (Admin)</td><td>Tidak mengubah stok (kecuali Create draft POs → draft PO)</td></tr>
+</table>
+<h3>Daftar kode galat yang sering muncul</h3>
+<table>
+  <tr><th>Kode</th><th>Arti</th><th>Tindakan</th></tr>
+  <tr><td><code>insufficient_recipe_stock</code> (409)</td><td>Bahan resep tidak cukup</td><td>Tambah stok bahan</td></tr>
+  <tr><td><code>insufficient_stock_reserved</code> (409)</td><td>Jual langsung produk bahan melebihi saldo setelah tahanan</td><td>Kurangi qty atau selesaikan/batalkan tab terbuka</td></tr>
+  <tr><td><code>ingredient_in_use</code> (409)</td><td>Produk masih dirujuk resep</td><td>Lepas dari resep dulu</td></tr>
+  <tr><td><code>recipe_ingredient_whole_quantity</code> (422)</td><td>Jumlah bahan produk harus bulat</td><td>Ubah qty jadi bilangan bulat</td></tr>
+  <tr><td><code>recipe_ingredient_recursive</code> (422)</td><td>Resep akan berputar</td><td>Ubah struktur resep</td></tr>
+</table>
+
+<h3>Daftar bagian yang belum terverifikasi</h3>
+<ul>
+  <li>Daftar pilihan bahan produk di laci Recipe (gambar), layar detail PO dan tombol status, isi Reports → Purchases — menunggu data/pengambilan manual.</li>
+  <li>Pemetaan tepat bahan per opsi “Rasa Kuah” (layar “Materials used” tidak terbuka saat pengambilan otomatis).</li>
+  <li>Hak peran Inventory untuk mengubah status PO.</li>
+  <li>Perilaku di tablet Android dan keserentakan dua terminal fisik (hanya diuji di tingkat kode/tes).</li>
+</ul>
+<p class="pagehead">Sumber isi: kode aplikasi (<code>PurchaseOrderService</code>, <code>MaterialStockService</code>, <code>MenuStockService</code>, <code>ModifierMaterialConsumption</code>), spesifikasi <code>specs/087–093</code>, dan screenshot aplikasi 7 November 2026.</p>
+</section>
+
+</body>
+</html>
