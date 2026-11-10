@@ -26,6 +26,9 @@ class ProductResource extends JsonResource
             'station_id' => $this->station_id,
             // 087 US6 — sumber stok: `variant` | `modifier`.
             'stock_source' => $this->stock_source ?? \App\Models\Product::STOCK_VARIANT,
+            // 093 — produk bahan: varian-variannya boleh dipilih di resep produk lain; label satuan hanya tampilan.
+            'use_as_ingredient' => (bool) $this->use_as_ingredient,
+            'ingredient_unit' => $this->ingredient_unit,
             // 045 Stage 3 — outlet yang boleh dilihat pengguna dan apakah masing-masing membawa produk ini. Hanya ada bila
             // beberapa outlet terlihat DAN relasi `outletItemSettings.outlet` dimuat (show/store/update); disembunyikan di satu outlet.
             'outlets' => $this->when(

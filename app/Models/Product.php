@@ -46,6 +46,10 @@ class Product extends Model
         'is_retail',
         // 087 US6 — sumber stok (`variant`/`modifier`); aturannya hanya di ProductVariant::tracksOwnStock().
         'stock_source',
+        // 093 — produk boleh dipakai sebagai bahan resep produk lain dengan SATU saldo bersama (varian). Aturan
+        // "boleh dinyalakan" ada di service produk, bukan di sini. `ingredient_unit` hanya label tampilan.
+        'use_as_ingredient',
+        'ingredient_unit',
     ];
 
     public const STOCK_VARIANT = 'variant';
@@ -53,7 +57,7 @@ class Product extends Model
     public const STOCK_MODIFIER = 'modifier';
 
     // Default DB tidak terlihat pada model hasil create(); dicerminkan supaya tracksOwnStock() benar sebelum refresh.
-    protected $attributes = ['stock_source' => self::STOCK_VARIANT];
+    protected $attributes = ['stock_source' => self::STOCK_VARIANT, 'use_as_ingredient' => false];
 
     public const STATUS_DRAFT = 'draft';
 
@@ -93,6 +97,7 @@ class Product extends Model
         return [
             'is_active' => 'boolean',
             'is_retail' => 'boolean',
+            'use_as_ingredient' => 'boolean',
             'prep_minutes' => 'integer',
             'published_at' => 'datetime',
             'discontinued_at' => 'datetime',

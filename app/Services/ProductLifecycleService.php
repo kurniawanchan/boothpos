@@ -37,6 +37,10 @@ class ProductLifecycleService
                 throw ValidationException::withMessages(['product' => __('products.already_discontinued')])->status(409);
             }
 
+            // 093 (FR-011) — produk yang masih dipakai resep tidak boleh dihentikan (cek saat DIMINTA; pada rilis menu
+            // aktif, perubahan yang sudah antre tidak dibatalkan di sini).
+            app(IngredientProductService::class)->assertNotInUse($product);
+
             if (MenuSettings::releaseEnabled()) {
                 return ['product' => $product, 'change' => $this->queue($product, $by, MenuChange::KIND_ITEM_DISCONTINUE, ['reason_code_id' => $reason->id, 'note' => $note])];
             }

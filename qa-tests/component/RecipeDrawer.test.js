@@ -3,12 +3,12 @@ import { render, screen, waitFor, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import RecipeDrawer from '../../resources/js/components/product/RecipeDrawer.vue';
 import { useToastStore } from '../../resources/js/stores/toast';
-import { createRecipe, getRecipe, listRecipeModifierOptions, updateRecipe } from '../../resources/js/api/recipes';
+import { createRecipe, getRecipe, listRecipeIngredients, listRecipeModifierOptions, updateRecipe } from '../../resources/js/api/recipes';
 import { getMaterial, listMaterials } from '../../resources/js/api/materials';
 import { ApiError } from '../../resources/js/utils/errors';
 import { computeRecipeCost, referencePrice } from '../../resources/js/utils/recipeCost';
 
-vi.mock('../../resources/js/api/recipes', () => ({ createRecipe: vi.fn(), getRecipe: vi.fn(), updateRecipe: vi.fn(), listRecipeModifierOptions: vi.fn() }));
+vi.mock('../../resources/js/api/recipes', () => ({ createRecipe: vi.fn(), getRecipe: vi.fn(), updateRecipe: vi.fn(), listRecipeModifierOptions: vi.fn(), listRecipeIngredients: vi.fn() }));
 vi.mock('../../resources/js/api/materials', () => ({ listMaterials: vi.fn(), getMaterial: vi.fn() }));
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -81,6 +81,7 @@ describe('RecipeDrawer (043/089)', () => {
     listMaterials.mockResolvedValue({ data: MATERIALS, meta: { current_page: 1, last_page: 1 } });
     getRecipe.mockResolvedValue(RECIPE_V3);
     listRecipeModifierOptions.mockResolvedValue([]);
+    listRecipeIngredients.mockResolvedValue({ data: [], meta: { current_page: 1, last_page: 1 } });
     getMaterial.mockResolvedValue({ ...MATERIALS[0], vendor_prices: [] });
     createRecipe.mockResolvedValue({ id: 40, name: 'Topping' });
     updateRecipe.mockResolvedValue({ id: 30, name: 'Dasar' });
@@ -503,4 +504,74 @@ describe('RecipeDrawer (043/089)', () => {
       expect(screen.getByRole('option', { name: /^es/i })).not.toHaveAttribute('aria-disabled');
     }, 30000);
   });
+
+  // 093 — produk sebagai bahan: grup "Produk" di pemilih, baris tanpa susut, muatan memakai variant_id.
+  describe('product ingredients (093)', () => {
+    const TELUR = { variant_id: 77, product_id: 9, product_name: 'Telur', variant_name: 'Standard', sku: 'TLR-1', unit: 'pcs', on_hand: 200, held: 5, available: 195, is_active: true };
+
+    it('offers flagged products next to materials and saves a product line with variant_id and no shrinkage', async () => {
+      listRecipeIngredients.mockResolvedValue({ data: [TELUR], meta: { current_page: 1, last_page: 1 } });
+      const user = await userEv();
+      await renderDrawer({ recipe: null });
+
+      expect(listRecipeIngredients).toHaveBeenCalledWith(expect.objectContaining({ exclude_product_id: 12 }));
+      await user.click(screen.getAllByTestId('rc-add')[0]);
+      await pick(user, within(lineRows()[0]).getByRole('combobox'), /Telur · TLR-1 · .*195/);
+
+      expect(within(lineRows()[0]).getByTestId('rc-shrink-na')).toBeTruthy();
+      expect(within(lineRows()[0]).getByTestId('rc-unit').textContent).toContain('pcs');
+
+      await user.type(within(lineRows()[0]).getByLabelText(/Jumlah|Qty/i), '1');
+      await user.click(submitBtn(/simpan|save/i));
+
+      await waitFor(() => expect(createRecipe).toHaveBeenCalled());
+      const line = createRecipe.mock.calls[0][1].blocks[0].lines[0];
+      expect(line).toEqual({ variant_id: 77, quantity: 1, shrinkage_pct: 0 });
+      expect(line).not.toHaveProperty('material_id');
+    });
+
+    it('refuses a fractional per-portion quantity for a product before calling the server', async () => {
+      listRecipeIngredients.mockResolvedValue({ data: [TELUR], meta: { current_page: 1, last_page: 1 } });
+      const user = await userEv();
+      await renderDrawer({ recipe: null });
+
+      await user.click(screen.getAllByTestId('rc-add')[0]);
+      await pick(user, within(lineRows()[0]).getByRole('combobox'), /Telur · TLR-1/);
+      await user.type(within(lineRows()[0]).getByLabelText(/Jumlah|Qty/i), '1');
+      const yieldInput = screen.getByLabelText(/Portions|Porsi/i);
+      await user.clear(yieldInput);
+      await user.type(yieldInput, '2'); // 1 telur untuk 2 porsi = 0,5 per porsi
+      await user.click(submitBtn(/simpan|save/i));
+
+      expect(await screen.findByText(/bilangan bulat|whole number/i)).toBeTruthy();
+      expect(createRecipe).not.toHaveBeenCalled();
+    });
+
+    it('shows the server refusal of a product line (recursion, not flagged, whole quantity) under that very line', async () => {
+      listRecipeIngredients.mockResolvedValue({ data: [TELUR], meta: { current_page: 1, last_page: 1 } });
+      createRecipe.mockRejectedValueOnce(new ApiError('x', { status: 422, errors: { 'blocks.0.lines.0.variant_id': ['Produk "Telur" punya resep sendiri, jadi tidak bisa dipakai sebagai bahan.'] } }));
+      const user = await userEv();
+      await renderDrawer({ recipe: null });
+
+      await user.click(screen.getAllByTestId('rc-add')[0]);
+      await pick(user, within(lineRows()[0]).getByRole('combobox'), /Telur · TLR-1/);
+      await user.type(within(lineRows()[0]).getByLabelText(/Jumlah|Qty/i), '1');
+      await user.click(submitBtn(/simpan|save/i));
+
+      expect(await within(lineRows()[0]).findByText(/punya resep sendiri/)).toBeTruthy();
+    });
+
+    it('keeps an existing product line whose product is no longer flagged, with a note', async () => {
+      getRecipe.mockResolvedValue({
+        ...RECIPE_V3,
+        lines: [{ material_id: null, variant_id: 90, name: 'Gula', unit: 'unit', sku: 'GLA-1', kind: 'product', ingredient_flagged: false, quantity: '1.0000', shrinkage_pct: '0.00' }],
+      });
+      await renderDrawer();
+
+      expect(lineRows()).toHaveLength(1);
+      expect(within(lineRows()[0]).getByTestId('rc-shrink-na')).toBeTruthy();
+      expect(within(lineRows()[0]).getByRole('combobox').textContent).toMatch(/tidak lagi tersedia|no longer available/i);
+    });
+  });
+
 });

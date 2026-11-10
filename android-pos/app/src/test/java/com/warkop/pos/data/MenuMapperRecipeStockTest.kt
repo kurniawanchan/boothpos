@@ -57,4 +57,23 @@ class MenuMapperRecipeStockTest {
         assertEquals("Telur", v.stockLimiting?.name)
         assertEquals(10, map(v).products.single().stock)
     }
+
+    // 093 — bahan penghambat bisa berupa PRODUK (varian bahan): `material_id` null, `variant_id` + `ingredient_type` terisi.
+    // Tablet tidak membaca kunci baru dan tidak menghitung stok sendiri: angka tetap `outlet_stock` dari server.
+    @Test fun `bahan penghambat berupa produk terbaca dan angkanya tetap dari server`() {
+        val v = json.decodeFromString(VariantDto.serializer(),
+            """{"id":10,"sell_price":"20000.00","current_stock":999,"outlet_stock":45,"track_stock":true,"stock_basis":"recipe","stock_limiting":{"ingredient_type":"variant","material_id":null,"variant_id":77,"name":"Telur","unit":"pcs","on_hand":"45.000","per_portion":"1.000"}}""")
+        assertEquals("Telur", v.stockLimiting?.name)
+        val p = map(v).products.single()
+        assertEquals(45, p.stock)
+        assertEquals("Telur", p.limitingMaterial)
+    }
+
+    @Test fun `kartu produk bahan memakai outlet_stock server yang sudah dikurangi tahanan`() {
+        val v = json.decodeFromString(VariantDto.serializer(),
+            """{"id":20,"sell_price":"3000.00","current_stock":50,"outlet_stock":45,"track_stock":true,"stock_basis":"variant"}""")
+        val c = map(v)
+        assertEquals(45, c.products.single().stock)
+        assertEquals("variant", c.products.single().stockBasis)
+    }
 }

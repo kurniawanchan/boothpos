@@ -34,7 +34,10 @@ class Recipe extends Model
         // 092 D6: memo "varian beresep" harus ikut berubah setiap resep disimpan/dihapus, termasuk lewat jalur
         // yang tidak melewati RecipeService (impor, tes). Pivot `recipe_variants` tidak punya event, jadi
         // RecipeService juga memanggil forget() sesudah menyinkronkan tautan.
-        $forget = fn () => app(\App\Support\RecipeDrivenVariants::class)->forget();
+        $forget = function () {
+            app(\App\Support\RecipeDrivenVariants::class)->forget();
+            app(\App\Support\IngredientVariants::class)->forget(); // 093
+        };
         static::saved($forget);
         static::deleted($forget);
     }

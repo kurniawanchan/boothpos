@@ -115,6 +115,8 @@ const productForm = reactive({
   prep_minutes: '',
   is_retail: false,
   stock_source: 'variant', // 087 US6
+  use_as_ingredient: false, // 093
+  ingredient_unit: '',
 });
 const variantRows = ref([createVariant()]);
 
@@ -216,6 +218,8 @@ function openCreate(defaults = {}) {
     prep_minutes: '',
     is_retail: defaults.is_retail === true,
     stock_source: 'variant',
+    use_as_ingredient: false,
+    ingredient_unit: '',
   });
   variantRows.value = [createVariant()];
   modifierRows.value = [blankLinkRow()];
@@ -253,6 +257,8 @@ async function openEdit(product) {
     prep_minutes: full.prep_minutes ?? '',
     is_retail: full.is_retail === true,
     stock_source: full.stock_source ?? 'variant',
+    use_as_ingredient: full.use_as_ingredient === true,
+    ingredient_unit: full.ingredient_unit ?? '',
   });
   variantRows.value = full.variants.length
     ? full.variants.map((v) => ({ ...v, cost_price: plainNumber(v.cost_price), sell_price: plainNumber(v.sell_price), low_stock_alert: v.low_stock_alert ?? '', original_stock: v.current_stock, image_file: null, image_error: '' }))
@@ -379,6 +385,9 @@ function factsPayload() {
     prep_minutes: productForm.prep_minutes === '' || productForm.prep_minutes === null ? null : Number(productForm.prep_minutes),
     is_retail: productForm.is_retail,
     stock_source: productForm.stock_source, // 087 US6 — server menentukan efeknya di semua modul
+    // 093 — penanda produk bahan; server menolak (422) bila stok tak dilacak/bersumber modifier/beresep.
+    use_as_ingredient: productForm.use_as_ingredient,
+    ingredient_unit: productForm.ingredient_unit.trim() || null,
   };
 }
 
@@ -743,6 +752,18 @@ async function saveProduct() {
           </div>
           <p class="text-[11.5px] text-muted-3">{{ t(`products.stock_source_${productForm.stock_source}_hint`) }}</p>
         </fieldset>
+        <!-- 093 — produk bahan: varian-variannya bisa dipilih di resep produk lain dan memakai SATU saldo bersama dengan penjualan langsung. -->
+        <div class="flex flex-col gap-1.5" data-testid="ingredient-flag">
+          <label class="flex items-center gap-2.5 text-[13px] font-medium text-muted-5">
+            <input v-model="productForm.use_as_ingredient" type="checkbox" class="h-4 w-4 accent-brand" data-testid="ingredient-flag-input" />
+            {{ t('products.use_as_ingredient') }}
+          </label>
+          <p class="text-[11.5px] text-muted-3">{{ t('products.use_as_ingredient_hint') }}</p>
+          <ProductField v-if="productForm.use_as_ingredient" v-slot="{ id }" :label="t('products.ingredient_unit')" :error="formErrors.ingredient_unit">
+            <input :id="id" v-model="productForm.ingredient_unit" type="text" maxlength="20" :placeholder="t('products.ingredient_unit_placeholder')" :class="[controlClass, borderOf(formErrors.ingredient_unit)]" data-testid="ingredient-unit-input" />
+          </ProductField>
+          <p v-if="formErrors.use_as_ingredient" role="alert" class="text-[12px] font-medium text-danger-text" data-testid="ingredient-flag-error">{{ formErrors.use_as_ingredient }}</p>
+        </div>
       </ProductFormBlock>
 
       <!-- STATUS (070) — hanya saat UBAH: Draft atau Aktif. Saat buat item langsung aktif (atau draft bila rilis menu aktif);

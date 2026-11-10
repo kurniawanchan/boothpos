@@ -189,6 +189,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/products/{product}/recipes/recalculate', [\App\Http\Controllers\Api\RecipeController::class, 'recalculate']);
         Route::delete('/products/{product}/recipes', [\App\Http\Controllers\Api\RecipeController::class, 'destroy']);
         Route::get('/products/{product}/recipe-modifier-options', [\App\Http\Controllers\Api\RecipeController::class, 'modifierOptions']);
+        Route::get('/recipe-ingredients', [\App\Http\Controllers\Api\RecipeController::class, 'ingredients']);
         Route::get('/recipes/{recipe}', [\App\Http\Controllers\Api\RecipeController::class, 'show']);
         Route::put('/recipes/{recipe}', [\App\Http\Controllers\Api\RecipeController::class, 'update']);
         Route::delete('/recipes/{recipe}', [\App\Http\Controllers\Api\RecipeController::class, 'destroyOne']);
