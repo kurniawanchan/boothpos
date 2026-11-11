@@ -1080,6 +1080,8 @@
     "bulk_download_action": "Download invoices",
     "bulk_email_action": "Email invoices",
     "bulk_download_failed": "Failed to download the selected invoices.",
+    "shipping_sheet_hint": "Shipping slips downloaded. Print at 100% / actual size (do not fit to page) so the lines stay where you cut. Some printers cannot print the outermost edge.",
+    "shipping_sheet_too_tall": "A shipping slip is too tall to fit on one A4 page. Shorten its address or notes and try again.",
     "bulk_email_failed": "Failed to email the selected invoices.",
     "bulk_email_summary": "{sent} sent, {skipped} skipped.",
     "paid_this_time": "Paid this time",
@@ -1101,7 +1103,7 @@
     "invoice_footer_default": "Thank you for your order. Show this document at our booth for pickup or delivery.",
     "download_shipping_slip": "Download shipping slip (PDF)",
     "shipping_slip_download_failed": "Failed to download the shipping slip.",
-    "bulk_download_shipping_slip": "Download shipping slips (ZIP)",
+    "bulk_download_shipping_slip": "Download shipping slips (A4 PDF)",
     "bulk_download_payment_slip": "Download payment invoices (ZIP)",
     "save_shipment_changes": "Save shipment changes",
     "edit_shipment": "Edit shipment"

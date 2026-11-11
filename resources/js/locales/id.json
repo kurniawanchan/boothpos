@@ -1080,6 +1080,8 @@
     "bulk_download_action": "Unduh invoice",
     "bulk_email_action": "Kirim email",
     "bulk_download_failed": "Gagal mengunduh invoice terpilih.",
+    "shipping_sheet_hint": "Surat jalan terunduh. Cetak dengan skala 100% / ukuran sebenarnya (jangan 'muat ke halaman') agar garis potong tidak bergeser. Beberapa printer tidak bisa mencetak tepi paling luar.",
+    "shipping_sheet_too_tall": "Ada surat jalan yang terlalu tinggi untuk satu halaman A4. Persingkat alamat atau catatannya lalu coba lagi.",
     "bulk_email_failed": "Gagal mengirim email invoice terpilih.",
     "bulk_email_summary": "{sent} email terkirim, {skipped} dilewati.",
     "paid_this_time": "Dibayar kali ini",
@@ -1101,7 +1103,7 @@
     "invoice_footer_default": "Terima kasih atas pesanan Anda. Tunjukkan dokumen ini di booth kami untuk pickup atau pengiriman.",
     "download_shipping_slip": "Unduh surat jalan (PDF)",
     "shipping_slip_download_failed": "Gagal mengunduh surat jalan.",
-    "bulk_download_shipping_slip": "Unduh surat jalan (ZIP)",
+    "bulk_download_shipping_slip": "Unduh surat jalan (PDF A4)",
     "bulk_download_payment_slip": "Unduh invoice pembayaran (ZIP)",
     "save_shipment_changes": "Simpan perubahan pengiriman",
     "edit_shipment": "Edit pengiriman"

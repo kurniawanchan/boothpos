@@ -544,6 +544,18 @@ Two multi-select filters on the Pre-orders list and four export-only columns. **
 - **Infra note:** a full disk (97 %) crashed `boothpos-mysql-1` mid-`migrate` during this feature; `docker compose up -d mysql` recovered cleanly (InnoDB crash recovery). `docker builder prune` reported 0 B reclaimed — free space came from elsewhere, so watch `df -h /` before blaming code.
 - **Not verified in a real browser** (see quickstart.md): the two dropdowns, the export file opened in Excel, phone width.
 
+## Bulk shipping slips on A4 cut sheets (feature 067, 2026-11-10)
+
+Frontend only: no migration, route or OpenAPI change. Pre-orders → select → "Download shipping slips" now returns ONE `surat-jalan.pdf` (was a ZIP of one PDF per slip). Rules a future change must not break:
+
+- **All of it lives in `utils/shippingSlipSheet.js`** (cell markup, pure `layoutSlipRows()`, `measureSlipHeights()`, `renderShippingSlipSheet()`); `buildShippingSlipHtml` is gone from `invoiceDocument.js` (which now only exports `escapeHtml`). `doBulkShippingSlips()` fetches, calls the renderer (dynamic import), downloads, toasts the print hint. The detail drawer's single slip (`shippingSlipEl`) is untouched.
+- **Integer grid on a 794×1123 px page: columns 265+264+264.** Each slip box owns only its right + bottom 1 px black border (first column also left, first row of a page also top), so neighbours share ONE line — no margin/gap. At raster scale 2 every line is exactly 2 device px. Do not "fix" the 1 px of slack on the right edge or make the columns fractional (blurry lines, the 049 trap).
+- **Row height = tallest slip in the row, measured from the real markup** at the real content width (263 px); never a fixed height with `overflow:hidden`/`line-clamp` (an address must not be cut). A row taller than a page throws `SlipTooTallError` → localized toast, no file; it is never truncated. jsdom has no layout: tests inject `measure`/`capture`.
+- **One rasterization per PAGE**, sequential, page node and canvas released before the next (≤ 200 slips).
+- **Zero page margin is deliberate** (product-owner request). Printers may clip the outermost left/top line; the success toast tells the user to print at 100 % / actual size. A safety margin would be one constant (`COL_WIDTHS` offset), not built.
+- Bulk recipient comes from `invoice.customer`, the single-slip template from the `shipment` record — an OLD difference, left as is.
+- **Not verified in a real browser or on paper** (tasks T022/T023 open): crispness of the 1 px lines in the PDF and a ruler check of a printed sheet.
+
 ## Reopening a closed shift (feature 063, 2026-11-06)
 
 - **Owner role only, as a FIXED rule.** `POST /sessions/{session}/reopen` checks `$request->user()->role?->isOwner()` inline in `CashierSessionController::reopen()` (403 before any state is revealed). It is deliberately NOT a `MenuActions` action — a role-editor checkbox would imply it can be delegated — so the route sits in `MenuActionsRouteCoverageTest::EXEMPT` with that reason. Do not "fix" the exemption by adding `ability:session,...`.
@@ -561,7 +573,16 @@ Two multi-select filters on the Pre-orders list and four export-only columns. **
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/066-preorder-filter-export-columns/plan.md`
+Active feature plan: `specs/067-bulk-shipping-slips-a4-grid/plan.md`
+(branch `097-bulk-shipping-slips-a4-grid`, from `develop`; spec dir number ≠ branch number) — frontend only, NO migration,
+no route, OpenAPI unchanged. Pre-orders bulk "download shipping slips" stops zipping one PDF per slip and produces ONE A4
+portrait PDF: slips in a 3-column grid, 1 px solid black border, neighbours share one line (no margin/gap), rows of equal
+height, no slip split across pages, only existing slips drawn. New `utils/shippingSlipSheet.js` (cell markup replacing
+`buildShippingSlipHtml`, pure `layoutSlipRows()`, renderer: one `pdfCapture` rasterization per PAGE → one jsPDF). Integer
+grid 265+264+264 px on a 794×1123 px page; row height = tallest slip in the row (measured, never clipped); a row taller than
+a page is an error, not a truncation. Print-at-100 % hint after download. Detail drawer's single slip unchanged. See research.md D1–D7.
+
+Previous feature: `specs/066-preorder-filter-export-columns/plan.md`
 (branch `096-preorder-filter-export-columns`, from `develop`; spec dir number ≠ branch number) — NO migration, no new
 route. Pre-orders list gets two multi-select filters, Customer (`customer_id[]`, was scalar) and product Category
 (`category_id[]`, via items → variant → product, soft-deleted included, each pre-order once and returned whole); the
