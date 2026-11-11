@@ -41,7 +41,6 @@ import { useDebouncedFn } from '../composables/useDebouncedFn';
 import { formatIDR, parseMoney, toMoneyString } from '../utils/money';
 import { formatDate, formatDateTime } from '../utils/date';
 import { downloadElementAsPdf, captureElementCanvas } from '../utils/pdfCapture';
-import { buildShippingSlipHtml } from '../utils/invoiceDocument';
 import PreorderInvoiceDocument from '../components/preorder/PreorderInvoiceDocument.vue';
 import PreorderPaymentDocument from '../components/preorder/PreorderPaymentDocument.vue';
 import DataTable from '../components/ui/DataTable.vue';
@@ -944,45 +943,34 @@ async function doBulkEmail() {
   }
 }
 
-// 024-invoice-layout-shipping-slip (US7) — bulk unduh surat jalan (ZIP).
+// 024 (US7) → 067: bulk unduh surat jalan. Hasilnya SATU PDF A4 berisi grid 3 kolom
+// berbingkai 1 px yang saling menempel, siap dipotong mengikuti garis (lihat
+// utils/shippingSlipSheet.js). Dulu: satu PDF per surat jalan di dalam ZIP.
 async function doBulkShippingSlips() {
   const ids = [...selectedIds.value];
   if (!ids.length) return;
   bulkDownloading.value = true;
   try {
     const { data: invoices } = await bulkPreorderInvoices(ids, 'invoice');
-    const [{ default: JSZip }, { jsPDF }] = await Promise.all([
-      import('jszip'), import('jspdf'),
-    ]);
-    const zip = new JSZip();
-    for (const invoice of invoices) {
-      const container = document.createElement('div');
-      container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.innerHTML = buildShippingSlipHtml(invoice);
-      document.body.appendChild(container);
-      const canvas = await captureElementCanvas(container);
-      document.body.removeChild(container);
+    if (!invoices?.length) throw new Error(t('preorders.bulk_download_failed'));
 
-      const imgData = canvas.toDataURL('image/png');
-      const widthPt = (canvas.width * 72) / 96;
-      const heightPt = (canvas.height * 72) / 96;
-      const pdf = new jsPDF({ orientation: heightPt >= widthPt ? 'portrait' : 'landscape', unit: 'pt', format: [widthPt, heightPt] });
-      pdf.addImage(imgData, 'PNG', 0, 0, widthPt, heightPt);
-      zip.file(`surat-jalan-${invoice.preorder_number}.pdf`, pdf.output('blob'));
-    }
+    // Modul dimuat malas: ikut chunk halaman ini, html2canvas/jspdf tetap dynamic import.
+    const { renderShippingSlipSheet } = await import('../utils/shippingSlipSheet');
+    const blob = await renderShippingSlipSheet(invoices);
 
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(zipBlob);
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'surat-jalan.zip';
+    link.download = 'surat-jalan.pdf';
     document.body.appendChild(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+
+    // FR-010: garis potong hanya akurat bila dicetak 100 % (tanpa "muat ke halaman").
+    toast.success(t('preorders.shipping_sheet_hint'));
   } catch (err) {
-    toast.error(err.message || t('preorders.bulk_download_failed'));
+    toast.error(err?.name === 'SlipTooTallError' ? t('preorders.shipping_sheet_too_tall') : (err.message || t('preorders.bulk_download_failed')));
   } finally {
     bulkDownloading.value = false;
   }
@@ -1577,7 +1565,7 @@ async function saveShipmentChanges() {
         <i class="ph-duotone ph-file-zip text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.bulk_download_action') }}
       </BaseButton>
-      <BaseButton v-if="auth.canDo('preorders', 'export')" variant="secondary" size="sm" :loading="bulkDownloading" @click="doBulkShippingSlips">
+      <BaseButton v-if="auth.canDo('preorders', 'export')" variant="secondary" size="sm" data-testid="bulk-btn-shipping-slips" :loading="bulkDownloading" @click="doBulkShippingSlips">
         <i class="ph-duotone ph-truck text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.bulk_download_shipping_slip') }}
       </BaseButton>
