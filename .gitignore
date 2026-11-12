@@ -56,3 +56,17 @@ yarn-error.log
 
 # Playwright MCP browser-verification artifacts (screenshots, traces)
 /.playwright-mcp/
+
+# android-customer — aplikasi storefront pelanggan (Kotlin/Compose), proyek Gradle terpisah.
+# Mengikuti entri /android di atas, ditambah bahan penandatanganan rilis yang tidak boleh ter-commit.
+/android-customer/.gradle
+/android-customer/.idea
+/android-customer/.kotlin
+/android-customer/local.properties
+/android-customer/**/build
+/android-customer/*.iml
+/android-customer/captures
+/android-customer/.cxx
+/android-customer/keystore.properties
+/android-customer/*.jks
+/android-customer/*.keystore

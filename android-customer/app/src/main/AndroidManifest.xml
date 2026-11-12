@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Pengerasan (sengaja):
+      - allowBackup=false + aturan ekstraksi yang mengecualikan semuanya: sesi, keranjang, dan cache
+        tidak pernah ikut cadangan awan atau transfer perangkat.
+      - usesCleartextTraffic=false + networkSecurityConfig: hanya HTTPS (varian debug menimpa berkas
+        XML-nya untuk 10.0.2.2/localhost saja).
+      - Satu-satunya komponen yang diekspor adalah activity peluncur; tidak ada deep link, service,
+        receiver, provider, atau WebView.
+    -->
+    <application
+        android:name=".CustomerApp"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.BoothCustomer"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Dibawa pustaka androidx.profileinstaller dalam keadaan exported (dijaga izin DUMP, hanya
+          untuk `adb`/benchmark). Aplikasi ini tidak membutuhkannya, jadi dibuang supaya activity
+          peluncur benar-benar satu-satunya komponen yang diekspor.
+          tools:ignore MissingClass: kelasnya dependensi transitif runtime-only, jadi lint (yang
+          melihat classpath kompilasi) tidak menemukannya; manifest merger tetap membuangnya.
+        -->
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
+    </application>
+</manifest>

@@ -1,0 +1,50 @@
+{
+ "data": {
+  "order_number": "CO-V1NKWSJQCN",
+  "status": "awaiting_confirmation",
+  "fulfilment_method": "courier",
+  "total": "150000.00",
+  "item_count": 1,
+  "first_item_name": "Etalase Bruno 1794456911541 — Ukuran S",
+  "created_at": "2026-11-12T04:15:26+00:00",
+  "updated_at": "2026-11-12T04:15:26+00:00",
+  "subtotal": "150000.00",
+  "shipping_cost": "0.00",
+  "shipping_cost_pending": true,
+  "contact": {
+   "name": "Pelanggan Bruno A",
+   "phone": "0800****0011",
+   "email": "b***@example.test"
+  },
+  "shipping_address": {
+   "recipient_name": "Pelanggan Bruno A",
+   "phone": "0800****0011",
+   "address_line": "Jl. Contoh Uji No. 1",
+   "city": "Bandung",
+   "province": "Jawa Barat",
+   "postal_code": "40111",
+   "notes": "Pagar hijau"
+  },
+  "notes": "Mohon dibungkus rapi.",
+  "cancel_reason": null,
+  "instructions": null,
+  "items": [
+   {
+    "name": "Etalase Bruno 1794456911541 — Ukuran S",
+    "sku": "BRN-BR-DGDRPJ-1",
+    "unit_price": "75000.00",
+    "qty": 2,
+    "line_total": "150000.00"
+   }
+  ],
+  "shipment": null,
+  "timeline": [
+   {
+    "status": "awaiting_confirmation",
+    "event_type": "status_changed",
+    "note": null,
+    "occurred_at": "2026-11-12T04:15:26+00:00"
+   }
+  ]
+ }
+}

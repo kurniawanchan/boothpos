@@ -1,0 +1,40 @@
+{
+ "data": [
+  {
+   "order_number": "CO-MZYWRXNDSY",
+   "status": "awaiting_confirmation",
+   "fulfilment_method": "pickup",
+   "total": "75000.00",
+   "item_count": 1,
+   "first_item_name": "Etalase Bruno 1794456911541 — Ukuran S",
+   "created_at": "2026-11-12T04:15:29+00:00",
+   "updated_at": "2026-11-12T04:15:29+00:00"
+  },
+  {
+   "order_number": "CO-YFQB1Q4KCG",
+   "status": "awaiting_confirmation",
+   "fulfilment_method": "pickup",
+   "total": "75000.00",
+   "item_count": 1,
+   "first_item_name": "Etalase Bruno 1794456911541 — Ukuran S",
+   "created_at": "2026-11-12T04:15:29+00:00",
+   "updated_at": "2026-11-12T04:15:29+00:00"
+  },
+  {
+   "order_number": "CO-V1NKWSJQCN",
+   "status": "awaiting_confirmation",
+   "fulfilment_method": "courier",
+   "total": "150000.00",
+   "item_count": 1,
+   "first_item_name": "Etalase Bruno 1794456911541 — Ukuran S",
+   "created_at": "2026-11-12T04:15:26+00:00",
+   "updated_at": "2026-11-12T04:15:26+00:00"
+  }
+ ],
+ "meta": {
+  "current_page": 1,
+  "per_page": 20,
+  "total": 3,
+  "last_page": 1
+ }
+}

@@ -1,0 +1,13 @@
+# Keluaran build, cache Gradle/Kotlin, dan berkas IDE tidak pernah di-commit.
+.gradle/
+.idea/
+.kotlin/
+local.properties
+**/build/
+*.iml
+captures/
+.cxx/
+# Bahan penandatanganan rilis tidak boleh masuk repositori (manajemen rahasia).
+keystore.properties
+*.jks
+*.keystore

@@ -1,0 +1,8 @@
+{
+ "type": "https://boothpos.local/problems/idempotency_key_reused",
+ "title": "Kunci permintaan sudah dipakai",
+ "status": 409,
+ "detail": "Permintaan ini memakai kunci yang sudah dipakai untuk pesanan lain. Mulai ulang proses pemesanan.",
+ "code": "idempotency_key_reused",
+ "request_id": "895db4e1-db25-45e2-87f7-da5140c294f1"
+}

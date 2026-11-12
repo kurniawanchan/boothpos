@@ -1,0 +1,15 @@
+{
+ "data": {
+  "enabled": true,
+  "store_name": "Toko Merchandise Dummy",
+  "currency": "IDR",
+  "fulfilment_methods": [
+   "pickup",
+   "courier"
+  ],
+  "pickup_instructions": null,
+  "courier_instructions": null,
+  "max_qty_per_line": 20,
+  "max_lines_per_order": 50
+ }
+}

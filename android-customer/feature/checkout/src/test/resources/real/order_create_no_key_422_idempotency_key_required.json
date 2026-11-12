@@ -1,0 +1,8 @@
+{
+ "type": "https://boothpos.local/problems/idempotency_key_required",
+ "title": "Kunci permintaan wajib ada",
+ "status": 422,
+ "detail": "Permintaan pesanan harus menyertakan kunci permintaan yang valid.",
+ "code": "idempotency_key_required",
+ "request_id": "1e55821d-c327-4279-8c2e-dfa4abf39339"
+}

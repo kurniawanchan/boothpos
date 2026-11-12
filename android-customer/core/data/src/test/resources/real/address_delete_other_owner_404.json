@@ -1,0 +1,8 @@
+{
+ "type": "https://boothpos.local/problems/not_found",
+ "title": "Tidak ditemukan",
+ "status": 404,
+ "detail": "Data yang Anda cari tidak ditemukan.",
+ "code": "not_found",
+ "request_id": "99afc944-aedc-4a1e-8025-8652fc6bac0e"
+}

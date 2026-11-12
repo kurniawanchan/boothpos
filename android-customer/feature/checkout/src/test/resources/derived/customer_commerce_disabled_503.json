@@ -1,0 +1,8 @@
+{
+ "type": "https://boothpos.local/problems/customer_commerce_disabled",
+ "title": "Toko sedang tidak menerima pesanan",
+ "status": 503,
+ "detail": "Toko sedang tidak menerima pesanan baru lewat aplikasi. Silakan coba lagi nanti.",
+ "code": "customer_commerce_disabled",
+ "request_id": "00000000-0000-4000-8000-000000000503"
+}

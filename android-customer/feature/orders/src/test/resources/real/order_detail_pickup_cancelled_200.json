@@ -1,0 +1,48 @@
+{
+ "data": {
+  "order_number": "CO-MZYWRXNDSY",
+  "status": "cancelled",
+  "fulfilment_method": "pickup",
+  "total": "75000.00",
+  "item_count": 1,
+  "first_item_name": "Etalase Bruno 1794456911541 — Ukuran S",
+  "created_at": "2026-11-12T04:15:29+00:00",
+  "updated_at": "2026-11-12T04:15:40+00:00",
+  "subtotal": "75000.00",
+  "shipping_cost": "0.00",
+  "shipping_cost_pending": false,
+  "contact": {
+   "name": "Pelanggan Bruno A Diperbarui",
+   "phone": "0800****0011",
+   "email": "b***@example.test"
+  },
+  "shipping_address": null,
+  "notes": "Pesanan uji untuk dibatalkan toko.",
+  "cancel_reason": "Stok dialokasikan untuk acara lain.",
+  "instructions": null,
+  "items": [
+   {
+    "name": "Etalase Bruno 1794456911541 — Ukuran S",
+    "sku": "BRN-BR-DGDRPJ-1",
+    "unit_price": "75000.00",
+    "qty": 1,
+    "line_total": "75000.00"
+   }
+  ],
+  "shipment": null,
+  "timeline": [
+   {
+    "status": "cancelled",
+    "event_type": "status_changed",
+    "note": "Stok dialokasikan untuk acara lain.",
+    "occurred_at": "2026-11-12T04:15:40+00:00"
+   },
+   {
+    "status": "awaiting_confirmation",
+    "event_type": "status_changed",
+    "note": null,
+    "occurred_at": "2026-11-12T04:15:29+00:00"
+   }
+  ]
+ }
+}

@@ -1,0 +1,26 @@
+{
+ "data": {
+  "slug": "etalase-bruno-1794456911541",
+  "name": "Etalase Bruno 1794456911541",
+  "image_url": null,
+  "category": {
+   "id": 1,
+   "name": "Bruno Test Category"
+  },
+  "seller_name": "Bruno Test Seller",
+  "price_min": "75000.00",
+  "price_max": "75000.00",
+  "in_stock": true,
+  "description": "Produk uji etalase dari koleksi Bruno.",
+  "variants": [
+   {
+    "id": 1,
+    "name": "Ukuran S",
+    "image_url": null,
+    "price": "75000.00",
+    "in_stock": true,
+    "max_qty": 10
+   }
+  ]
+ }
+}

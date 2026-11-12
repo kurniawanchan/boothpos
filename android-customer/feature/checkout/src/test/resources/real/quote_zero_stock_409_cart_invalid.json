@@ -1,0 +1,17 @@
+{
+ "type": "https://boothpos.local/problems/cart_invalid",
+ "title": "Keranjang perlu diperbarui",
+ "status": 409,
+ "detail": "Sebagian barang di keranjang tidak lagi tersedia atau jumlahnya melebihi yang tersedia.",
+ "code": "cart_invalid",
+ "errors": {
+  "items": [
+   {
+    "variant_id": 2,
+    "reason": "unavailable",
+    "max_qty": 0
+   }
+  ]
+ },
+ "request_id": "c93b0e59-e656-4664-91c8-ad4c26102c11"
+}

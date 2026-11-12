@@ -1,0 +1,14 @@
+{
+ "data": {
+  "id": 2,
+  "label": "Kantor",
+  "recipient_name": "Pelanggan Bruno B",
+  "phone": "0800****0002",
+  "address_line": "Jl. Contoh Uji No. 2",
+  "city": "Surabaya",
+  "province": "Jawa Timur",
+  "postal_code": "60111",
+  "notes": null,
+  "is_default": true
+ }
+}

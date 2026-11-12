@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bahasa Indonesia adalah bahasa bawaan; terjemahan lain ditambahkan sebagai values-<kode>/. -->
+<resources>
+    <string name="cart_empty_title">Keranjang Anda kosong</string>
+    <string name="cart_empty_message">Barang yang Anda pilih akan tampil di sini.</string>
+    <string name="cart_empty_action">Mulai belanja</string>
+
+    <!-- %1$s = harga satuan terformat (mis. "Rp15.000"). -->
+    <string name="cart_unit_price">%1$s per barang</string>
+    <!-- %1$s = nama produk. -->
+    <string name="cart_open_product">Lihat produk %1$s</string>
+    <string name="cart_remove_line">Hapus %1$s dari keranjang</string>
+    <string name="cart_quantity_decrease">Kurangi jumlah %1$s</string>
+    <string name="cart_quantity_increase">Tambah jumlah %1$s</string>
+    <!-- Plurals supaya terjemahan lain dapat membedakan bentuk jamak; bahasa Indonesia hanya punya "other". -->
+    <plurals name="cart_quantity_value">
+        <item quantity="other">Jumlah: %1$d</item>
+    </plurals>
+
+    <string name="cart_issue_unavailable">Tidak lagi tersedia. Hapus barang ini untuk melanjutkan.</string>
+    <plurals name="cart_issue_exceeds">
+        <item quantity="other">Jumlah melebihi yang tersedia (maksimal %1$d).</item>
+    </plurals>
+    <plurals name="cart_issue_adjust">
+        <item quantity="other">Ubah jumlah menjadi %1$d</item>
+    </plurals>
+
+    <string name="cart_total_label">Total sementara</string>
+    <plurals name="cart_item_count">
+        <item quantity="other">%1$d barang</item>
+    </plurals>
+    <string name="cart_price_confirmed_at_checkout">Harga dan stok akan dikonfirmasi saat checkout.</string>
+    <string name="cart_fix_issues_hint">Perbaiki barang yang ditandai untuk melanjutkan.</string>
+    <string name="cart_action_checkout">Lanjut ke checkout</string>
+
+    <!-- %1$s = nama produk. -->
+    <string name="cart_line_removed">%1$s dihapus dari keranjang.</string>
+    <string name="cart_action_undo">Urungkan</string>
+    <string name="cart_undo_failed">Barang tidak dapat dikembalikan ke keranjang.</string>
+    <string name="cart_update_failed">Keranjang belum dapat diubah. Silakan coba lagi.</string>
+</resources>

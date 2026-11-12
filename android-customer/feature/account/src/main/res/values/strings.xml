@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bahasa Indonesia adalah bahasa bawaan; terjemahan lain ditambahkan sebagai values-<kode>/. -->
+<resources>
+    <string name="account_signed_out_title">Anda belum masuk</string>
+    <string name="account_signed_out_message">Masuk atau daftar untuk melihat profil dan memantau pesanan Anda.</string>
+    <string name="account_session_expired">Sesi berakhir, silakan masuk lagi.</string>
+    <string name="account_action_sign_in">Masuk</string>
+    <string name="account_action_register">Daftar</string>
+
+    <string name="account_field_name">Nama</string>
+    <string name="account_field_email">E-mail</string>
+    <string name="account_field_phone">Nomor telepon</string>
+    <string name="account_field_phone_optional">Nomor telepon (opsional)</string>
+    <string name="account_field_empty">Belum diisi</string>
+    <string name="account_email_read_only">E-mail tidak dapat diubah.</string>
+
+    <string name="account_refreshing">Memperbarui profil…</string>
+    <!-- %1$s = penyebab (mis. "Periksa koneksi internet Anda, lalu coba lagi."). -->
+    <string name="account_refresh_failed">Profil belum dapat diperbarui. %1$s</string>
+
+    <string name="account_action_edit_profile">Ubah profil</string>
+    <string name="account_action_addresses">Alamat pengiriman</string>
+    <string name="account_action_save">Simpan</string>
+    <string name="account_action_sign_out">Keluar</string>
+    <string name="account_action_cancel">Batal</string>
+    <string name="account_sign_out_confirm_title">Keluar dari akun?</string>
+    <string name="account_sign_out_confirm_message">Keranjang belanja di perangkat ini akan dikosongkan.</string>
+
+    <!-- %1$s = nama kolom, %2$d = batas karakter. -->
+    <string name="account_error_required">%1$s wajib diisi.</string>
+    <!-- Plurals supaya terjemahan lain dapat membedakan bentuk jamak; bahasa Indonesia hanya punya "other". -->
+    <plurals name="account_error_too_long">
+        <item quantity="other">%1$s maksimal %2$d karakter.</item>
+    </plurals>
+    <string name="account_error_invalid">%1$s tidak valid.</string>
+</resources>
