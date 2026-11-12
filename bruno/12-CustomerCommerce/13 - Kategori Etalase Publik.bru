@@ -1,0 +1,21 @@
+meta {
+  name: 13 - Kategori Etalase Publik
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{base_url}}/storefront/categories
+  auth: none
+}
+
+tests {
+  test("kategori produk etalase tampil hanya dengan id, nama, dan gambar", function () {
+    expect(res.status).to.equal(200);
+    const ids = res.body.data.map(function (c) { return Number(c.id); });
+    expect(ids).to.include(Number(bru.getVar("storefront_category_id")));
+    res.body.data.forEach(function (c) {
+      expect(c).to.have.all.keys("id", "name", "image_url");
+    });
+  });
+}

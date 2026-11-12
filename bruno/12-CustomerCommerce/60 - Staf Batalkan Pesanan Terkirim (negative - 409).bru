@@ -1,0 +1,28 @@
+meta {
+  name: 60 - Staf Batalkan Pesanan Terkirim (negative - 409)
+  type: http
+  seq: 60
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_order_staff_id}}/cancel
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "reason": "Percobaan batal setelah terkirim."
+  }
+}
+
+tests {
+  test("ditolak 409 invalid_transition - pesanan yang sudah terkirim tidak bisa dibatalkan (belum ada alur retur)", function () {
+    expect(res.status).to.equal(409);
+    expect(res.body.code).to.equal("invalid_transition");
+  });
+}

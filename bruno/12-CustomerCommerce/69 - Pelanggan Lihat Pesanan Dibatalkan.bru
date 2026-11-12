@@ -1,0 +1,25 @@
+meta {
+  name: 69 - Pelanggan Lihat Pesanan Dibatalkan
+  type: http
+  seq: 69
+}
+
+get {
+  url: {{base_url}}/customer/orders/{{customer_cancel_order_number}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("pelanggan melihat status batal beserta alasannya di linimasa", function () {
+    expect(res.status).to.equal(200);
+    const o = res.body.data;
+    expect(o.status).to.equal("cancelled");
+    expect(o.cancel_reason).to.equal(bru.getVar("customer_cancel_reason"));
+    expect(o.timeline[0].status).to.equal("cancelled");
+    expect(o.timeline[0].note).to.equal(bru.getVar("customer_cancel_reason"));
+  });
+}

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bahasa Indonesia adalah bahasa bawaan; terjemahan lain ditambahkan sebagai values-<kode>/. -->
+<resources>
+    <string name="auth_action_sign_in">Masuk</string>
+    <string name="auth_action_register">Daftar</string>
+
+    <string name="auth_choice_title">Selamat datang</string>
+    <string name="auth_choice_message">Masuk atau daftar untuk memesan dan memantau pesanan Anda. Anda juga dapat melihat toko lebih dulu tanpa akun.</string>
+    <string name="auth_choice_guest">Lihat toko tanpa akun</string>
+
+    <string name="auth_field_name">Nama</string>
+    <string name="auth_field_email">E-mail</string>
+    <string name="auth_field_phone">Nomor telepon</string>
+    <string name="auth_field_phone_optional">Nomor telepon (opsional)</string>
+    <string name="auth_field_password">Kata sandi</string>
+    <!-- Plurals supaya terjemahan lain dapat membedakan bentuk jamak; bahasa Indonesia hanya punya "other". -->
+    <plurals name="auth_password_hint">
+        <item quantity="other">Minimal %1$d karakter.</item>
+    </plurals>
+
+    <string name="auth_sign_in_intro">Masuk untuk memesan dan memantau pesanan Anda.</string>
+    <string name="auth_sign_in_to_register">Belum punya akun? Daftar</string>
+    <string name="auth_sign_in_recovery_help">Lupa kata sandi? Atur ulang kata sandi belum tersedia di aplikasi ini. Hubungi toko untuk bantuan.</string>
+    <string name="auth_session_expired">Sesi berakhir, silakan masuk lagi.</string>
+
+    <string name="auth_register_intro">Buat akun untuk memesan dan memantau pesanan Anda.</string>
+    <string name="auth_register_to_sign_in">Sudah punya akun? Masuk</string>
+
+    <!-- %1$s = nama kolom, %2$d = batas karakter. -->
+    <string name="auth_error_required">%1$s wajib diisi.</string>
+    <string name="auth_error_email_format">Format e-mail tidak valid. Contoh: nama@email.com</string>
+    <plurals name="auth_error_too_short">
+        <item quantity="other">%1$s minimal %2$d karakter.</item>
+    </plurals>
+    <plurals name="auth_error_too_long">
+        <item quantity="other">%1$s maksimal %2$d karakter.</item>
+    </plurals>
+
+    <!-- Sengaja generik: tidak membedakan e-mail tak dikenal dari kata sandi yang salah. -->
+    <string name="auth_error_invalid_credentials">E-mail atau kata sandi salah. Periksa lagi, lalu coba masuk kembali.</string>
+    <!-- Sengaja netral: tidak menyatakan bahwa e-mail sudah terdaftar. -->
+    <string name="auth_error_registration_failed">Pendaftaran tidak dapat diproses. Periksa data Anda, atau masuk jika sudah punya akun.</string>
+    <string name="auth_error_store_unavailable">Toko sedang tidak tersedia saat ini. Silakan coba lagi nanti.</string>
+    <string name="auth_error_rate_limited">Terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi.</string>
+    <!-- Plurals supaya terjemahan lain dapat membedakan bentuk jamak; bahasa Indonesia hanya punya "other". -->
+    <plurals name="auth_error_rate_limited_seconds">
+        <item quantity="other">Terlalu banyak percobaan. Coba lagi dalam %1$d detik.</item>
+    </plurals>
+    <plurals name="auth_error_rate_limited_minutes">
+        <item quantity="other">Terlalu banyak percobaan. Coba lagi dalam sekitar %1$d menit.</item>
+    </plurals>
+</resources>

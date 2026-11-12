@@ -1,0 +1,37 @@
+meta {
+  name: 37 - Ulangi Checkout dengan Idempotency-Key Sama (idempotensi - 200)
+  type: http
+  seq: 37
+}
+
+post {
+  url: {{base_url}}/customer/orders
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+  Idempotency-Key: {{idempotency_key}}
+}
+
+body:json {
+  {
+    "fulfilment_method": "courier",
+    "address_id": {{customer_address_id}},
+    "contact": { "name": "Pelanggan Bruno A", "phone": "080000000011" },
+    "items": [
+      { "variant_id": {{storefront_variant_id}}, "qty": 2 }
+    ],
+    "notes": "Mohon dibungkus rapi.",
+    "expected_total": "{{quote_total}}"
+  }
+}
+
+tests {
+  test("kunci dan isi sama: 200 dengan pesanan ASLI, tidak ada pesanan baru", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data.order_number).to.equal(bru.getVar("customer_order_number"));
+    expect(res.body.data.status).to.equal("awaiting_confirmation");
+  });
+}

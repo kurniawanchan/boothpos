@@ -1,0 +1,21 @@
+meta {
+  name: 72 - Logout Pelanggan B (cleanup)
+  type: http
+  seq: 72
+}
+
+post {
+  url: {{base_url}}/customer/auth/logout
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_b_token}}
+}
+
+tests {
+  test("logout 204 - token Pelanggan B dicabut", function () {
+    expect(res.status).to.equal(204);
+  });
+}

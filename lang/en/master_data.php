@@ -13,4 +13,6 @@ return [
     'artist_license_quota_exceeded' => 'This installation uses a Pro license (one seller). Upgrade to Master to add more sellers.',
     'insufficient_stock' => 'Insufficient stock for variant :sku. Available: :available.',
     'customer_delete_has_transactions' => 'This customer still has transactions (orders/pre-orders) and cannot be deleted.',
+    // Customer commerce: kontak dengan akun aplikasi / pesanan pelanggan tidak boleh dihapus (akun jadi yatim).
+    'customer_delete_has_customer_account' => 'This customer has a customer app account or customer orders and cannot be deleted.',
 ];

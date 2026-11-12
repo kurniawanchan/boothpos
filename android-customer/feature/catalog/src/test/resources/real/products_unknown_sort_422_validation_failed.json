@@ -1,0 +1,13 @@
+{
+ "type": "https://boothpos.local/problems/validation_failed",
+ "title": "Data tidak valid",
+ "status": 422,
+ "detail": "Data yang dikirim tidak valid. Periksa kembali isian Anda.",
+ "code": "validation_failed",
+ "errors": {
+  "sort": [
+   "validation.in"
+  ]
+ },
+ "request_id": "7810f6ad-b0ac-4da0-a860-4e210244cd0b"
+}

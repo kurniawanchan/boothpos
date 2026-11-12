@@ -1,0 +1,24 @@
+meta {
+  name: 47 - Pelanggan B Lihat Tracking Milik A (negative - 404)
+  type: http
+  seq: 47
+}
+
+get {
+  url: {{base_url}}/customer/orders/{{customer_order_number}}/tracking
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_b_token}}
+}
+
+tests {
+  test("ditolak 404 not_found - pelacakan pesanan akun lain, isi respons sama persis dengan request 46", function () {
+    expect(res.status).to.equal(404);
+    expect(res.body.code).to.equal("not_found");
+    const salinan = Object.assign({}, res.body);
+    delete salinan.request_id;
+    expect(JSON.stringify(salinan), "respons pelacakan membocorkan keberadaan pesanan akun lain").to.equal(bru.getVar("cross_account_not_found_body"));
+  });
+}

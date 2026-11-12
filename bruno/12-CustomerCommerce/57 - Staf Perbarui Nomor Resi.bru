@@ -1,0 +1,33 @@
+meta {
+  name: 57 - Staf Perbarui Nomor Resi
+  type: http
+  seq: 57
+}
+
+patch {
+  url: {{base_url}}/customer-orders/{{customer_order_staff_id}}/shipment
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "tracking_number": "{{customer_tracking_number}}-R",
+    "service_name": "YES"
+  }
+}
+
+tests {
+  test("resi diperbarui tanpa mengubah status; riwayat lama tidak ditulis ulang", function () {
+    expect(res.status).to.equal(200);
+    const o = res.body.data;
+    expect(o.status).to.equal("shipped");
+    expect(o.shipment.tracking_number).to.equal(bru.getVar("customer_tracking_number") + "-R");
+    expect(o.timeline[0].event_type).to.equal("tracking_updated");
+    expect(o.timeline[0].metadata.old.tracking_number).to.equal(bru.getVar("customer_tracking_number"));
+  });
+}

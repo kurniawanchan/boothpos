@@ -1,0 +1,35 @@
+meta {
+  name: 39 - Checkout Tanpa Idempotency-Key (negative - 422)
+  type: http
+  seq: 39
+}
+
+post {
+  url: {{base_url}}/customer/orders
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+body:json {
+  {
+    "fulfilment_method": "courier",
+    "address_id": {{customer_address_id}},
+    "contact": { "name": "Pelanggan Bruno A", "phone": "080000000011" },
+    "items": [
+      { "variant_id": {{storefront_variant_id}}, "qty": 2 }
+    ],
+    "notes": "Mohon dibungkus rapi.",
+    "expected_total": "{{quote_total}}"
+  }
+}
+
+tests {
+  test("ditolak 422 idempotency_key_required - header wajib untuk membuat pesanan", function () {
+    expect(res.status).to.equal(422);
+    expect(res.body.code).to.equal("idempotency_key_required");
+  });
+}

@@ -1,0 +1,44 @@
+meta {
+  name: 27 - Tambah Alamat Pelanggan A
+  type: http
+  seq: 27
+}
+
+post {
+  url: {{base_url}}/customer/addresses
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+body:json {
+  {
+    "label": "Rumah",
+    "recipient_name": "Pelanggan Bruno A",
+    "phone": "080000000011",
+    "address_line": "Jl. Contoh Uji No. 1",
+    "city": "Bandung",
+    "province": "Jawa Barat",
+    "postal_code": "40111",
+    "notes": "Pagar hijau",
+    "is_default": true
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("customer_address_id", res.body.data.id);
+  }
+}
+
+tests {
+  test("alamat pertama tersimpan dan otomatis menjadi alamat utama", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.data.id).to.be.a("number");
+    expect(res.body.data.is_default).to.equal(true);
+    expect(res.body.data.city).to.equal("Bandung");
+  });
+}

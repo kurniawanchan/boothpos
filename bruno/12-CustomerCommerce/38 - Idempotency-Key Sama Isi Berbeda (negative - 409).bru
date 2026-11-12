@@ -1,0 +1,36 @@
+meta {
+  name: 38 - Idempotency-Key Sama Isi Berbeda (negative - 409)
+  type: http
+  seq: 38
+}
+
+post {
+  url: {{base_url}}/customer/orders
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+  Idempotency-Key: {{idempotency_key}}
+}
+
+body:json {
+  {
+    "fulfilment_method": "courier",
+    "address_id": {{customer_address_id}},
+    "contact": { "name": "Pelanggan Bruno A", "phone": "080000000011" },
+    "items": [
+      { "variant_id": {{storefront_variant_id}}, "qty": 2 }
+    ],
+    "notes": "Isi berbeda dengan kunci yang sama.",
+    "expected_total": "{{quote_total}}"
+  }
+}
+
+tests {
+  test("ditolak 409 idempotency_key_reused - kunci yang sama untuk isi berbeda", function () {
+    expect(res.status).to.equal(409);
+    expect(res.body.code).to.equal("idempotency_key_reused");
+  });
+}

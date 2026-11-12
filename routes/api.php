@@ -8,7 +8,12 @@ use App\Http\Controllers\Api\BusinessTypeController;
 use App\Http\Controllers\Api\CashierSessionController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\Customer\AddressController as CustomerAddressController;
+use App\Http\Controllers\Api\Customer\AuthController as CustomerAuthController;
+use App\Http\Controllers\Api\Customer\OrderController as CustomerOrderController;
+use App\Http\Controllers\Api\Customer\ProfileController as CustomerProfileController;
 use App\Http\Controllers\Api\CustomerController;
+use App\Http\Controllers\Api\CustomerOrderFulfilmentController;
 use App\Http\Controllers\Api\EventController;
 use App\Http\Controllers\Api\InvoiceController;
 use App\Http\Controllers\Api\InvoiceExportImportController;
@@ -25,6 +30,7 @@ use App\Http\Controllers\Api\PaymentProofController;
 use App\Http\Controllers\Api\PreorderController;
 use App\Http\Controllers\Api\ProductCatalogController;
 use App\Http\Controllers\Api\ProductController;
+use App\Http\Controllers\Api\ProductPublicationController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
@@ -35,9 +41,14 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VariantBomController;
 use App\Http\Controllers\Api\PosDraftController;
 use App\Http\Controllers\Api\PurchaseOrderController;
+use App\Http\Controllers\Api\Storefront\CatalogController as StorefrontCatalogController;
+use App\Http\Controllers\Api\Storefront\ConfigController as StorefrontConfigController;
 use App\Http\Controllers\Api\VendorController;
+use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\SetLocaleFromAcceptLanguage;
 use App\Http\Middleware\SetLocaleFromUser;
 use App\Services\BackupService;
+use App\Support\CustomerOrderNumber;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -125,6 +136,13 @@ Route::prefix('v1')->group(function () {
         Route::delete('/variants/{variant}', [ProductController::class, 'destroyVariant'])->middleware('ability:products,delete');
         Route::post('/variants/{variant}/image', [ProductController::class, 'uploadVariantImage'])->middleware('ability:products,edit');
         Route::get('/variants/lookup', [ProductController::class, 'lookupVariants']);
+        // Customer commerce — terbit/tarik produk dan varian di etalase publik. Aksi bernama `publish`,
+        // SENGAJA bukan bagian dari PUT /products (SPA mengirim seluruh produk saat mengedit, jadi peran
+        // "ubah saja" akan ikut bisa membuka barang ke publik). Produk seller lain 404 lewat SellerScope.
+        Route::post('/products/{product}/publish', [ProductPublicationController::class, 'publishProduct'])->middleware('ability:products,publish');
+        Route::post('/products/{product}/unpublish', [ProductPublicationController::class, 'unpublishProduct'])->middleware('ability:products,publish');
+        Route::post('/variants/{variant}/publish', [ProductPublicationController::class, 'publishVariant'])->middleware('ability:products,publish');
+        Route::post('/variants/{variant}/unpublish', [ProductPublicationController::class, 'unpublishVariant'])->middleware('ability:products,publish');
         Route::get('/catalog', [ProductCatalogController::class, 'index'])->middleware('ability:products,catalog');
         Route::get('/catalog/export', [ProductCatalogController::class, 'export'])->middleware('ability:products,catalog');
 
@@ -385,5 +403,92 @@ Route::prefix('v1')->group(function () {
         Route::get('/settlements/{settlement}/payments/{payment}/proof', [SellerSettlementController::class, 'paymentProof']);
         Route::get('/settlements/{settlement}/payments/{payment}/document', [SellerSettlementController::class, 'paymentDocument']);
         Route::get('/settlements/{settlement}/document', [SellerSettlementController::class, 'document']);
+
+        // Customer commerce (2026-11-11) — fulfilment pesanan pelanggan oleh STAF (menu 'customer_orders',
+        // Owner/Admin secara default). Sengaja DI DALAM grup staf: `auth:sanctum` menolak token pelanggan (401)
+        // dan pelanggan tidak punya rute yang mengubah status. Tiap mutasi membawa TEPAT satu
+        // `ability:customer_orders,<aksi>`; baca digerbang menu di controller/FormRequest. Semua rute memakai
+        // `seller.forbidden`: pesanan bisa memuat barang banyak seller dan CustomerOrder belum punya aturan
+        // SellerScope, jadi staf terikat seller ditolak (bukan disaring) di v1. TANPA `customer.commerce`:
+        // pesanan yang sudah masuk tetap bisa dipenuhi saat toko online dimatikan.
+        Route::get('/customer-orders', [CustomerOrderFulfilmentController::class, 'index'])->middleware('seller.forbidden');
+        Route::get('/customer-orders/{customerOrder}', [CustomerOrderFulfilmentController::class, 'show'])->middleware('seller.forbidden')->whereNumber('customerOrder');
+        Route::post('/customer-orders/{customerOrder}/confirm', [CustomerOrderFulfilmentController::class, 'confirm'])->middleware('ability:customer_orders,confirm')->middleware('seller.forbidden')->whereNumber('customerOrder');
+        Route::post('/customer-orders/{customerOrder}/pack', [CustomerOrderFulfilmentController::class, 'pack'])->middleware('ability:customer_orders,pack')->middleware('seller.forbidden')->whereNumber('customerOrder');
+        Route::post('/customer-orders/{customerOrder}/ready', [CustomerOrderFulfilmentController::class, 'ready'])->middleware('ability:customer_orders,ready')->middleware('seller.forbidden')->whereNumber('customerOrder');
+        Route::post('/customer-orders/{customerOrder}/pickup', [CustomerOrderFulfilmentController::class, 'pickup'])->middleware('ability:customer_orders,pickup')->middleware('seller.forbidden')->whereNumber('customerOrder');
+        Route::post('/customer-orders/{customerOrder}/ship', [CustomerOrderFulfilmentController::class, 'ship'])->middleware('ability:customer_orders,ship')->middleware('seller.forbidden')->whereNumber('customerOrder');
+        // Memperbarui resi/layanan memakai aksi `ship` (orang yang boleh mengirim boleh membetulkan resinya).
+        Route::patch('/customer-orders/{customerOrder}/shipment', [CustomerOrderFulfilmentController::class, 'updateShipment'])->middleware('ability:customer_orders,ship')->middleware('seller.forbidden')->whereNumber('customerOrder');
+        Route::post('/customer-orders/{customerOrder}/deliver', [CustomerOrderFulfilmentController::class, 'deliver'])->middleware('ability:customer_orders,deliver')->middleware('seller.forbidden')->whereNumber('customerOrder');
+        Route::post('/customer-orders/{customerOrder}/cancel', [CustomerOrderFulfilmentController::class, 'cancel'])->middleware('ability:customer_orders,cancel')->middleware('seller.forbidden')->whereNumber('customerOrder');
     });
+
+    // ------------------------------------------------------------------
+    // Customer commerce (2026-11-11) — etalase publik dan API akun pelanggan
+    // untuk aplikasi Android. Lihat docs/android-customer-commerce/design.md.
+    //
+    // Dua grup di bawah ini SAUDARA grup staf di atas, sengaja BUKAN di
+    // dalamnya: mereka tidak boleh mewarisi `auth:sanctum` maupun
+    // SetLocaleFromUser, dan tidak ada rute staf yang dilonggarkan untuk
+    // pelanggan. Batas tokennya ada di config/auth.php (guard `sanctum` hanya
+    // menerima User, guard `customer` hanya CustomerAccount).
+    //
+    // Keduanya memakai AssignRequestId + SetLocaleFromAcceptLanguage dan
+    // amplop galat problem+json (bootstrap/app.php). Limiter-nya bernama
+    // (AppServiceProvider), tidak pernah `throttle:N,M` polos yang berbagi
+    // ember dengan login staf. JANGAN memasang `ability:` (gerbang menu staf)
+    // atau `seller.forbidden` di sini.
+    // ------------------------------------------------------------------
+    Route::prefix('storefront')
+        ->middleware(['customer.body', AssignRequestId::class, SetLocaleFromAcceptLanguage::class, 'throttle:storefront'])
+        ->group(function () {
+            // Satu-satunya rute etalase TANPA `customer.commerce`: aplikasi harus bisa membaca
+            // `enabled: false` saat fitur dimatikan. Rute etalase lain wajib memasang `customer.commerce`.
+            Route::get('/config', [StorefrontConfigController::class, 'show']);
+
+            // Katalog publik (CONTRACT §6): hanya produk/varian yang layak tampil, lewat resource
+            // Storefront* tersendiri. `{slug}` dibatasi polanya, jadi masukan aneh berhenti di rute (404).
+            Route::middleware('customer.commerce')->group(function () {
+                Route::get('/categories', [StorefrontCatalogController::class, 'categories']);
+                Route::get('/products', [StorefrontCatalogController::class, 'products']);
+                Route::get('/products/{slug}', [StorefrontCatalogController::class, 'product'])->where('slug', '[a-z0-9-]{1,160}');
+            });
+        });
+
+    Route::prefix('customer')
+        ->middleware(['customer.body', AssignRequestId::class, SetLocaleFromAcceptLanguage::class])
+        ->group(function () {
+            // Publik. Pendaftaran ikut saklar fitur; login TIDAK (pelanggan lama tetap bisa
+            // mengikuti pesanannya saat fitur dimatikan).
+            Route::post('/auth/register', [CustomerAuthController::class, 'register'])->middleware(['customer.commerce', 'throttle:customer-register']);
+            Route::post('/auth/login', [CustomerAuthController::class, 'login'])->middleware('throttle:customer-login');
+
+            // `auth:customer` menolak token staf (provider); `customer.account` menolak akun
+            // nonaktif, token tanpa ability `customer`, dan pengguna yang bukan CustomerAccount.
+            Route::middleware(['auth:customer', 'customer.account', 'throttle:customer-api'])->group(function () {
+                Route::post('/auth/logout', [CustomerAuthController::class, 'logout']);
+                Route::get('/me', [CustomerProfileController::class, 'show']);
+                Route::put('/me', [CustomerProfileController::class, 'update']);
+
+                // Alamat tersimpan (CONTRACT §7). Tulis ikut saklar fitur; baca tidak. `{addressId}` angka polos,
+                // SENGAJA bukan route-model binding: alamat selalu dicari lewat pemiliknya (id akun lain = 404).
+                Route::get('/addresses', [CustomerAddressController::class, 'index']);
+                Route::post('/addresses', [CustomerAddressController::class, 'store'])->middleware('customer.commerce');
+                Route::get('/addresses/{addressId}', [CustomerAddressController::class, 'show'])->where('addressId', '[0-9]{1,18}');
+                Route::put('/addresses/{addressId}', [CustomerAddressController::class, 'update'])->middleware('customer.commerce')->where('addressId', '[0-9]{1,18}');
+                Route::delete('/addresses/{addressId}', [CustomerAddressController::class, 'destroy'])->middleware('customer.commerce')->where('addressId', '[0-9]{1,18}');
+
+                // Quote dan checkout (CONTRACT §8): ikut saklar fitur; checkout punya limiter sendiri per akun dan
+                // wajib membawa header Idempotency-Key. Tidak ada rute pelanggan yang MENGUBAH pesanan.
+                Route::post('/orders/quote', [CustomerOrderController::class, 'quote'])->middleware('customer.commerce');
+                Route::post('/orders', [CustomerOrderController::class, 'store'])->middleware(['customer.commerce', 'throttle:customer-checkout']);
+
+                // Baca pesanan sendiri: TANPA saklar fitur, supaya pesanan yang sudah dikirim tetap bisa diikuti
+                // saat toko online dimatikan. `{orderNumber}` = nomor publik acak (bukan id), dibatasi polanya.
+                Route::get('/orders', [CustomerOrderController::class, 'index']);
+                Route::get('/orders/{orderNumber}', [CustomerOrderController::class, 'show'])->where('orderNumber', CustomerOrderNumber::ROUTE_PATTERN);
+                Route::get('/orders/{orderNumber}/tracking', [CustomerOrderController::class, 'tracking'])->where('orderNumber', CustomerOrderNumber::ROUTE_PATTERN);
+            });
+        });
 });

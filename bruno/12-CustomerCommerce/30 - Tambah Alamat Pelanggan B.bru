@@ -1,0 +1,40 @@
+meta {
+  name: 30 - Tambah Alamat Pelanggan B
+  type: http
+  seq: 30
+}
+
+post {
+  url: {{base_url}}/customer/addresses
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_b_token}}
+}
+
+body:json {
+  {
+    "label": "Kantor",
+    "recipient_name": "Pelanggan Bruno B",
+    "phone": "080000000002",
+    "address_line": "Jl. Contoh Uji No. 2",
+    "city": "Surabaya",
+    "province": "Jawa Timur",
+    "postal_code": "60111"
+  }
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("customer_b_address_id", res.body.data.id);
+  }
+}
+
+tests {
+  test("alamat milik Pelanggan B tersimpan", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.data.recipient_name).to.equal("Pelanggan Bruno B");
+  });
+}

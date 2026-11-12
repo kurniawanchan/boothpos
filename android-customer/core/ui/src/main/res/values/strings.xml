@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bahasa Indonesia adalah bahasa bawaan; terjemahan lain ditambahkan sebagai values-<kode>/. -->
+<resources>
+    <string name="core_ui_retry">Coba lagi</string>
+    <string name="core_ui_loading">Memuat…</string>
+    <string name="core_ui_in_progress">Sedang diproses</string>
+    <string name="core_ui_error_title">Terjadi kesalahan</string>
+    <string name="core_ui_error_generic">Terjadi kesalahan. Silakan coba lagi.</string>
+    <string name="core_ui_error_network_title">Tidak ada koneksi</string>
+    <string name="core_ui_error_network">Periksa koneksi internet Anda, lalu coba lagi.</string>
+    <string name="core_ui_error_timeout">Koneksi terlalu lambat. Silakan coba lagi.</string>
+    <string name="core_ui_error_too_many_requests">Terlalu banyak percobaan. Tunggu sebentar, lalu coba lagi.</string>
+    <string name="core_ui_error_unauthenticated">Sesi Anda berakhir. Silakan masuk lagi.</string>
+    <string name="core_ui_error_session_storage">Tidak bisa menyimpan sesi di perangkat ini. Coba lagi.</string>
+    <string name="core_ui_store_unavailable_title">Toko sedang tidak tersedia</string>
+    <string name="core_ui_store_unavailable_message">Toko belum menerima pesanan baru saat ini. Pesanan yang sudah Anda buat tetap dapat dilihat di menu Pesanan.</string>
+    <string name="core_ui_offline_banner">Anda sedang offline. Data yang tampil mungkin belum terbaru.</string>
+    <string name="core_ui_show_password">Tampilkan kata sandi</string>
+    <string name="core_ui_hide_password">Sembunyikan kata sandi</string>
+    <string name="core_ui_image_failed">Gambar tidak dapat dimuat</string>
+</resources>

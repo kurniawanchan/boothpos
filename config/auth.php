@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\CustomerAccount;
 use App\Models\User;
 
 return [
@@ -42,6 +43,28 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+
+        // Customer commerce (2026-11-11) — BATAS TOKEN staf vs pelanggan.
+        //
+        // Tanpa entri ini Sanctum mendaftarkan guard `sanctum` dengan provider
+        // NULL, dan provider null berarti token milik model APA PUN yang
+        // memakai HasApiTokens diterima. Begitu CustomerAccount punya token,
+        // token pelanggan akan lolos di seluruh rute staf `auth:sanctum`
+        // (sebagian menjawab 2xx, sisanya 500). Mengikat provider membuat
+        // guard memeriksa kelas pemilik token:
+        //   - `sanctum`  hanya menerima token milik App\Models\User;
+        //   - `customer` hanya menerima token milik App\Models\CustomerAccount.
+        // Token yang salah alamat = 401 di kedua arah, tanpa mengubah satu
+        // baris rute staf pun. JANGAN menghapus atau melonggarkan `provider`.
+        'sanctum' => [
+            'driver' => 'sanctum',
+            'provider' => 'users',
+        ],
+
+        'customer' => [
+            'driver' => 'sanctum',
+            'provider' => 'customer_accounts',
+        ],
     ],
 
     /*
@@ -65,6 +88,12 @@ return [
         'users' => [
             'driver' => 'eloquent',
             'model' => env('AUTH_MODEL', User::class),
+        ],
+
+        // Customer commerce — identitas pelanggan aplikasi Android (lihat guard `customer` di atas).
+        'customer_accounts' => [
+            'driver' => 'eloquent',
+            'model' => CustomerAccount::class,
         ],
 
         // 'users' => [

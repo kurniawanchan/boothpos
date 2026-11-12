@@ -1,0 +1,8 @@
+{
+ "type": "https://boothpos.local/problems/unauthenticated",
+ "title": "Sesi tidak valid",
+ "status": 401,
+ "detail": "Sesi Anda tidak valid atau sudah berakhir. Silakan masuk kembali.",
+ "code": "unauthenticated",
+ "request_id": "f8e6fa4a-323c-4e55-a5fd-1a684a4e5963"
+}

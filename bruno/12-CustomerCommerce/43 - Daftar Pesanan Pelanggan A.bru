@@ -1,0 +1,25 @@
+meta {
+  name: 43 - Daftar Pesanan Pelanggan A
+  type: http
+  seq: 43
+}
+
+get {
+  url: {{base_url}}/customer/orders
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("tiga pesanan; pesanan kurir hanya sekali walau checkout diulang", function () {
+    expect(res.status).to.equal(200);
+    const nomor = res.body.data.map(function (o) { return o.order_number; });
+    expect(res.body.meta.total).to.equal(3);
+    expect(nomor.filter(function (n) { return n === bru.getVar("customer_order_number"); })).to.have.length(1);
+    expect(nomor).to.include(bru.getVar("customer_pickup_order_number"));
+    expect(nomor).to.include(bru.getVar("customer_cancel_order_number"));
+  });
+}

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CustomerOrderItem;
 use App\Models\OrderItem;
 use App\Models\PreorderItem;
 use App\Models\ProductVariant;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Hapus varian dari drawer produk (spec 045, FR-015/FR-016).
  *
- * - Varian TANPA riwayat (penjualan, pre-order, mutasi stok, baris BOM) dihapus
+ * - Varian TANPA riwayat (penjualan, pre-order, mutasi stok, baris BOM, pesanan pelanggan) dihapus
  *   lunak. SKU-nya diganti penanda sementara supaya nomornya bebas dipakai lagi
  *   (indeks unik sku tetap berlaku untuk baris yang dihapus). Snapshot penjualan
  *   lama tidak tersentuh: ia menyimpan teks SKU sendiri.
@@ -70,6 +71,9 @@ class VariantRemovalService
         return OrderItem::withoutGlobalScopes()->where('variant_id', $variant->id)->exists()
             || PreorderItem::withoutGlobalScopes()->where('variant_id', $variant->id)->exists()
             || StockMovement::withoutGlobalScopes()->where('variant_id', $variant->id)->exists()
-            || ProductVariantBomLine::withoutGlobalScopes()->where('product_variant_id', $variant->id)->exists();
+            || ProductVariantBomLine::withoutGlobalScopes()->where('product_variant_id', $variant->id)->exists()
+            // Customer commerce: pesanan pelanggan yang BELUM dikonfirmasi belum punya pergerakan stok,
+            // jadi tanpa cek ini variannya tampak "tanpa riwayat" dan SKU-nya diganti "#id".
+            || CustomerOrderItem::withoutGlobalScopes()->where('variant_id', $variant->id)->exists();
     }
 }

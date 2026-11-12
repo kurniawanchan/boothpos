@@ -1,0 +1,21 @@
+{
+ "data": {
+  "fulfilment_method": "courier",
+  "lines": [
+   {
+    "variant_id": 1,
+    "product_slug": "etalase-bruno-1794456911541",
+    "name": "Etalase Bruno 1794456911541 — Ukuran S",
+    "image_url": null,
+    "unit_price": "75000.00",
+    "qty": 2,
+    "line_total": "150000.00",
+    "max_qty": 10
+   }
+  ],
+  "subtotal": "150000.00",
+  "shipping_cost": "0.00",
+  "shipping_cost_pending": true,
+  "total": "150000.00"
+ }
+}

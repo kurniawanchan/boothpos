@@ -50,6 +50,38 @@ tags:
   - name: Import & Export
   - name: Company Onboarding
   - name: Settlement
+  - name: Storefront
+    description: |
+      Customer commerce (2026-11-11) — etalase PUBLIK untuk aplikasi Android pelanggan. Tanpa autentikasi
+      (`security: []`); token apa pun yang dikirim diabaikan. Galat memakai `application/problem+json`
+      (skema `CustomerProblem`), bukan bentuk `Error` milik staf.
+  - name: Customer Account
+    description: |
+      Customer commerce (2026-11-11) — akun pelanggan aplikasi Android. Memakai skema `customerBearerAuth`
+      (guard `customer`), TERPISAH dari `bearerAuth` staf: token staf ditolak 401 di sini dan token pelanggan
+      ditolak 401 di seluruh rute staf. Galat memakai `application/problem+json` (skema `CustomerProblem`).
+      Termasuk alamat tersimpan (`/customer/addresses`).
+  - name: Customer Order
+    description: |
+      Customer commerce (2026-11-11) — quote, checkout, dan baca pesanan milik akun pelanggan (`customerBearerAuth`).
+      BUKAN penjualan POS (`/orders`) dan bukan pre-order: pesanan lahir `awaiting_confirmation`, TANPA pergerakan
+      stok, lalu dipenuhi staf. Pelanggan tidak punya rute yang mengubah status. Harga, total, status, dan pemilik
+      selalu dihitung server; kiriman klien untuk field itu diabaikan.
+  - name: Customer Order Fulfilment
+    description: |
+      Customer commerce (2026-11-11) — fulfilment pesanan pelanggan oleh STAF (`bearerAuth`, menu `customer_orders`,
+      bawaan hanya Owner + Admin). Satu rute per transisi, masing-masing digerbang aksi bernama
+      (`ability:customer_orders,<aksi>`): `confirm, pack, ready, pickup, ship, deliver, cancel` (PATCH shipment memakai
+      `ship`). Semua rute membawa `seller.forbidden` (pengguna terikat seller: 403 `seller_scope_forbidden`) dan TIDAK
+      digerbang saklar `customer_commerce_enabled`. Token pelanggan: 401. Galat memakai bentuk staf `{message, code}`.
+
+        awaiting_confirmation → confirmed → packing → ready_for_pickup → picked_up   (ambil di tempat)
+                                               └────→ shipped → delivered            (kurir)
+
+      Batal hanya dari awaiting_confirmation / confirmed / packing / ready_for_pickup (belum ada alur retur di v1).
+      Stok dikurangi saat KONFIRMASI (`stock_movements` jenis `sale`, referensi `customer_order_item`) dan dikembalikan
+      tepat sekali saat batal setelah konfirmasi (jenis `return`). Tidak ada penjualan POS / pre-order yang dibuat dan
+      laporan penjualan tidak berubah.
 
 security:
   - bearerAuth: []
@@ -332,6 +364,13 @@ paths:
                     description: |
                       065 — batas pre-order per aksi massal (`config('preorders.bulk_max')`, env `PREORDER_BULK_MAX`, bawaan 200).
                       Terbuka untuk semua peran; hanya kemudahan UI — server menegakkannya di setiap rute massal (422 menyebut batasnya).
+                  customer_commerce_enabled:
+                    type: boolean
+                    description: |
+                      Customer commerce — saklar toko online (etalase + aplikasi pelanggan), satu untuk seluruh instalasi
+                      (bukan per mode DEMO/LIVE). Bawaan `false`: baris settings yang belum ada berarti MATI. Hanya status
+                      untuk UI staf; penegaknya ada di rute pelanggan (503 `customer_commerce_disabled`). Diubah lewat
+                      `PUT /settings` (key `customer_commerce_enabled`).
 
   /settings/payment:
     get:
@@ -435,6 +474,16 @@ paths:
         `receipt`, dirender di struk hanya bila terisi — dihilangkan sama
         sekali, bukan blok kosong, saat kosong), `receipt_show_logo`
         (boolean-as-string, group `receipt`).
+
+        Customer commerce (2026-11-11) — juga satu-satunya jalur untuk tiga key
+        toko online (group `customer_commerce`), masing-masing divalidasi:
+        `customer_commerce_enabled` (HANYA nilai boolean: `true`/`false`/`1`/`0`
+        atau bentuk teksnya; nilai lain termasuk `null` → 422),
+        `customer_commerce_pickup_instructions` dan
+        `customer_commerce_courier_instructions` (teks biasa untuk pelanggan,
+        `null` atau string ≤ 500 karakter tanpa tag HTML/karakter kontrol → 422
+        bila melanggar). Mematikan saklar menghentikan pendaftaran dan pesanan
+        BARU; pelanggan lama tetap bisa masuk dan melihat pesanannya.
       requestBody:
         required: true
         content:
@@ -1101,6 +1150,102 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Variant' }
         '409': { $ref: '#/components/responses/Conflict' }
+
+  /products/{id}/publish:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Master Data]
+      summary: Terbitkan produk ke etalase publik (customer commerce)
+      description: |
+        Customer commerce (2026-11-11) — mengisi `published_at` produk dengan waktu sekarang. Aksi bernama
+        `products.publish` (middleware `ability:products,publish`), SENGAJA terpisah dari PUT /products/{id}:
+        `published_at` dan `slug` tidak diterima endpoint ubah, jadi peran "ubah saja" tidak bisa membuka barang
+        ke publik. Produk seller lain / mode data lain: 404.
+
+        Idempoten: produk yang sudah terbit tidak digeser tanggalnya dan tidak menulis log kedua; produk yang
+        dijadwalkan di masa depan menjadi terbit sekarang. `with_variants: true` ikut menerbitkan varian AKTIF yang
+        belum terbit (varian nonaktif dibiarkan; yang sudah terbit tidak digeser).
+
+        Tanda terbit BUKAN jaminan tampil: etalase hanya menampilkan produk aktif, bukan pre-order, dengan seller
+        dan kategori aktif, yang punya minimal satu varian aktif, terbit, dan berstok (lihat tag Storefront).
+        Tidak digerbang saklar `customer_commerce_enabled`, supaya katalog bisa disiapkan sebelum toko dibuka.
+        Satu entri activity log `storefront_published` (entitas `Product`) dalam transaksi yang sama.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                with_variants: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Produk beserta variannya
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /products/{id}/unpublish:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Master Data]
+      summary: Tarik produk dari etalase publik (customer commerce)
+      description: |
+        Mengosongkan `published_at` produk; produk hilang SEKETIKA dari daftar, detail dan kategori etalase.
+        `published_at` variannya dibiarkan, sehingga menerbitkan produk lagi memulihkan susunan varian yang sama.
+        Aksi `products.publish`. Idempoten (produk yang sudah ditarik: 200 tanpa log baru). Activity log
+        `storefront_unpublished`.
+      responses:
+        '200':
+          description: Produk beserta variannya
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /variants/{id}/publish:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Master Data]
+      summary: Terbitkan varian ke etalase publik (customer commerce)
+      description: |
+        Mengisi `published_at` varian dengan waktu sekarang. Produknya TIDAK ikut terbit; varian baru tampil bila
+        produknya juga terbit dan varian itu aktif serta berstok. Aksi `products.publish`; idempoten. Activity log
+        `storefront_published` (entitas `ProductVariant`).
+      responses:
+        '200':
+          description: Varian
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Variant' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /variants/{id}/unpublish:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Master Data]
+      summary: Tarik varian dari etalase publik (customer commerce)
+      description: |
+        Mengosongkan `published_at` varian; varian hilang seketika dari detail produk dan dari rentang harga kartu.
+        Produk yang kehilangan varian layak jual terakhirnya ikut hilang dari etalase. Aksi `products.publish`;
+        idempoten. Activity log `storefront_unpublished`.
+      responses:
+        '200':
+          description: Varian
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Variant' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /variants/lookup:
     get:
@@ -2653,7 +2798,9 @@ paths:
       description: |
         009-ui-ux-refinements (US4). Soft delete, owner/admin saja. Ditolak
         (409) bila pelanggan masih memiliki order atau pre-order (status
-        apa pun) yang mereferensikannya.
+        apa pun) yang mereferensikannya. Customer commerce (2026-11-11):
+        juga ditolak (409) bila pelanggan punya akun aplikasi pelanggan
+        atau pesanan pelanggan.
       responses:
         '204': { description: Berhasil }
         '403': { $ref: '#/components/responses/Forbidden' }
@@ -6486,6 +6633,1032 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/SettlementConflict' }
 
+  # ------------------------------------------------------------------
+  # CUSTOMER COMMERCE (2026-11-11) — etalase publik dan akun pelanggan
+  # untuk aplikasi Android. Grup rute ini SAUDARA grup staf, bukan di
+  # dalamnya: guard `customer` (bukan `sanctum`), tanpa izin menu staf.
+  # Semua respons membawa header `X-Request-Id`; galat memakai
+  # `application/problem+json` (skema CustomerProblem). Bahasa pesan:
+  # Indonesia secara bawaan, Inggris bila `Accept-Language: en`.
+  # Dua penjaga global berlaku untuk SEMUA operasi di grup ini dan memakai
+  # amplop ini: badan > `customer_commerce.max_body_bytes` (bawaan 64 KB,
+  # juga header Content-Length yang melebihinya) ditolak 413
+  # `payload_too_large` SEBELUM diurai dan tanpa menghabiskan limiter, dan
+  # gerbang lisensi yang masih terkunci menjawab 423 `installation_locked`.
+  # Rute staf dan `/license/*` TIDAK berubah (423 `{message, activated:false}`).
+  # ------------------------------------------------------------------
+  /storefront/config:
+    get:
+      tags: [Storefront]
+      summary: Konfigurasi publik toko online
+      description: |
+        Dibaca aplikasi pelanggan saat dibuka. Satu-satunya rute etalase yang TIDAK digerbang saklar fitur:
+        saat `customer_commerce_enabled` mati tetap menjawab 200 dengan `enabled: false`, supaya aplikasi bisa
+        menampilkan "toko sedang tidak menerima pesanan". Publik; token yang dikirim diabaikan.
+        Limiter `storefront` (bawaan 120 permintaan/menit per IP).
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StorefrontConfig' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /storefront/categories:
+    get:
+      tags: [Storefront]
+      summary: Kategori yang punya produk tampil
+      description: |
+        Publik; token yang dikirim diabaikan. Hanya kategori aktif dengan minimal satu produk yang LAYAK TAMPIL
+        (aturan pada `/storefront/products`), urut `display_order` lalu nama. Tanpa halaman. Mengikuti mode data
+        (DEMO/LIVE) yang sedang aktif. Limiter `storefront`.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StorefrontCategory' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/CustomerCommerceDisabled' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /storefront/products:
+    get:
+      tags: [Storefront]
+      summary: Daftar produk etalase
+      description: |
+        Publik; token yang dikirim diabaikan (token pelanggan maupun staf tidak mengubah isi). Hanya produk yang
+        LAYAK TAMPIL: tidak dihapus, aktif, `published_at` sudah lewat, bukan pre-order, seller aktif dan tidak
+        dihapus, kategori aktif, dan punya minimal satu varian yang tidak dihapus, aktif, terbit, dan berstok.
+        Aturannya satu (`Product::scopeStorefrontVisible` / `ProductVariant::scopeStorefrontSellable`) dan dipakai
+        juga oleh detail, quote dan checkout. Mengikuti mode data (DEMO/LIVE) yang sedang aktif.
+
+        `price_min`/`price_max` dihitung hanya dari varian yang layak jual. Parameter tak dikenal diabaikan; nilai
+        yang salah bentuk ditolak 422 `validation_failed`. `per_page` di atas 50 DIPANGKAS ke 50 (bukan galat).
+        Halaman di luar jangkauan menjawab `data: []`. Limiter `storefront`.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+        - name: q
+          in: query
+          description: Cari di NAMA produk saja (sebagian, tanpa peduli huruf besar). `%`, `_` dan `\` diperlakukan sebagai huruf biasa.
+          schema: { type: string, maxLength: 100 }
+        - name: category_id
+          in: query
+          description: Id dari `/storefront/categories`. Id yang tidak dikenal menghasilkan daftar kosong.
+          schema: { type: integer, minimum: 1 }
+        - name: sort
+          in: query
+          description: |
+            `newest` = terbit paling baru dulu; `name` = nama A–Z; `price_asc` = harga terendah naik;
+            `price_desc` = harga tertinggi turun. Nilai lain: 422.
+          schema: { type: string, enum: [newest, name, price_asc, price_desc], default: newest }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1, minimum: 1, maximum: 100000 }
+        - name: per_page
+          in: query
+          description: Bawaan 20; di atas 50 dipangkas ke 50.
+          schema: { type: integer, default: 20, minimum: 1 }
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StorefrontProductCard' }
+                  meta:
+                    type: object
+                    required: [current_page, per_page, total, last_page]
+                    properties:
+                      current_page: { type: integer }
+                      per_page: { type: integer }
+                      total: { type: integer }
+                      last_page: { type: integer }
+        '422': { $ref: '#/components/responses/CustomerValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/CustomerCommerceDisabled' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /storefront/products/{slug}:
+    get:
+      tags: [Storefront]
+      summary: Detail produk etalase
+      description: |
+        Publik; token yang dikirim diabaikan. Kartu produk + deskripsi + varian yang layak jual (aktif, terbit,
+        berstok), urut id. Produk yang tidak ada dan produk yang ada tetapi tidak layak tampil menjawab 404
+        `not_found` yang SAMA. `max_qty` = min(stok, `max_qty_per_line`): stok persisnya tidak pernah dikirim.
+        Limiter `storefront`.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+        - name: slug
+          in: path
+          required: true
+          description: Pengenal publik produk; dibuat sekali dari nama dan tidak berubah saat produk diganti nama.
+          schema: { type: string, pattern: '^[a-z0-9-]{1,160}$' }
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/StorefrontProductDetail' }
+        '404': { $ref: '#/components/responses/CustomerNotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/CustomerCommerceDisabled' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/auth/register:
+    post:
+      tags: [Customer Account]
+      summary: Daftar akun pelanggan
+      description: |
+        Publik. SELALU membuat kontak `customers` baru (tanpa seller) dan akun pelanggan dalam satu transaksi dan
+        satu mode data; tidak pernah menempel ke kontak buatan staf walau e-mailnya sama. E-mail disimpan sudah
+        di-trim dan huruf kecil. Kata sandi hanya disimpan sebagai hash. `email_verified` selalu `false` di v1
+        (belum ada alur verifikasi e-mail).
+
+        E-mail yang sudah terdaftar (di mode data aktif) ditolak `422 registration_failed` dengan pesan GENERIK dan
+        TANPA `errors.email`, supaya respons tidak bisa dipakai menebak e-mail terdaftar. Risiko enumerasi yang
+        tersisa (tanpa verifikasi e-mail) diterima dan dibatasi limiter.
+
+        E-mail HARUS ASCII tercetak (tanpa huruf beraksen, IDN, spasi, atau karakter kontrol; domain IDN ditulis
+        dalam bentuk punycode `xn--`): kolasi basis data menyamakan `víctim@x.com` dengan `victim@x.com`, yang
+        membuka celah limiter per e-mail. Yang bukan ASCII ditolak `422 validation_failed` dengan `errors.email`
+        (bukan `registration_failed`, jadi tidak membocorkan e-mail terdaftar). Kata sandi paling banyak 72 BYTE
+        (bcrypt memotong di 72 byte; huruf beraksen memakai lebih dari satu byte), selain 72 karakter.
+
+        Digerbang saklar fitur (503 `customer_commerce_disabled`) dan limiter `customer-register`
+        (bawaan 5/menit per IP dan 3/menit per e-mail).
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, maxLength: 100 }
+                email: { type: string, format: email, maxLength: 100, pattern: '^[\x21-\x7E]+$', description: 'ASCII tercetak saja (setelah di-trim); non-ASCII → 422 `errors.email`' }
+                password: { type: string, format: password, minLength: 8, maxLength: 72, description: 'Paling banyak 72 karakter DAN 72 byte UTF-8' }
+                phone: { type: string, maxLength: 30, nullable: true }
+      responses:
+        '201':
+          description: Akun dibuat; token langsung diterbitkan
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerTokenResponse' }
+        '422':
+          description: |
+            `validation_failed` (dengan `errors` per field) atau `registration_failed` (generik, TANPA `errors`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/CustomerProblem' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/CustomerCommerceDisabled' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/auth/login:
+    post:
+      tags: [Customer Account]
+      summary: Masuk sebagai pelanggan
+      description: |
+        Publik. Mengembalikan token baru (nama `customer-app`, ability `customer`) yang kedaluwarsa setelah
+        `config('customer_commerce.token_ttl_minutes')` (bawaan 20160 menit = 14 hari; tidak ada alur refresh di
+        v1, token kedaluwarsa = masuk ulang). Mencap `last_login_at`.
+
+        Kegagalan SELALU `401 invalid_credentials` dengan badan yang identik untuk e-mail tidak dikenal, kata
+        sandi salah, dan akun dinonaktifkan. E-mail non-ASCII tidak pernah dipakai mencari akun dan diperlakukan
+        persis seperti e-mail tidak dikenal (kolasi basis data menyamakan huruf beraksen dengan padanan ASCII-nya).
+        Kata sandi lebih dari 72 byte UTF-8 ditolak `422 validation_failed`. TIDAK digerbang saklar fitur (pelanggan lama tetap bisa mengikuti
+        pesanannya). Limiter `customer-login` (bawaan 10/menit per IP dan 5/menit per e-mail), terpisah dari
+        limiter login staf.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, maxLength: 100 }
+                password: { type: string, format: password, maxLength: 72, description: 'Paling banyak 72 karakter DAN 72 byte UTF-8' }
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CustomerTokenResponse' }
+        '401':
+          description: '`invalid_credentials` — identik untuk e-mail tidak dikenal, kata sandi salah, akun nonaktif'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/CustomerProblem' }
+        '422': { $ref: '#/components/responses/CustomerValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/auth/logout:
+    post:
+      tags: [Customer Account]
+      summary: Cabut token pelanggan yang sedang dipakai
+      description: Hanya token permintaan ini yang dicabut; perangkat lain milik akun yang sama tetap masuk.
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      responses:
+        '204':
+          description: Berhasil (tanpa badan)
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/me:
+    get:
+      tags: [Customer Account]
+      summary: Profil akun pelanggan yang sedang masuk
+      description: |
+        Proyeksi sempit milik pemilik token (`CustomerAccount`), bukan resource `Customer` staf: catatan internal,
+        akun sosial, dan alamat kontak tidak pernah ikut. Tetap bisa dibuka saat saklar fitur mati.
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerAccount' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+    put:
+      tags: [Customer Account]
+      summary: Ubah nama dan telepon akun sendiri
+      description: |
+        Mengubah nama/telepon pada kontak `customers` milik akun. E-mail TIDAK bisa diubah di v1: field `email`
+        (dan field lain di luar `name`/`phone`) yang dikirim diabaikan, bukan ditolak. `phone` yang tidak dikirim
+        dibiarkan; `null` mengosongkannya.
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 100 }
+                phone: { type: string, maxLength: 30, nullable: true }
+      responses:
+        '200':
+          description: Diperbarui
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerAccount' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '422': { $ref: '#/components/responses/CustomerValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/addresses:
+    get:
+      tags: [Customer Account]
+      summary: Daftar alamat tersimpan milik akun
+      description: |
+        Alamat utama lebih dulu, lalu yang terbaru. Tidak dipaginasi (paling banyak `max_addresses`, bawaan 10).
+        Tetap bisa dibuka saat saklar fitur mati.
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CustomerAddress' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+    post:
+      tags: [Customer Account]
+      summary: Tambah alamat tersimpan
+      description: |
+        Alamat PERTAMA akun selalu menjadi alamat utama (apa pun nilai `is_default`). `is_default: true` mencabut
+        alamat utama sebelumnya dalam transaksi yang sama, jadi selama akun punya alamat tepat SATU yang utama.
+        Pemilik alamat selalu akun pemegang token; field lain yang dikirim (mis. `customer_account_id`) diabaikan.
+        Melebihi batas jumlah alamat → `409 address_limit_reached`. Digerbang saklar fitur.
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerAddressInput' }
+      responses:
+        '201':
+          description: Dibuat
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerAddress' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '409':
+          description: '`address_limit_reached` — batas jumlah alamat tercapai; tidak ada yang berubah'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/CustomerProblem' }
+        '422': { $ref: '#/components/responses/CustomerValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/CustomerCommerceDisabled' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/addresses/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id alamat (angka). Id milik akun lain dijawab 404 yang sama dengan id yang tidak ada.
+        schema: { type: integer }
+      - $ref: '#/components/parameters/CustomerRequestId'
+      - $ref: '#/components/parameters/CustomerAcceptLanguage'
+    get:
+      tags: [Customer Account]
+      summary: Satu alamat tersimpan milik akun
+      description: Tetap bisa dibuka saat saklar fitur mati.
+      security:
+        - customerBearerAuth: []
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerAddress' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '404': { $ref: '#/components/responses/CustomerNotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+    put:
+      tags: [Customer Account]
+      summary: Ubah alamat tersimpan
+      description: |
+        Field wajib sama dengan POST. Field opsional (`label`, `postal_code`, `notes`) yang tidak dikirim dibiarkan;
+        `null` mengosongkannya. `is_default: true` memindahkan alamat utama ke alamat ini; `is_default: false` pada
+        alamat utama DIABAIKAN (akun tidak boleh tertinggal tanpa alamat utama) — pindahkan dengan menandai alamat
+        lain. Digerbang saklar fitur.
+      security:
+        - customerBearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerAddressInput' }
+      responses:
+        '200':
+          description: Diperbarui
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerAddress' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '404': { $ref: '#/components/responses/CustomerNotFound' }
+        '422': { $ref: '#/components/responses/CustomerValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/CustomerCommerceDisabled' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+    delete:
+      tags: [Customer Account]
+      summary: Hapus alamat tersimpan
+      description: |
+        Menghapus alamat utama menaikkan alamat tersisa yang paling baru dibuat menjadi utama. Pesanan lama tidak
+        terpengaruh (alamatnya snapshot). Digerbang saklar fitur.
+      security:
+        - customerBearerAuth: []
+      responses:
+        '204':
+          description: Dihapus (tanpa badan)
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '404': { $ref: '#/components/responses/CustomerNotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/CustomerCommerceDisabled' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/orders/quote:
+    post:
+      tags: [Customer Order]
+      summary: Hitung keranjang (tanpa efek samping)
+      description: |
+        Menghitung keranjang dari sisi server: harga dari harga jual varian, kelayakan dari aturan etalase yang sama
+        dengan `/storefront/products`. TIDAK membuat pesanan, tidak mengunci, tidak menggerakkan stok. Angkanya sama
+        dengan yang dipakai `POST /customer/orders`. `expected_total` dan field harga/total yang dikirim diabaikan.
+
+        Untuk `courier`, `address_id` wajib dan harus milik akun (alamat tidak ada / milik akun lain →
+        `422 validation_failed` dengan `errors.address_id` yang sama untuk keduanya); `shipping_cost` selalu `"0.00"`
+        dengan `shipping_cost_pending: true` (tidak ada tarif otomatis di v1: toko menetapkan ongkir saat
+        mengonfirmasi). Untuk `pickup`, `address_id` diabaikan. Telepon kontak TIDAK dituntut di quote.
+
+        Masalah keranjang → `409 cart_invalid` dengan `errors.items` (hanya baris yang bermasalah). Varian yang tidak
+        ada, tersembunyi, stok 0, atau milik mode data lain dijawab `unavailable` tanpa pembedaan. Varian kembar,
+        `qty` < 1, dan lebih dari `max_lines_per_order` baris adalah galat bentuk (422). Digerbang saklar fitur.
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerCheckoutInput' }
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerQuote' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '409': { $ref: '#/components/responses/CustomerCartInvalid' }
+        '422': { $ref: '#/components/responses/CustomerValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/CustomerCommerceDisabled' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/orders:
+    post:
+      tags: [Customer Order]
+      summary: Buat pesanan (checkout idempoten)
+      description: |
+        Membuat pesanan `awaiting_confirmation` atas nama pemilik token, dalam SATU transaksi: kunci baris akun →
+        periksa `Idempotency-Key` → alamat & kontak → kunci varian (id menaik) dan periksa kelayakan/stok → hitung
+        harga dari harga jual → bandingkan dengan `expected_total` → tulis pesanan, item (snapshot nama/SKU/harga),
+        snapshot kontak & alamat, dan peristiwa status pertama. **TIDAK ADA pergerakan stok**: stok baru berkurang
+        saat staf mengonfirmasi, jadi dua pesanan yang menunggu bisa lolos untuk stok yang sama.
+
+        **Idempotensi** (per akun): header `Idempotency-Key` wajib, `^[A-Za-z0-9_-]{16,64}$`; tidak ada / salah bentuk
+        → `422 idempotency_key_required` (diperiksa sebelum badan). Kunci + isi yang sama → `200` dengan pesanan
+        ASLI (tanpa baris baru, tanpa memeriksa ulang harga/stok); kunci sama + isi berbeda → `409
+        idempotency_key_reused`. "Isi" = metode, `address_id` (kurir), `contact`, baris (urutan tidak berpengaruh),
+        `notes` — `expected_total` TIDAK termasuk. Kunci yang sama dari akun lain adalah pesanan baru milik akun itu.
+
+        Kontak: `contact.name` / `contact.phone` bila diisi, selain itu profil; e-mail selalu milik akun. Telepon
+        wajib ada di hasil akhir (`422` dengan `errors["contact.phone"]`). `expected_total` berbeda dari total server
+        → `409 price_changed` dengan `errors.quote` (quote terbaru) dan tidak ada yang dibuat. Field `status`,
+        `order_number`, id pemilik, harga, dan total yang dikirim diabaikan.
+
+        Digerbang saklar fitur dan limiter `customer-checkout` (bawaan 10/menit per akun; permintaan yang ditolak
+        ikut dihitung). Activity log `customer_order_placed` (entitas `CustomerOrder`, `user_id` null, tanpa data pribadi).
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Kunci unik per percobaan checkout (mis. UUID tanpa kurung). Pakai ulang kunci yang sama saat mengulang permintaan yang sama.
+          schema: { type: string, pattern: '^[A-Za-z0-9_-]{16,64}$' }
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/CustomerCheckoutInput'
+                - type: object
+                  required: [expected_total]
+                  properties:
+                    expected_total:
+                      type: string
+                      pattern: '^\d{1,12}(\.\d{1,2})?$'
+                      example: '150000.00'
+                      description: Total yang dilihat pelanggan saat menekan "Pesan" (`total` dari quote). Angka JSON juga diterima.
+      responses:
+        '201':
+          description: Pesanan dibuat
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerOrderDetail' }
+        '200':
+          description: Replay — `Idempotency-Key` dan isi sama dengan permintaan sebelumnya; pesanan asli dikembalikan
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '409':
+          description: |
+            `idempotency_key_reused` (tanpa `errors`), `cart_invalid` (`errors.items`), atau `price_changed`
+            (`errors.quote` = skema `CustomerQuote`). Tidak ada yang dibuat.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/CustomerProblem' }
+        '422':
+          description: '`validation_failed` (dengan `errors` per field) atau `idempotency_key_required` (tanpa `errors`)'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/CustomerProblem' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/CustomerCommerceDisabled' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+    get:
+      tags: [Customer Order]
+      summary: Daftar pesanan milik akun
+      description: |
+        Hanya pesanan pemilik token, di mode data aktif, terbaru lebih dulu. `per_page` bawaan 20; di atas 50
+        dipangkas menjadi 50; di bawah 1 / bukan bilangan bulat → 422. Halaman di luar jangkauan menjawab `data: []`.
+        Tetap bisa dibuka saat saklar fitur mati.
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 1, minimum: 1, maximum: 100000 } }
+        - { name: per_page, in: query, schema: { type: integer, default: 20, minimum: 1 }, description: 'Di atas 50 dipangkas menjadi 50' }
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CustomerOrderSummary' }
+                  meta:
+                    type: object
+                    properties:
+                      current_page: { type: integer }
+                      per_page: { type: integer }
+                      total: { type: integer }
+                      last_page: { type: integer }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '422': { $ref: '#/components/responses/CustomerValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/orders/{orderNumber}:
+    get:
+      tags: [Customer Order]
+      summary: Detail pesanan milik akun
+      description: |
+        `orderNumber` adalah nomor publik acak (`CO-` + 10 karakter Crockford base32, huruf besar), BUKAN id numerik
+        (id dipakai rute staf). Nomor milik akun lain, nomor yang tidak ada, dan nomor yang salah bentuk dijawab
+        `404 not_found` yang sama. Kontak, alamat, dan item adalah snapshot saat checkout. `metadata`, pelaku, dan
+        nama staf pada riwayat tidak pernah ikut. Tetap bisa dibuka saat saklar fitur mati.
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerOrderNumber'
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '404': { $ref: '#/components/responses/CustomerNotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer/orders/{orderNumber}/tracking:
+    get:
+      tags: [Customer Order]
+      summary: Pelacakan pesanan milik akun
+      description: |
+        Status, pengiriman, dan linimasa (terbaru dulu) sebagaimana DICATAT TOKO — bukan telemetri kurir.
+        `updated_by: "store"` adalah sinyal bagi aplikasi untuk menampilkan "Diperbarui oleh toko". `tracking_url`
+        hanya dibentuk server dari templat kurir yang diizinkan (`config/customer_commerce.php`, bawaan kosong →
+        selalu `null` di v1). Aturan 404 sama dengan detail. Tetap bisa dibuka saat saklar fitur mati.
+      security:
+        - customerBearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CustomerOrderNumber'
+        - $ref: '#/components/parameters/CustomerRequestId'
+        - $ref: '#/components/parameters/CustomerAcceptLanguage'
+      responses:
+        '200':
+          description: Berhasil
+          headers:
+            X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomerOrderTracking' }
+        '401': { $ref: '#/components/responses/CustomerUnauthenticated' }
+        '404': { $ref: '#/components/responses/CustomerNotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '413': { $ref: '#/components/responses/CustomerPayloadTooLarge' }
+        '423': { $ref: '#/components/responses/CustomerInstallationLocked' }
+
+  /customer-orders:
+    get:
+      tags: [Customer Order Fulfilment]
+      summary: Daftar pesanan pelanggan (staf)
+      description: |
+        Pesanan pelanggan mode data aktif, terbaru dulu. Butuh menu `customer_orders` (403 bila tidak). `q` mencocokkan
+        nomor pesanan atau nama pemesan (LIKE, `%`/`_`/`\` di-escape). Tanpa query per pesanan.
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [awaiting_confirmation, confirmed, packing, ready_for_pickup, shipped, delivered, picked_up, cancelled] }
+        - name: fulfilment_method
+          in: query
+          schema: { type: string, enum: [pickup, courier] }
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: page
+          in: query
+          description: 'Dibatasi 100000 (sama dengan daftar pelanggan); di atasnya 422. Tanpa batas, OFFSET melampaui jangkauan dan menjadi 500.'
+          schema: { type: integer, default: 1, minimum: 1, maximum: 100000 }
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/StaffCustomerOrder' }
+                  meta:
+                    type: object
+                    required: [current_page, per_page, total, last_page]
+                    properties:
+                      current_page: { type: integer }
+                      per_page: { type: integer }
+                      total: { type: integer }
+                      last_page: { type: integer }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /customer-orders/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [Customer Order Fulfilment]
+      summary: Detail pesanan pelanggan (staf)
+      description: |
+        Semua yang dilihat pelanggan DITAMBAH detail audit khusus staf: `metadata` peristiwa, jenis/id/nama pelaku,
+        id item/varian, stok tersedia, cap waktu internal, serta `available_actions` / `can_update_shipment` yang
+        dihitung server dari tabel transisi DAN izin aksi pengguna (petunjuk tombol saja). Pesanan mode data lain: 404.
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/StaffCustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /customer-orders/{id}/confirm:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Customer Order Fulfilment]
+      summary: Konfirmasi pesanan (awaiting_confirmation → confirmed) dan kurangi stok
+      description: |
+        Aksi `customer_orders.confirm`. Dalam satu transaksi: kunci baris pesanan, kunci varian urut id menaik, periksa
+        ULANG stok (checkout tidak mencadangkan stok), lalu `StockService::applyMovement` jenis `sale` per item
+        (referensi `customer_order_item`), isi `stock_deducted_at` dan `confirmed_at`. Satu baris saja yang kurang /
+        variannya hilang → 409 `insufficient_stock` / `variant_unavailable` dengan `errors.items`, TIDAK ada yang ditulis.
+        Varian yang dinonaktifkan atau ditarik dari etalase setelah checkout tetap bisa dikonfirmasi.
+        `shipping_cost` WAJIB untuk pesanan kurir yang menunggu konfirmasi (nol eksplisit = gratis ongkir; hilang atau
+        `null` → 422 `errors.shipping_cost`, tidak ada yang ditulis): memperbarui ongkir dan total (= subtotal + ongkir)
+        dan menambah peristiwa `shipping_cost_set`. Dulu `{}` diam-diam membuat ongkir 0 tanpa jalan membetulkannya
+        sesudahnya. Untuk pesanan ambil di tempat nilainya DILARANG (422 `errors.shipping_cost`) dan badan `{}` tetap
+        sah. Pesanan kurir yang sudah lewat tahap konfirmasi tetap dijawab 409 `invalid_transition` (bukan 422).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                shipping_cost: { type: number, minimum: 0, maximum: 999999999999.99, nullable: true, description: 'Maksimal dua desimal. WAJIB (boleh 0) untuk pesanan kurir yang menunggu konfirmasi; DILARANG untuk ambil di tempat' }
+                note: { $ref: '#/components/schemas/CustomerOrderStaffNote' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffCustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CustomerOrderFulfilmentConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /customer-orders/{id}/pack:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Customer Order Fulfilment]
+      summary: Mulai dikemas (confirmed → packing)
+      description: Aksi `customer_orders.pack`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerOrderNoteInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffCustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CustomerOrderFulfilmentConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /customer-orders/{id}/ready:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Customer Order Fulfilment]
+      summary: Siap diambil (packing → ready_for_pickup), ambil di tempat saja
+      description: Aksi `customer_orders.ready`. Pesanan kurir → 409 `wrong_fulfilment_method`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerOrderNoteInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffCustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CustomerOrderFulfilmentConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /customer-orders/{id}/pickup:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Customer Order Fulfilment]
+      summary: Sudah diambil (ready_for_pickup → picked_up), ambil di tempat saja
+      description: Aksi `customer_orders.pickup`. Mengisi `completed_at`. Pesanan kurir → 409 `wrong_fulfilment_method`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CustomerOrderNoteInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffCustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CustomerOrderFulfilmentConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /customer-orders/{id}/ship:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Customer Order Fulfilment]
+      summary: Kirim (packing → shipped), kurir saja
+      description: |
+        Aksi `customer_orders.ship`. Membuat SATU baris pengiriman; `shipping_cost`-nya snapshot ongkir pesanan saat
+        dikirim. `courier_name` wajib dari daftar kurir bersama (`App\Support\Couriers::OPTIONS`), teks lain 422.
+        `dispatched_at` ≤ sekarang (bawaan sekarang), dinormalkan ke zona waktu aplikasi. Tidak ada field URL:
+        `tracking_url` hanya dibentuk server. Pesanan ambil di tempat → 409 `wrong_fulfilment_method`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [courier_name]
+              properties:
+                courier_name: { type: string, description: "Salah satu `Couriers::OPTIONS`" }
+                service_name: { type: string, maxLength: 50, nullable: true }
+                tracking_number: { type: string, maxLength: 50, pattern: '^[A-Za-z0-9-]+$', nullable: true }
+                dispatched_at: { type: string, format: date-time, nullable: true }
+                note: { $ref: '#/components/schemas/CustomerOrderStaffNote' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffCustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CustomerOrderFulfilmentConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /customer-orders/{id}/shipment:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [Customer Order Fulfilment]
+      summary: Perbarui nomor resi / layanan (status tetap shipped)
+      description: |
+        Aksi `customer_orders.ship`. Hanya selama pesanan kurir berstatus `shipped` (selain itu 409
+        `invalid_transition`; pesanan ambil di tempat 409 `wrong_fulfilment_method`). Minimal satu kunci dikirim (422
+        bila tidak ada); kunci yang tidak dikirim tidak disentuh, `null` eksplisit mengosongkan. Setiap perubahan
+        nyata menambah peristiwa `tracking_updated` (nilai lama/baru di `metadata`, khusus staf); peristiwa lama tidak
+        pernah ditulis ulang. Nilai yang sama dengan yang tersimpan: 200 tanpa peristiwa maupun log.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tracking_number: { type: string, maxLength: 50, pattern: '^[A-Za-z0-9-]+$', nullable: true }
+                service_name: { type: string, maxLength: 50, nullable: true }
+      responses:
+        '200': { $ref: '#/components/responses/StaffCustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CustomerOrderFulfilmentConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /customer-orders/{id}/deliver:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Customer Order Fulfilment]
+      summary: Tandai diterima (shipped → delivered), kurir saja
+      description: |
+        Aksi `customer_orders.deliver`. Mengisi `delivered_at` pengiriman dan `completed_at` pesanan (bawaan sekarang).
+        `delivered_at` di masa depan atau sebelum `dispatched_at` → 422 `errors.delivered_at`.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                delivered_at: { type: string, format: date-time, nullable: true }
+                note: { $ref: '#/components/schemas/CustomerOrderStaffNote' }
+      responses:
+        '200': { $ref: '#/components/responses/StaffCustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CustomerOrderFulfilmentConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
+  /customer-orders/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [Customer Order Fulfilment]
+      summary: Batalkan pesanan (sebelum barang keluar)
+      description: |
+        Aksi `customer_orders.cancel`. Dari awaiting_confirmation / confirmed / packing / ready_for_pickup saja;
+        `shipped`, `delivered`, `picked_up`, `cancelled` → 409 `invalid_transition` (kebijakan v1: belum ada retur).
+        Bila stok sudah dikurangi, stok dikembalikan per item (jenis `return`) TEPAT sekali; batal sebelum konfirmasi
+        tidak menulis pergerakan stok. `reason` wajib, teks polos, dan dilihat pelanggan (alasan + catatan linimasa);
+        tidak disalin ke activity log.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 255, description: Teks polos (tanpa tag HTML / karakter kontrol) }
+      responses:
+        '200': { $ref: '#/components/responses/StaffCustomerOrderDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/CustomerOrderFulfilmentConflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+
 # =====================================================================
 # COMPONENTS
 # =====================================================================
@@ -6495,8 +7668,43 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+      description: |
+        Token STAF (guard `sanctum`, pemilik token harus `users`). Token pelanggan ditolak 401 di seluruh rute staf.
+    customerBearerAuth:
+      type: http
+      scheme: bearer
+      description: |
+        Customer commerce — token PELANGGAN dari `/customer/auth/register` atau `/customer/auth/login`
+        (guard `customer`, pemilik token harus akun pelanggan, ability `customer`, kedaluwarsa per token).
+        Token staf ditolak 401 di rute pelanggan. Akun yang dinonaktifkan kehilangan akses seketika dan seluruh
+        tokennya dihapus. Token mengikuti mode data akun: akun DEMO tidak dikenali saat toko LIVE, dan sebaliknya.
+
+  headers:
+    CustomerRequestId:
+      description: |
+        Id korelasi permintaan (rute `/storefront` dan `/customer` saja). Menggemakan `X-Request-Id` kiriman klien
+        bila cocok `^[A-Za-z0-9._-]{8,64}$`; selain itu UUID buatan server. Sama dengan `request_id` pada badan galat.
+      schema: { type: string }
 
   parameters:
+    CustomerRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      description: Opsional. Dipakai hanya bila cocok `^[A-Za-z0-9._-]{8,64}$`; selain itu server membuat UUID sendiri.
+      schema: { type: string, pattern: '^[A-Za-z0-9._-]{8,64}$' }
+    CustomerAcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      description: Bahasa pesan untuk rute `/storefront` dan `/customer`. Hanya `id` (bawaan) dan `en`; bahasa lain memakai `id`.
+      schema: { type: string, example: id }
+    CustomerOrderNumber:
+      name: orderNumber
+      in: path
+      required: true
+      description: Nomor pesanan pelanggan (publik, acak). Hanya bentuk kanonis huruf besar yang dikenali.
+      schema: { type: string, pattern: '^CO-[0-9A-HJKMNP-TV-Z]{10}$', example: CO-7K2M9QX4RT }
     Id:
       name: id
       in: path
@@ -6547,6 +7755,44 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/SettlementRuleError' }
+    CustomerOrderFulfilmentConflict:
+      description: |
+        Customer commerce — pelanggaran aturan fulfilment pesanan pelanggan (bentuk staf `{message, code}`); tidak ada
+        yang ditulis. `invalid_transition`: status pesanan tidak mengizinkan aksi ini; `wrong_fulfilment_method`: aksi
+        bukan untuk metode pesanan ini (ambil di tempat tidak bisa dikirim, kurir tidak bisa "siap diambil"), selalu
+        kode ini apa pun statusnya; `insufficient_stock` / `variant_unavailable` (konfirmasi, atau batal bila varian
+        yang stoknya dikurangi sudah tidak ada) dengan `errors.items` berisi SEMUA baris bermasalah.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [message, code]
+            properties:
+              message: { type: string }
+              code: { type: string, enum: [invalid_transition, wrong_fulfilment_method, insufficient_stock, variant_unavailable] }
+              errors:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        item_id: { type: integer }
+                        variant_id: { type: integer }
+                        sku: { type: string }
+                        name: { type: string }
+                        reason: { type: string, enum: [insufficient_stock, variant_unavailable] }
+                        requested: { type: integer, description: Total unit varian ini di pesanan (baris kembar dijumlahkan) }
+                        available: { type: integer }
+    StaffCustomerOrderDetail:
+      description: Detail pesanan pelanggan terbaru setelah transisi
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: '#/components/schemas/StaffCustomerOrderDetail' }
     SchemaOutdated:
       description: |
         035-po-row-actions — struktur database TERTINGGAL dari versi aplikasi
@@ -6576,8 +7822,535 @@ components:
                 additionalProperties:
                   type: array
                   items: { type: string }
+    CustomerUnauthenticated:
+      description: |
+        Customer commerce — `unauthenticated`: token tidak ada, tidak valid, kedaluwarsa, tanpa ability `customer`,
+        milik staf, milik akun yang dinonaktifkan, atau milik akun di mode data lain.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/CustomerProblem' }
+    CustomerNotFound:
+      description: |
+        Customer commerce — `not_found`: data tidak ada, tidak layak tampil, atau milik akun lain. Badannya sama
+        untuk ketiganya supaya keberadaan data tidak terbaca.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/CustomerProblem' }
+    CustomerValidationError:
+      description: |
+        Customer commerce — `validation_failed`; `errors` berisi pesan per field berupa KALIMAT siap tampil
+        (bahasa `id` bawaan, `en` bila diminta), tidak pernah kunci terjemahan mentah seperti `validation.in`.
+        Pesan bahasa Inggris untuk aturan standar memakai teks bawaan framework yang menyebut nama field.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/CustomerProblem' }
+    CustomerCartInvalid:
+      description: |
+        Customer commerce — `cart_invalid`: satu atau lebih baris keranjang tidak bisa dipesan. `errors.items`
+        berisi HANYA baris yang bermasalah: `{variant_id, reason, max_qty}` dengan `reason` = `unavailable`
+        (`max_qty` 0; hapus dari keranjang), `insufficient_stock` (di atas stok), atau `qty_limit` (di atas batas
+        per baris). `max_qty` adalah jumlah terbesar yang masih bisa dipesan untuk baris itu.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/CustomerProblem'
+              - type: object
+                properties:
+                  errors:
+                    type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          required: [variant_id, reason, max_qty]
+                          properties:
+                            variant_id: { type: integer }
+                            reason: { type: string, enum: [unavailable, insufficient_stock, qty_limit] }
+                            max_qty: { type: integer, minimum: 0 }
+    TooManyRequests:
+      description: |
+        Customer commerce — `too_many_requests`: limiter bernama terlampaui (`customer-register`, `customer-login`,
+        `storefront`, `customer-api`, `customer-checkout`). Batasnya ada di `config/customer_commerce.php` dan
+        tidak pernah berbagi ember dengan limiter login staf.
+      headers:
+        Retry-After:
+          description: Detik sampai boleh mencoba lagi
+          schema: { type: integer }
+        X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/CustomerProblem' }
+    CustomerCommerceDisabled:
+      description: |
+        Customer commerce — `customer_commerce_disabled`: saklar fitur mati. Berlaku untuk rute yang membuat hal baru
+        (etalase selain `/storefront/config`, pendaftaran, checkout, tulis alamat); login, profil, dan baca pesanan
+        tetap dilayani.
+      headers:
+        Retry-After:
+          description: Selalu `3600`
+          schema: { type: integer }
+        X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/CustomerProblem' }
+
+    CustomerPayloadTooLarge:
+      description: |
+        Customer commerce — `payload_too_large`: badan permintaan (atau header `Content-Length`) lebih dari
+        `customer_commerce.max_body_bytes` (bawaan 65536 byte). Ditolak SEBELUM badan diurai dan tanpa menghabiskan
+        jatah limiter. Berlaku untuk SEMUA operasi `/storefront/*` dan `/customer/*`; kirim data yang lebih sedikit,
+        jangan diulang apa adanya.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/CustomerProblem' }
+    CustomerInstallationLocked:
+      description: |
+        Customer commerce — `installation_locked`: instalasi toko belum diaktivasi lisensinya. Gerbang lisensi
+        global menjawab 423 untuk SEMUA operasi `/storefront/*` dan `/customer/*` dengan amplop ini (bukan
+        `{message, activated:false}` milik rute staf; bidang `activated` tidak ada). Bukan salah pelanggan: tampilkan
+        pesan "toko belum aktif" dan coba lagi nanti.
+      headers:
+        X-Request-Id: { $ref: '#/components/headers/CustomerRequestId' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/CustomerProblem' }
 
   schemas:
+    CustomerProblem:
+      type: object
+      description: |
+        Customer commerce — amplop galat gaya RFC 9457 untuk `/storefront/*` dan `/customer/*` SAJA
+        (`Content-Type: application/problem+json`). Rute staf tetap memakai `Error` / `ValidationError`.
+        Klien memutuskan tindakan dari `code`; `title`/`detail` hanya untuk ditampilkan dan tidak pernah memuat
+        pesan exception, nama tabel/kelas, atau data pelanggan lain.
+      required: [type, title, status, detail, code, request_id]
+      properties:
+        type: { type: string, format: uri, example: 'https://boothpos.local/problems/validation_failed' }
+        title: { type: string }
+        status: { type: integer, example: 422 }
+        detail: { type: string, description: Pesan aman berbahasa `id` (bawaan) atau `en` }
+        code:
+          type: string
+          description: |
+            Kode mesin yang stabil. 401 `unauthenticated`, `invalid_credentials`; 403 `forbidden`; 404 `not_found`
+            (juga untuk data milik akun lain); 405 `method_not_allowed`; 409 `idempotency_key_reused`, `cart_invalid`,
+            `price_changed`, `address_limit_reached`; 413 `payload_too_large`; 422 `validation_failed`,
+            `registration_failed`, `idempotency_key_required`; 423 `installation_locked`; 429 `too_many_requests`;
+            503 `customer_commerce_disabled`; 5xx `server_error`; 4xx lain `request_failed`.
+          enum:
+            - unauthenticated
+            - invalid_credentials
+            - forbidden
+            - not_found
+            - method_not_allowed
+            - idempotency_key_reused
+            - cart_invalid
+            - price_changed
+            - address_limit_reached
+            - validation_failed
+            - registration_failed
+            - idempotency_key_required
+            - too_many_requests
+            - customer_commerce_disabled
+            - payload_too_large
+            - installation_locked
+            - server_error
+            - request_failed
+        errors:
+          type: object
+          additionalProperties: true
+          description: |
+            Hanya bila relevan — pesan per field pada `validation_failed`, `errors.items` pada `cart_invalid`,
+            `errors.quote` (skema `CustomerQuote`) pada `price_changed`
+        request_id: { type: string, description: Sama dengan header `X-Request-Id` respons }
+    CustomerAccount:
+      type: object
+      description: Customer commerce — akun pelanggan sebagaimana dilihat pemiliknya (bukan skema `Customer` staf)
+      required: [id, name, email, phone, email_verified, created_at]
+      properties:
+        id: { type: integer, description: Id akun pelanggan (bukan id kontak `customers`) }
+        name: { type: string }
+        email: { type: string, format: email, description: Huruf kecil; tidak bisa diubah di v1 }
+        phone: { type: string, nullable: true }
+        email_verified: { type: boolean }
+        created_at: { type: string, format: date-time }
+    CustomerTokenResponse:
+      type: object
+      required: [token, token_type, expires_at, account]
+      properties:
+        token: { type: string, description: 'Token bearer polos; hanya ditampilkan sekali' }
+        token_type: { type: string, enum: [Bearer] }
+        expires_at: { type: string, format: date-time }
+        account: { $ref: '#/components/schemas/CustomerAccount' }
+    CustomerAddress:
+      type: object
+      description: Customer commerce — alamat tersimpan sebagaimana dilihat pemiliknya
+      required: [id, label, recipient_name, phone, address_line, city, province, postal_code, notes, is_default]
+      properties:
+        id: { type: integer }
+        label: { type: string, nullable: true, maxLength: 50 }
+        recipient_name: { type: string, maxLength: 100 }
+        phone: { type: string, maxLength: 30 }
+        address_line: { type: string, maxLength: 255 }
+        city: { type: string, maxLength: 100 }
+        province: { type: string, maxLength: 100 }
+        postal_code: { type: string, nullable: true, maxLength: 10 }
+        notes: { type: string, nullable: true, maxLength: 255 }
+        is_default: { type: boolean, description: Selama akun punya alamat, tepat satu yang `true` }
+    CustomerAddressInput:
+      type: object
+      required: [recipient_name, phone, address_line, city, province]
+      properties:
+        label: { type: string, nullable: true, maxLength: 50 }
+        recipient_name: { type: string, maxLength: 100 }
+        phone: { type: string, maxLength: 30 }
+        address_line: { type: string, maxLength: 255 }
+        city: { type: string, maxLength: 100 }
+        province: { type: string, maxLength: 100 }
+        postal_code: { type: string, nullable: true, maxLength: 10 }
+        notes: { type: string, nullable: true, maxLength: 255 }
+        is_default: { type: boolean, description: 'Opsional. Alamat pertama selalu utama; `false` pada alamat utama diabaikan' }
+    CustomerCheckoutInput:
+      type: object
+      description: |
+        Customer commerce — badan bersama quote dan checkout. Field di luar daftar ini (harga, total, status, id
+        pemilik) diabaikan.
+      required: [fulfilment_method, items]
+      properties:
+        fulfilment_method: { type: string, enum: [pickup, courier] }
+        address_id:
+          type: integer
+          nullable: true
+          description: Wajib untuk `courier` dan harus alamat milik akun; diabaikan untuk `pickup`
+        contact:
+          type: object
+          nullable: true
+          description: Opsional; field yang kosong jatuh ke profil akun. E-mail selalu milik akun.
+          properties:
+            name: { type: string, nullable: true, maxLength: 100 }
+            phone: { type: string, nullable: true, maxLength: 30 }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 50
+          description: '`variant_id` harus berbeda di setiap baris. `maxItems` = `max_lines_per_order` (GET /storefront/config)'
+          items:
+            type: object
+            required: [variant_id, qty]
+            properties:
+              variant_id: { type: integer, minimum: 1 }
+              qty: { type: integer, minimum: 1, description: 'Di atas `max_qty` varian → 409 `cart_invalid`, bukan 422' }
+        notes: { type: string, nullable: true, maxLength: 500 }
+    CustomerQuote:
+      type: object
+      required: [fulfilment_method, lines, subtotal, shipping_cost, shipping_cost_pending, total]
+      properties:
+        fulfilment_method: { type: string, enum: [pickup, courier] }
+        lines:
+          type: array
+          description: Urutan sama dengan keranjang yang dikirim
+          items:
+            type: object
+            required: [variant_id, product_slug, name, image_url, unit_price, qty, line_total, max_qty]
+            properties:
+              variant_id: { type: integer }
+              product_slug: { type: string }
+              name: { type: string, description: '`nama produk — nama varian`' }
+              image_url: { type: string, format: uri, nullable: true }
+              unit_price: { type: string, example: '25000.00' }
+              qty: { type: integer }
+              line_total: { type: string, example: '50000.00' }
+              max_qty: { type: integer, description: 'min(stok, batas per baris); stok persisnya tidak pernah dikirim' }
+        subtotal: { type: string, example: '80000.00' }
+        shipping_cost: { type: string, example: '0.00', description: 'Selalu `"0.00"` di v1' }
+        shipping_cost_pending: { type: boolean, description: '`true` untuk kurir: toko menetapkan ongkir saat mengonfirmasi' }
+        total: { type: string, example: '80000.00', description: '`subtotal + shipping_cost`' }
+    CustomerOrderStaffNote:
+      type: string
+      nullable: true
+      maxLength: 255
+      description: Catatan opsional yang tampil di linimasa PELANGGAN; teks polos (tanpa tag HTML, karakter kontrol, penanda arah baca U+202A–202E / U+2066–2069 / U+200E–200F, spasi lebar nol U+200B–200D, maupun BOM U+FEFF)
+    CustomerOrderNoteInput:
+      type: object
+      properties:
+        note: { $ref: '#/components/schemas/CustomerOrderStaffNote' }
+    StaffCustomerOrder:
+      type: object
+      description: Customer commerce — baris daftar pesanan pelanggan untuk staf (bukan bentuk pelanggan)
+      required: [id, order_number, status, fulfilment_method, contact_name, contact_phone, total, shipping_cost_pending, item_count, first_item_name, created_at, updated_at]
+      properties:
+        id: { type: integer, description: Parameter rute staf }
+        order_number: { type: string, example: CO-7K2M9QX4RT }
+        status:
+          type: string
+          enum: [awaiting_confirmation, confirmed, packing, ready_for_pickup, shipped, delivered, picked_up, cancelled]
+        fulfilment_method: { type: string, enum: [pickup, courier] }
+        contact_name: { type: string }
+        contact_phone: { type: string }
+        total: { type: string }
+        shipping_cost_pending: { type: boolean }
+        item_count: { type: integer, description: Jumlah BARIS pesanan }
+        first_item_name: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    StaffCustomerOrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/StaffCustomerOrder'
+        - type: object
+          properties:
+            customer_id: { type: integer }
+            contact:
+              type: object
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                email: { type: string }
+            shipping_address:
+              type: object
+              nullable: true
+              properties:
+                recipient_name: { type: string }
+                phone: { type: string }
+                address_line: { type: string }
+                city: { type: string }
+                province: { type: string }
+                postal_code: { type: string, nullable: true }
+                notes: { type: string, nullable: true }
+            notes: { type: string, nullable: true }
+            cancel_reason: { type: string, nullable: true }
+            subtotal: { type: string }
+            shipping_cost: { type: string }
+            stock_deducted_at: { type: string, format: date-time, nullable: true }
+            confirmed_at: { type: string, format: date-time, nullable: true }
+            completed_at: { type: string, format: date-time, nullable: true }
+            cancelled_at: { type: string, format: date-time, nullable: true }
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: integer }
+                  variant_id: { type: integer }
+                  sku: { type: string }
+                  name: { type: string }
+                  unit_price: { type: string }
+                  qty: { type: integer }
+                  line_total: { type: string }
+                  available_stock: { type: integer, nullable: true, description: '`null` = varian sudah tidak terjangkau' }
+            shipment:
+              allOf:
+                - $ref: '#/components/schemas/CustomerOrderShipment'
+              nullable: true
+            timeline:
+              type: array
+              description: Terbaru lebih dulu; termasuk detail audit khusus staf
+              items:
+                type: object
+                properties:
+                  id: { type: integer }
+                  status: { type: string }
+                  event_type: { type: string, enum: [status_changed, tracking_updated, shipping_cost_set] }
+                  note: { type: string, nullable: true }
+                  occurred_at: { type: string, format: date-time }
+                  actor_type: { type: string, enum: [customer, staff, system] }
+                  actor_user_id: { type: integer, nullable: true }
+                  actor_name: { type: string, nullable: true }
+                  metadata: { type: object, nullable: true, additionalProperties: true }
+            available_actions:
+              type: array
+              description: Aksi yang sah untuk status ini DAN diizinkan untuk pengguna (petunjuk tombol)
+              items: { type: string, enum: [confirm, pack, ready, pickup, ship, deliver, cancel] }
+            can_update_shipment: { type: boolean }
+    CustomerOrderSummary:
+      type: object
+      required: [order_number, status, fulfilment_method, total, item_count, first_item_name, created_at, updated_at]
+      properties:
+        order_number: { type: string, example: CO-7K2M9QX4RT }
+        status:
+          type: string
+          enum: [awaiting_confirmation, confirmed, packing, ready_for_pickup, shipped, delivered, picked_up, cancelled]
+        fulfilment_method: { type: string, enum: [pickup, courier] }
+        total: { type: string, example: '80000.00' }
+        item_count: { type: integer, description: Jumlah BARIS pesanan (bukan jumlah unit) }
+        first_item_name: { type: string, nullable: true, description: Nama snapshot baris pertama }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CustomerOrderDetail:
+      allOf:
+        - $ref: '#/components/schemas/CustomerOrderSummary'
+        - type: object
+          required: [subtotal, shipping_cost, shipping_cost_pending, contact, shipping_address, notes, cancel_reason, instructions, items, shipment, timeline]
+          properties:
+            subtotal: { type: string }
+            shipping_cost: { type: string }
+            shipping_cost_pending:
+              type: boolean
+              description: '`true` hanya untuk pesanan kurir yang masih `awaiting_confirmation` (total belum final)'
+            contact:
+              type: object
+              description: Snapshot saat checkout
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                email: { type: string }
+            shipping_address:
+              type: object
+              nullable: true
+              description: Snapshot alamat saat checkout; `null` untuk ambil di tempat
+              properties:
+                recipient_name: { type: string }
+                phone: { type: string }
+                address_line: { type: string }
+                city: { type: string }
+                province: { type: string }
+                postal_code: { type: string, nullable: true }
+                notes: { type: string, nullable: true }
+            notes: { type: string, nullable: true, description: Catatan pelanggan }
+            cancel_reason: { type: string, nullable: true }
+            instructions:
+              type: string
+              nullable: true
+              description: Teks polos petunjuk toko untuk metode pesanan ini (pengaturan `customer_commerce_*_instructions`)
+            items:
+              type: array
+              items:
+                type: object
+                required: [name, sku, unit_price, qty, line_total]
+                properties:
+                  name: { type: string }
+                  sku: { type: string }
+                  unit_price: { type: string }
+                  qty: { type: integer }
+                  line_total: { type: string }
+            shipment:
+              allOf:
+                - $ref: '#/components/schemas/CustomerOrderShipment'
+              nullable: true
+            timeline:
+              type: array
+              description: Terbaru lebih dulu
+              items: { $ref: '#/components/schemas/CustomerOrderEvent' }
+    CustomerOrderShipment:
+      type: object
+      description: Customer commerce — pengiriman kurir sebagaimana dicatat toko
+      required: [courier_name, service_name, tracking_number, tracking_url, dispatched_at, delivered_at, shipping_cost]
+      properties:
+        courier_name: { type: string }
+        service_name: { type: string, nullable: true }
+        tracking_number: { type: string, nullable: true }
+        tracking_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Hanya dari templat https yang diizinkan server; bawaan `null`. Tidak pernah dari input staf/klien.
+        dispatched_at: { type: string, format: date-time }
+        delivered_at: { type: string, format: date-time, nullable: true }
+        shipping_cost: { type: string }
+    CustomerOrderEvent:
+      type: object
+      required: [status, event_type, note, occurred_at]
+      properties:
+        status:
+          type: string
+          enum: [awaiting_confirmation, confirmed, packing, ready_for_pickup, shipped, delivered, picked_up, cancelled]
+        event_type: { type: string, enum: [status_changed, tracking_updated, shipping_cost_set] }
+        note: { type: string, nullable: true, description: Teks polos yang boleh dilihat pelanggan }
+        occurred_at: { type: string, format: date-time }
+    CustomerOrderTracking:
+      type: object
+      required: [order_number, status, fulfilment_method, updated_by, shipment, timeline]
+      properties:
+        order_number: { type: string }
+        status:
+          type: string
+          enum: [awaiting_confirmation, confirmed, packing, ready_for_pickup, shipped, delivered, picked_up, cancelled]
+        fulfilment_method: { type: string, enum: [pickup, courier] }
+        updated_by: { type: string, enum: [store], description: 'Sinyal label "Diperbarui oleh toko"' }
+        shipment:
+          allOf:
+            - $ref: '#/components/schemas/CustomerOrderShipment'
+          nullable: true
+        timeline:
+          type: array
+          description: Terbaru lebih dulu
+          items: { $ref: '#/components/schemas/CustomerOrderEvent' }
+    StorefrontConfig:
+      type: object
+      required: [enabled, store_name, currency, fulfilment_methods, pickup_instructions, courier_instructions, max_qty_per_line, max_lines_per_order]
+      properties:
+        enabled: { type: boolean, description: Saklar `customer_commerce_enabled` }
+        store_name: { type: string, description: 'Nama toko mode data aktif; kosong = nama aplikasi' }
+        currency: { type: string, enum: [IDR] }
+        fulfilment_methods:
+          type: array
+          items: { type: string, enum: [pickup, courier] }
+        pickup_instructions: { type: string, nullable: true, description: Teks biasa dari pengaturan toko }
+        courier_instructions: { type: string, nullable: true, description: Teks biasa dari pengaturan toko }
+        max_qty_per_line: { type: integer, example: 20 }
+        max_lines_per_order: { type: integer, example: 50 }
+    StorefrontCategory:
+      type: object
+      description: Customer commerce — kategori untuk publik (bukan skema `Category` staf)
+      required: [id, name, image_url]
+      properties:
+        id: { type: integer, description: Dipakai sebagai `category_id` pada `/storefront/products` }
+        name: { type: string }
+        image_url: { type: string, format: uri, nullable: true, description: URL absolut (disk publik) }
+    StorefrontProductCard:
+      type: object
+      description: |
+        Customer commerce — kartu produk untuk publik (bukan skema `Product` staf). Pengenal publiknya `slug`;
+        id numerik produk, `code_prefix`, SKU, harga modal, stok, field BOM, jalur berkas, kontak/catatan seller dan
+        mode data TIDAK PERNAH dikirim.
+      required: [slug, name, image_url, category, seller_name, price_min, price_max, in_stock]
+      properties:
+        slug: { type: string, example: gantungan-kunci-sakura }
+        name: { type: string }
+        image_url: { type: string, format: uri, nullable: true, description: URL absolut gambar produk }
+        category:
+          type: object
+          required: [id, name]
+          properties:
+            id: { type: integer }
+            name: { type: string }
+        seller_name: { type: string }
+        price_min: { type: string, example: "25000.00", description: Harga terendah di antara varian yang layak jual }
+        price_max: { type: string, example: "30000.00", description: Harga tertinggi di antara varian yang layak jual }
+        in_stock: { type: boolean, description: Selalu `true` — produk tanpa varian berstok tidak ditampilkan }
+    StorefrontVariant:
+      type: object
+      description: Customer commerce — varian untuk publik (bukan skema `Variant` staf)
+      required: [id, name, image_url, price, in_stock, max_qty]
+      properties:
+        id: { type: integer, description: Dikirim kembali sebagai `variant_id` baris keranjang }
+        name: { type: string }
+        image_url: { type: string, format: uri, nullable: true, description: 'Gambar varian; bila kosong, gambar produknya' }
+        price: { type: string, example: "25000.00" }
+        in_stock: { type: boolean, description: Selalu `true` — varian tanpa stok tidak ditampilkan }
+        max_qty: { type: integer, minimum: 1, example: 10, description: 'min(stok, `max_qty_per_line`); batas beli per baris keranjang' }
+    StorefrontProductDetail:
+      allOf:
+        - $ref: '#/components/schemas/StorefrontProductCard'
+        - type: object
+          required: [description, variants]
+          properties:
+            description: { type: string, nullable: true }
+            variants:
+              type: array
+              minItems: 1
+              items: { $ref: '#/components/schemas/StorefrontVariant' }
     PreorderBulkRequest:
       type: object
       required: [order_ids]
@@ -7415,6 +9188,7 @@ components:
         current_stock: { type: integer, readOnly: true }
         low_stock_alert: { type: integer, nullable: true }
         is_active: { type: boolean }
+        published_at: { type: string, format: date-time, nullable: true, readOnly: true, description: "Customer commerce — null = belum terbit di etalase. Hanya berubah lewat POST /variants/{id}/publish|unpublish atau `with_variants` pada terbit produk." }
         bom_complete: { type: boolean, description: "034 — BOM ditandai selesai; cost_price mengikuti biaya BOM dan dikunci." }
         has_bom: { type: boolean, description: "034 — hanya ada pada GET/PUT produk untuk pengguna menu products (baris BOM dimuat)." }
         bom_cost: { type: string, nullable: true, example: "1800.00", description: "034 — biaya BOM; null bila belum ada baris. Hanya bila has_bom ikut dikirim." }
@@ -7513,6 +9287,7 @@ components:
         category_id: { type: integer }
         category_name: { type: string, readOnly: true }
         code_prefix: { type: string, minLength: 8, maxLength: 13, readOnly: true, example: RYU-KY-SAK }
+        slug: { type: string, maxLength: 160, readOnly: true, example: gantungan-kunci-sakura, description: "Customer commerce — pengenal publik produk di etalase (`/storefront/products/{slug}`). Dibuat sekali dari nama, unik per mode data, TIDAK berubah saat ganti nama dan tidak diterima PUT /products/{id}." }
         product_segment:
           type: string
           minLength: 1
@@ -7527,6 +9302,7 @@ components:
         is_preorder: { type: boolean }
         preorder_eta: { type: string, format: date, nullable: true }
         is_active: { type: boolean }
+        published_at: { type: string, format: date-time, nullable: true, readOnly: true, description: "Customer commerce — null = belum terbit di etalase. Hanya berubah lewat POST /products/{id}/publish|unpublish (aksi `products.publish`)." }
         total_stock: { type: integer, readOnly: true, description: "048 — jumlah stok varian aktif; hanya pada GET /products (daftar). 0 bila tidak ada." }
         total_stock_value: { type: string, readOnly: true, example: "280000.00", description: "048 — jumlah (stok x harga jual) varian aktif, string uang dua desimal; hanya pada GET /products (daftar)." }
         variants:
@@ -7576,8 +9352,8 @@ components:
           nullable: true
           readOnly: true
           properties:
-            type: { type: string, enum: [order, preorder] }
-            id: { type: integer, description: id order / pre-order }
+            type: { type: string, enum: [order, preorder, customer_order], description: "`customer_order` (customer commerce, 2026-11-11) = pesanan dari aplikasi pelanggan; `number` berisi nomor pesanannya (CO-…)." }
+            id: { type: integer, description: id order / pre-order / pesanan pelanggan }
             number: { type: string, example: "TRX-20261004-0007" }
         image_url: { type: string, nullable: true, readOnly: true, description: "Gambar varian, jika tidak ada gambar produknya; null bila keduanya kosong (SPA menampilkan placeholder)." }
         artist_id: { type: integer, nullable: true, readOnly: true }

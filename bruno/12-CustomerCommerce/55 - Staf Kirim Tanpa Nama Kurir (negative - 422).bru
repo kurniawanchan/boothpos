@@ -1,0 +1,29 @@
+meta {
+  name: 55 - Staf Kirim Tanpa Nama Kurir (negative - 422)
+  type: http
+  seq: 55
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_order_staff_id}}/ship
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "service_name": "REG",
+    "tracking_number": "BRUNO-TANPA-KURIR"
+  }
+}
+
+tests {
+  test("ditolak 422 - courier_name wajib dari daftar kurir", function () {
+    expect(res.status).to.equal(422);
+    expect(res.body.errors.courier_name).to.be.an("array");
+  });
+}

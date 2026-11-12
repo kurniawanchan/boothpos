@@ -1,0 +1,21 @@
+meta {
+  name: 70 - Logout Pelanggan A
+  type: http
+  seq: 70
+}
+
+post {
+  url: {{base_url}}/customer/auth/logout
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("logout 204 - token yang dipakai dicabut", function () {
+    expect(res.status).to.equal(204);
+  });
+}

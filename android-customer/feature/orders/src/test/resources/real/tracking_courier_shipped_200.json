@@ -1,0 +1,55 @@
+{
+ "data": {
+  "order_number": "CO-V1NKWSJQCN",
+  "status": "shipped",
+  "fulfilment_method": "courier",
+  "updated_by": "store",
+  "shipment": {
+   "courier_name": "JNE",
+   "service_name": "YES",
+   "tracking_number": "BRUNO-1794456935022-R",
+   "tracking_url": null,
+   "dispatched_at": "2026-11-12T04:15:35+00:00",
+   "delivered_at": null,
+   "shipping_cost": "15000.00"
+  },
+  "timeline": [
+   {
+    "status": "shipped",
+    "event_type": "tracking_updated",
+    "note": null,
+    "occurred_at": "2026-11-12T04:15:35+00:00"
+   },
+   {
+    "status": "shipped",
+    "event_type": "status_changed",
+    "note": "Paket sudah diserahkan ke kurir.",
+    "occurred_at": "2026-11-12T04:15:35+00:00"
+   },
+   {
+    "status": "packing",
+    "event_type": "status_changed",
+    "note": "Pesanan sedang dikemas.",
+    "occurred_at": "2026-11-12T04:15:34+00:00"
+   },
+   {
+    "status": "confirmed",
+    "event_type": "status_changed",
+    "note": "Ongkir sudah ditetapkan toko.",
+    "occurred_at": "2026-11-12T04:15:33+00:00"
+   },
+   {
+    "status": "confirmed",
+    "event_type": "shipping_cost_set",
+    "note": null,
+    "occurred_at": "2026-11-12T04:15:33+00:00"
+   },
+   {
+    "status": "awaiting_confirmation",
+    "event_type": "status_changed",
+    "note": null,
+    "occurred_at": "2026-11-12T04:15:26+00:00"
+   }
+  ]
+ }
+}

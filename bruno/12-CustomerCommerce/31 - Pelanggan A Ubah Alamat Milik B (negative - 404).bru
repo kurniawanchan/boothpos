@@ -1,0 +1,32 @@
+meta {
+  name: 31 - Pelanggan A Ubah Alamat Milik B (negative - 404)
+  type: http
+  seq: 31
+}
+
+put {
+  url: {{base_url}}/customer/addresses/{{customer_b_address_id}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+body:json {
+  {
+    "recipient_name": "Bukan Pemilik",
+    "phone": "080000000099",
+    "address_line": "Jl. Pengambilalihan No. 9",
+    "city": "Jakarta",
+    "province": "DKI Jakarta"
+  }
+}
+
+tests {
+  test("ditolak 404 not_found - alamat akun lain dijawab sama dengan alamat yang tidak ada", function () {
+    expect(res.status).to.equal(404);
+    expect(res.body.code).to.equal("not_found");
+  });
+}

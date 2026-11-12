@@ -1,0 +1,22 @@
+meta {
+  name: 26 - Token Staf di Profil Pelanggan (negative - 401)
+  type: http
+  seq: 26
+}
+
+get {
+  url: {{base_url}}/customer/me
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+tests {
+  test("ditolak 401 unauthenticated - guard pelanggan tidak menerima token staf", function () {
+    expect(res.status).to.equal(401);
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+    expect(res.body.code).to.equal("unauthenticated");
+  });
+}

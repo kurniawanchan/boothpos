@@ -1,0 +1,8 @@
+{
+ "type": "https://boothpos.local/problems/too_many_requests",
+ "title": "Terlalu banyak permintaan",
+ "status": 429,
+ "detail": "Terlalu banyak percobaan. Tunggu sebentar lalu coba lagi.",
+ "code": "too_many_requests",
+ "request_id": "0e3570f7-bbf9-427b-98b1-24b3b339c988"
+}

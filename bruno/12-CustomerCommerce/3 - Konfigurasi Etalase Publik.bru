@@ -1,0 +1,26 @@
+meta {
+  name: 3 - Konfigurasi Etalase Publik
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/storefront/config
+  auth: none
+}
+
+script:post-response {
+  if (res.status === 200) {
+    bru.setVar("storefront_max_qty_per_line", res.body.data.max_qty_per_line);
+  }
+}
+
+tests {
+  test("terbaca tanpa token dan toko online sudah aktif", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data.enabled).to.equal(true);
+    expect(res.body.data.currency).to.equal("IDR");
+    expect(res.body.data.fulfilment_methods).to.include.members(["pickup", "courier"]);
+    expect(res.body.data.max_qty_per_line).to.be.a("number");
+  });
+}

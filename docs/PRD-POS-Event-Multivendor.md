@@ -934,6 +934,18 @@ Modul **Settlement** (penyelesaian hasil penjualan antara toko dan tiap penjual,
 
 Spesifikasi: `specs/047-settlement-tab-session-branding/`. Kontrak API: `docs/openapi-pos-mvp.yaml` (tag Settlement).
 
+**Catatan penambahan pasca-MVP — 2026-11-11 (toko online: API pelanggan dan aplikasi Android)**
+
+Disetujui pemilik produk pada 2026-11-11: aplikasi Android native untuk PELANGGAN (daftar/masuk, katalog terbit, keranjang, pesanan ambil di tempat atau kurir, pelacakan) beserta API pelanggan terpisah di instalasi yang sama. Ini kapabilitas baru, bukan kebangkitan butir yang dicoret di 10.2, dan bukan perubahan atas alur POS:
+
+- **Identitas terpisah.** Pelanggan masuk lewat tabel `customer_accounts` (guard `customer`), bukan `users`; token pelanggan ditolak di seluruh API staf dan token staf ditolak di API pelanggan. Baris `customers` tetap kontak yang dikelola staf.
+- **Pesanan pelanggan bukan penjualan POS.** Tabel tersendiri (`customer_orders` dan turunannya); tidak membuat `orders`/`preorders`/`shipments` dan tidak masuk laporan. Stok TIDAK berubah saat pelanggan memesan; baru berkurang saat staf mengonfirmasi (lewat `StockService`), dan kembali tepat sekali bila pesanan terkonfirmasi dibatalkan. Apakah pesanan yang selesai harus direkonsiliasi menjadi penjualan POS masih pertanyaan terbuka.
+- **Di luar cakupan rilis ini:** pembayaran online, ongkir otomatis, integrasi/webhook kurir, notifikasi push, verifikasi e-mail, reset password, ulasan, checkout tamu, login sosial, dan layar SPA staf untuk fulfilment (staf memakai API).
+- **Asumsi yang menunggu konfirmasi pemilik produk:** produk pre-order tidak dijual di etalase; ongkir kurir ditetapkan staf saat konfirmasi; Kasir tidak mendapat menu "Pesanan Pelanggan" secara bawaan; staf terikat penjual tidak bisa memenuhi pesanan; tidak ada pembatalan setelah barang dikirim; token pelanggan berlaku 14 hari; tabel pelanggan tidak ikut disalin saat kloning LIVE→DEMO.
+- Fitur ini mati secara bawaan (`customer_commerce_enabled`); mematikannya menghentikan pesanan baru tanpa menghapus pesanan yang sudah masuk.
+
+Rancangan: `docs/android-customer-commerce/design.md`. Kontrak API: `docs/openapi-pos-mvp.yaml` (tag Storefront, Customer Account, Customer Order, Customer Order Fulfilment). Operasional: `docs/RUNBOOK.md` bagian "Toko online".
+
 ### 10.3 Cakupan MVP Oktober
 
 | Prioritas | Modul |

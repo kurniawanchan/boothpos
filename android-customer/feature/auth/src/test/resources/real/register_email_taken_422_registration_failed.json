@@ -1,0 +1,8 @@
+{
+ "type": "https://boothpos.local/problems/registration_failed",
+ "title": "Pendaftaran tidak dapat diproses",
+ "status": 422,
+ "detail": "Pendaftaran tidak dapat diproses. Periksa data Anda, atau masuk jika sudah punya akun.",
+ "code": "registration_failed",
+ "request_id": "4845a3e3-b81d-4ae0-a723-a8db1e74f23b"
+}

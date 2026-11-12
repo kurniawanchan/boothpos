@@ -1,0 +1,41 @@
+meta {
+  name: 56 - Staf Kirim Pesanan Kurir dengan Nomor Resi
+  type: http
+  seq: 56
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_order_staff_id}}/ship
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "courier_name": "JNE",
+    "service_name": "REG",
+    "tracking_number": "{{customer_tracking_number}}",
+    "note": "Paket sudah diserahkan ke kurir."
+  }
+}
+
+script:pre-request {
+  // Nomor resi uji: hanya huruf, angka, dan tanda hubung (aturan ShipCustomerOrderRequest).
+  bru.setVar("customer_tracking_number", "BRUNO-" + Date.now());
+}
+
+tests {
+  test("dikirim: data pengiriman tersimpan dengan snapshot ongkir", function () {
+    expect(res.status).to.equal(200);
+    const o = res.body.data;
+    expect(o.status).to.equal("shipped");
+    expect(o.shipment.courier_name).to.equal("JNE");
+    expect(o.shipment.tracking_number).to.equal(bru.getVar("customer_tracking_number"));
+    expect(o.shipment.shipping_cost).to.equal("15000.00");
+    expect(o.can_update_shipment).to.equal(true);
+  });
+}

@@ -1,0 +1,22 @@
+meta {
+  name: 24 - Token Pelanggan di Katalog Staf (negative - 401)
+  type: http
+  seq: 24
+}
+
+get {
+  url: {{base_url}}/catalog
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("ditolak 401 - token pelanggan tidak berlaku di GET /catalog staf (amplop galat staf tidak berubah)", function () {
+    expect(res.status).to.equal(401);
+    expect(res.body.message).to.equal("Unauthenticated.");
+    expect(res.body).to.not.have.property("code");
+  });
+}

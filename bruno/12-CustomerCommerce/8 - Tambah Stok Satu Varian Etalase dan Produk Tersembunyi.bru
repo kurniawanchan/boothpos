@@ -1,0 +1,43 @@
+meta {
+  name: 8 - Tambah Stok Satu Varian Etalase dan Produk Tersembunyi
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{base_url}}/stock/adjustments
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "reason": "Stok awal uji etalase (Bruno)",
+    "items": [
+      { "variant_id": {{storefront_variant_id}}, "qty_change": 10 },
+      { "variant_id": {{hidden_variant_id}}, "qty_change": 5 }
+    ]
+  }
+}
+
+tests {
+  // Dari dua varian produk etalase hanya "Ukuran S" yang diberi stok; "Ukuran M" sengaja tetap 0.
+  // Produk tersembunyi IKUT diberi stok supaya terbukti ia tidak tampil karena BELUM TERBIT,
+  // bukan karena stoknya nol (request 10 dan 12).
+  test("stok masuk lewat StockService: Ukuran S 0 -> 10, produk tersembunyi 0 -> 5, Ukuran M tidak disentuh", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.movements).to.have.length(2);
+    const etalase = res.body.movements.find(function (m) {
+      return Number(m.variant_id) === Number(bru.getVar("storefront_variant_id"));
+    });
+    expect(etalase, "pergerakan stok varian Ukuran S tidak ada").to.be.an("object");
+    expect(Number(etalase.stock_after)).to.equal(10);
+    res.body.movements.forEach(function (m) {
+      expect(Number(m.variant_id), "varian stok kosong ikut diberi stok").to.not.equal(Number(bru.getVar("storefront_empty_variant_id")));
+    });
+  });
+}

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\LicenseActivationService;
+use App\Support\CustomerCommerceProblem;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,6 +15,12 @@ use Symfony\Component\HttpFoundation\Response;
  * grup middleware 'api' (bootstrap/app.php) — TIDAK ADA endpoint yang
  * dikecualikan selain dua endpoint lisensi itu sendiri, TERMASUK
  * /auth/login (FR-002: "tidak ada pengecualian").
+ *
+ * Customer commerce: rute /customer dan /storefront dijawab dengan amplop
+ * `application/problem+json` (code `installation_locked`, request_id, bahasa
+ * mengikuti Accept-Language) seperti semua galat pelanggan lainnya; aplikasi
+ * Android memutuskan tindakan dari `code`, bukan dari `{message, activated}`.
+ * Rute staf dan rute lisensi tetap persis seperti sebelumnya.
  */
 class EnsureInstallationIsActivated
 {
@@ -29,6 +36,13 @@ class EnsureInstallationIsActivated
         }
 
         if (! app(LicenseActivationService::class)->isActivated()) {
+            if (CustomerCommerceProblem::appliesTo($request)) {
+                // Gerbang ini berjalan sebelum middleware locale grup pelanggan.
+                SetLocaleFromAcceptLanguage::apply($request);
+
+                return CustomerCommerceProblem::response($request, 423, 'installation_locked');
+            }
+
             return response()->json([
                 'message' => __('license.installation_locked'),
                 'activated' => false,

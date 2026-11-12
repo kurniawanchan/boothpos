@@ -1,0 +1,32 @@
+meta {
+  name: 5 - Ambil Kategori Aktif
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{base_url}}/categories?per_page=100
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+script:post-response {
+  // Etalase hanya menampilkan produk dari kategori aktif. Kode kategori ikut membentuk code_prefix
+  // (pola ART-CA-SEG), jadi hanya kode dua huruf A-Z yang dipilih.
+  if (res.status === 200) {
+    const kategori = (res.body.data || []).find(function (c) {
+      return c.is_active && /^[A-Za-z]{2}$/.test(c.code || "");
+    });
+    bru.setVar("storefront_category_id", kategori ? kategori.id : "");
+  }
+}
+
+tests {
+  test("ada minimal satu kategori aktif (prasyarat folder ini)", function () {
+    expect(res.status).to.equal(200);
+    expect(bru.getVar("storefront_category_id"), "buat atau aktifkan satu kategori dulu").to.be.ok;
+  });
+}

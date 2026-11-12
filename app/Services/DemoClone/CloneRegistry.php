@@ -9,6 +9,9 @@ use InvalidArgumentException;
  * tempat yang tahu bentuk graf data untuk fitur ini: cloner, fingerprint,
  * dan pemeriksaan integritas semuanya membaca dari sini.
  *
+ * Selain itu ada daftar kedua, wipeOnly(): tabel customer commerce yang hanya
+ * DIHAPUS di sisi DEMO dan tidak pernah disalin (lihat docblock method-nya).
+ *
  * Kunci spec:
  *  fks             kolom => tabel induk; nilai dipetakan ke id baru. Kolom ke
  *                  users/payment_channels TIDAK di sini (dibagi, nilai tetap).
@@ -155,8 +158,12 @@ final class CloneRegistry
             throw new InvalidArgumentException('Mode harus live atau demo.');
         }
 
-        $via = self::spec($table)['via'];
+        return self::modeFragment(self::spec($table)['via'], $mode);
+    }
 
+    /** Fragmen untuk tabel ber-`data_mode` sendiri ($via null) atau yang mengikuti induknya ("induk.kolom"). */
+    private static function modeFragment(?string $via, string $mode): string
+    {
         if ($via === null) {
             return "data_mode = '{$mode}'";
         }
@@ -164,6 +171,80 @@ final class CloneRegistry
         [$parent, $column] = explode('.', $via);
 
         return "{$column} IN (SELECT id FROM {$parent} WHERE data_mode = '{$mode}')";
+    }
+
+    /**
+     * Customer commerce (2026-11-11) — tabel yang HANYA DIHAPUS di sisi DEMO,
+     * tidak pernah disalin dari LIVE. Urutan = urutan DELETE (anak dulu).
+     * Nilai: null untuk tabel ber-`data_mode` sendiri, atau "induk.kolom"
+     * (arti sama dengan kunci `via` di tables()).
+     *
+     * Kenapa tidak dicerminkan: akun pelanggan membawa hash kata sandi dan
+     * data pribadi; menyalinnya ke DEMO berarti kredensial LIVE hidup di data
+     * latihan (dan butuh aturan tulis-ulang e-mail, nomor pesanan, kunci
+     * idempotensi). Karena itu tabel-tabel ini SENGAJA tidak ada di tables():
+     * apa pun di sana disalin dan dihitung-cocokkan oleh verifyIntegrity().
+     *
+     * Tetap harus dihapus: FK-nya ke tabel tercermin bersifat RESTRICT
+     * (customers, product_variants), jadi tanpa penghapusan ini satu
+     * registrasi di DEMO saja sudah menggagalkan seluruh klon (MySQL 1451).
+     *
+     * @return array<string,string|null>
+     */
+    public static function wipeOnly(): array
+    {
+        return [
+            'customer_order_status_events' => 'customer_orders.customer_order_id',
+            'customer_order_shipments' => 'customer_orders.customer_order_id',
+            'customer_order_items' => 'customer_orders.customer_order_id',
+            'customer_orders' => null,
+            'customer_addresses' => 'customer_accounts.customer_account_id',
+            'customer_accounts' => null,
+        ];
+    }
+
+    /** Padanan scope() untuk tabel wipe-only. $mode dikunci ke 'live'/'demo' (disisipkan ke SQL). */
+    public static function wipeOnlyScope(string $table, string $mode): string
+    {
+        if (! in_array($mode, ['live', 'demo'], true)) {
+            throw new InvalidArgumentException('Mode harus live atau demo.');
+        }
+
+        $tables = self::wipeOnly();
+
+        if (! array_key_exists($table, $tables)) {
+            throw new InvalidArgumentException("Tabel {$table} bukan tabel wipe-only.");
+        }
+
+        return self::modeFragment($tables[$table], $mode);
+    }
+
+    /**
+     * FK tabel wipe-only yang bisa menghubungkan baris LIVE ke induk DEMO:
+     * "tabel.kolom" => tabel induk. Dicek SEBELUM DEMO dihapus — RESTRICT
+     * akan gagal dengan galat mentah di tengah proses, jadi berhenti lebih
+     * awal dengan pesan yang menyebut tabel/kolom/jumlah. Anak yang mengikuti
+     * mode induknya (alamat, item→pesanan, pengiriman, riwayat) tidak bisa
+     * lintas mode menurut definisinya, jadi tidak ada di sini.
+     *
+     * @return array<string,string>
+     */
+    public static function wipeOnlyReferences(): array
+    {
+        return [
+            'customer_accounts.customer_id' => 'customers',
+            'customer_orders.customer_id' => 'customers',
+            'customer_orders.customer_account_id' => 'customer_accounts',
+            'customer_order_items.variant_id' => 'product_variants',
+        ];
+    }
+
+    /** scope() atau wipeOnlyScope(), mana pun yang mengenal tabelnya. */
+    public static function anyScope(string $table, string $mode): string
+    {
+        return array_key_exists($table, self::wipeOnly())
+            ? self::wipeOnlyScope($table, $mode)
+            : self::scope($table, $mode);
     }
 
     /** @return array<string,string> kolom => tabel induk (FK biasa + self-FK) */

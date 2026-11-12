@@ -530,6 +530,14 @@ Di Docker dev: `docker compose exec app php artisan app:clone-live-to-demo ...`
   kode itu. Nomor dokumen DEMO berakhiran `-DM`.
 - Tidak disalin: `companies`, `invoices`, `pos_drafts`, riwayat `activity_logs`,
   `preorder_notifications`, `users`, `payment_channels`, `settings`.
+- **Toko online / aplikasi pelanggan (2026-11-11):** enam tabel `customer_accounts`,
+  `customer_addresses`, `customer_orders`, `customer_order_items`,
+  `customer_order_shipments`, `customer_order_status_events` hanya DIHAPUS di DEMO
+  (beserta token akun pelanggan DEMO), TIDAK disalin dari LIVE — supaya hash password
+  pelanggan tidak pernah masuk DEMO. Setelah kloning, DEMO tidak punya akun maupun
+  pesanan pelanggan. Gerakan stok LIVE hasil konfirmasi pesanan pelanggan tetap
+  disalin (stok DEMO = stok LIVE) tetapi rujukannya dikosongkan. Rinciannya:
+  `docs/superpowers/specs/2026-10-11-clone-live-to-demo-design.md` §11.
 - Pemeriksaan sebelum penghapusan: bila ada baris LIVE yang merujuk baris DEMO,
   perintah dibatalkan SEBELUM menghapus apa pun (data lintas mode akan diubah
   diam-diam oleh foreign key `ON DELETE SET NULL/CASCADE`). Perbaiki rujukan itu
@@ -586,3 +594,69 @@ Hanya untuk peran **Owner** (admin dan kasir tidak bisa). Dipakai saat shift dit
 4. Menutup ulang menghitung ulang kas diharapkan dan selisih. Pembukaan kembali tidak mengubah order, stok, rekap, laporan, atau settlement.
 
 Setelah menarik kode fitur ini, jalankan migrasi (`php artisan migrate`, atau restart container) — tabel baru `cashier_session_reopens`. Tanpa itu halaman Riwayat Sesi menjawab 503 `schema_outdated` (lihat "Setelah menarik perubahan kode").
+
+## Toko online: API pelanggan dan aplikasi Android (2026-11-11)
+
+Etalase publik (`/api/v1/storefront/*`), akun pelanggan (`/api/v1/customer/*`) dan
+fulfilment pesanan pelanggan oleh staf (`/api/v1/customer-orders/*`). Rancangan:
+`docs/android-customer-commerce/design.md`; kontrak API: `docs/openapi-pos-mvp.yaml`
+(tag Storefront, Customer Account, Customer Order, Customer Order Fulfilment).
+Belum ada layar SPA untuk fitur ini: semua langkah staf di bawah lewat API (Bruno).
+
+1. **Migrasi** — tabel `customer_*`, kolom `products.slug`/`published_at`,
+   `product_variants.published_at`, dan menu `customer_orders` untuk Owner/Admin:
+   `php artisan migrate` (atau restart container, lihat "Setelah menarik perubahan kode").
+2. **Nyalakan saklar** (mati secara bawaan; baris setting yang tidak ada = mati). Sebagai
+   Owner/Admin, `PUT /api/v1/settings` dengan body
+   `{"settings":[{"key":"customer_commerce_enabled","value":true,"type":"boolean","group":"customer_commerce"}]}`.
+   Hanya `true/false/1/0` yang diterima. Petunjuk untuk pelanggan (teks biasa, maks. 500
+   karakter, tanpa tag HTML): kunci `customer_commerce_pickup_instructions` dan
+   `customer_commerce_courier_instructions`. Status saklar terlihat di
+   `GET /api/v1/settings/features` (`customer_commerce_enabled`) dan publik di
+   `GET /api/v1/storefront/config` (`enabled`).
+   - Saat MATI: etalase, pendaftaran, alamat (tulis), quote dan checkout menjawab
+     `503 customer_commerce_disabled` (`Retry-After: 3600`). Login, profil, daftar alamat,
+     daftar/detail/pelacakan pesanan, dan SELURUH rute staf tetap jalan — mematikan saklar
+     adalah cara mundur (backout) tanpa menghapus pesanan yang sudah masuk. Jangan pernah
+     mundur dengan menghapus data pelanggan.
+3. **Terbitkan produk** — produk lama dan produk baru (termasuk hasil seeder dan impor
+   Excel) BELUM terbit, jadi etalase kosong sampai staf menerbitkannya. Peran butuh aksi
+   `publish` di menu Produk: Owner dan peran yang aksi menu Produk-nya tidak dibatasi otomatis
+   punya; peran yang aksinya sudah dibatasi harus diberi `publish` secara eksplisit.
+   - `POST /api/v1/products/{id}/publish` body `{"with_variants": true}` → produk dan varian
+     aktifnya yang belum terbit ikut terbit. Tarik: `POST /api/v1/products/{id}/unpublish`;
+     per varian: `POST /api/v1/variants/{id}/publish|unpublish`.
+   - Yang tampil di etalase hanya: produk aktif, terbit, bukan pre-order, penjual dan
+     kategori aktif, dengan minimal satu varian aktif + terbit + stok > 0. Mengikuti mode
+     DEMO/LIVE yang sedang aktif.
+4. **Memenuhi pesanan** (staf, menu "Pesanan Pelanggan"; Owner/Admin bawaan, staf terikat
+   penjual ditolak): `GET /api/v1/customer-orders` lalu, dengan `id` angkanya,
+   `confirm` (stok BARU dikurangi di sini; untuk kurir boleh sekaligus `shipping_cost`) →
+   `pack` → `ready` → `pickup` (ambil di tempat) atau `pack` → `ship` (kurir dari daftar
+   kurir, resi opsional) → `deliver`. `PATCH …/shipment` membetulkan resi/layanan.
+   `cancel` (alasan wajib) mengembalikan stok tepat sekali bila sudah dikonfirmasi; pesanan
+   yang sudah dikirim/selesai tidak bisa dibatalkan (belum ada alur retur).
+   Checkout pelanggan TIDAK mengubah stok dan tidak membuat order POS/pre-order; pesanan
+   pelanggan tidak masuk laporan penjualan (keputusan rekonsiliasi masih terbuka).
+5. **Test backend** (jangan `php artisan test`: mati di batas memori 128M di mesin ini; jangan
+   dua proses phpunit bersamaan):
+   ```bash
+   php -d memory_limit=2G vendor/bin/phpunit --no-progress tests/Feature/CustomerCommerce
+   php -d memory_limit=2G vendor/bin/phpunit --no-progress --filter 'MenuActionsRouteCoverageTest|MenuActionsRegistryTest|ForbiddenSurfacesTest|CloneRegistryDriftTest|SchemaStatusTest'
+   php -d memory_limit=2G vendor/bin/phpunit --no-progress   # suite penuh, ±10 menit
+   ```
+   Di container Docker dev tetap berlaku aturan `-e APP_ENV=testing -e DB_DATABASE=boothpos_test`.
+6. **Bruno** — folder `bruno/12-CustomerCommerce/` (berbagi awalan `12-` dengan
+   `12-Language`; nomor hanya untuk urutan). Variabel environment snake_case di
+   `bruno/environments/local.bru` (`customer_token`, `customer_email`, `idempotency_key`, …).
+   Butuh saklar menyala dan minimal satu produk terbit (langkah 2 dan 3).
+7. **Aplikasi Android** — proyek Gradle terpisah `android-customer/` (BUKAN `android/`,
+   installer POS). Perintah build, cara mengarahkan ke server, dan hasil verifikasi ada di
+   `android-customer/README.md` (mis. `./gradlew :app:assembleRelease
+   -Pboothpos.apiBaseUrl=https://…/api/v1/`; build rilis menolak alamat non-HTTPS).
+
+Batas yang perlu diketahui: token pelanggan berlaku 14 hari (`CUSTOMER_COMMERCE_TOKEN_TTL_MINUTES`),
+tanpa refresh; belum ada verifikasi e-mail, reset password, pembayaran online, ongkir otomatis,
+integrasi kurir, maupun notifikasi. Galat API pelanggan berbentuk `application/problem+json`
+dengan `request_id` (juga di header `X-Request-Id`) — minta id itu saat pelanggan melapor masalah
+dan cocokkan dengan log server.

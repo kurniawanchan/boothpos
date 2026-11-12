@@ -73,6 +73,20 @@ abstract class TestCase extends BaseTestCase
     // kebersihan test — tidak mengubah kode produksi sama sekali.
     protected function setUp(): void
     {
+        // BUG YANG DITEMUKAN & DIPERBAIKI (customer commerce, 2026-11-12) —
+        // suite penuh mati dengan "Maximum execution time of 120 seconds
+        // exceeded" di test yang tidak berhubungan (PaymentConfirmationTest).
+        // Kode produksi memanggil set_time_limit(120/600) untuk satu request
+        // berat (persetujuan massal, ekspor laporan, aksi massal pre-order);
+        // di server itu berlaku per request, tetapi di sini SELURUH suite
+        // satu proses PHP, jadi batasnya terbawa ke test-test berikutnya. Di
+        // PHP macOS Apple Silicon batas itu dihitung WAKTU DINDING (bukan
+        // waktu CPU), sehingga begitu mesin sedang sibuk, ±170 test sesudah
+        // panggilan itu melewati 120 detik dan prosesnya dibunuh. Setiap test
+        // mulai lagi tanpa batas waktu (bawaan CLI), persis seperti request
+        // baru di server; kode produksi tidak berubah.
+        set_time_limit(0);
+
         parent::setUp();
         Cache::flush();
 

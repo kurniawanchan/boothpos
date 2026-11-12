@@ -4,6 +4,8 @@ namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
 use App\Models\Concerns\HasSellerScope;
+use App\Support\ModeGate;
+use App\Support\ProductSlug;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -48,7 +50,47 @@ class Product extends Model
             'is_preorder' => 'boolean',
             'is_active' => 'boolean',
             'preorder_eta' => 'date',
+            'published_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Customer commerce — `slug` (pengenal publik di etalase) dibuat DI SINI,
+     * bukan di tiap pemanggil, supaya semua jalur pembuatan produk
+     * (ProductController::store, impor Excel master data, seeder demo,
+     * factory) mendapatkannya tanpa perlu tahu. Klon LIVE → DEMO memakai
+     * insert mentah dan menyalin slug apa adanya (unik per mode, jadi aman).
+     *
+     * `slug` dan `published_at` SENGAJA tidak ada di $fillable: slug tidak
+     * boleh berubah saat produk diganti nama (tautan dan cache aplikasi
+     * Android harus tetap sah) dan tidak boleh datang dari input klien;
+     * penerbitan hanya lewat aksi staf tersendiri. UpdateProductRequest juga
+     * tidak punya rule untuk keduanya.
+     *
+     * Keunikan dicek di dalam MODE DATA baris itu, termasuk baris yang sudah
+     * dihapus lunak (indeks unik `data_mode, slug` tidak mengenal
+     * `deleted_at`) dan tanpa scope seller (seller lain ikut memakai slug).
+     * Dua pembuatan bersamaan dengan nama sama tetap dijaga indeks unik.
+     */
+    protected static function booted(): void
+    {
+        static::creating(function (Product $product) {
+            if (filled($product->slug)) {
+                return;
+            }
+
+            $mode = $product->data_mode ?? ModeGate::current();
+            $base = ProductSlug::base($product->name);
+
+            // $base hanya berisi [a-z0-9-], jadi aman dipakai di LIKE tanpa escape.
+            $taken = static::withoutGlobalScopes()
+                ->where('data_mode', $mode)
+                ->where(fn (Builder $q) => $q->where('slug', $base)->orWhere('slug', 'like', $base.'-%'))
+                ->pluck('slug')
+                ->all();
+
+            $product->slug = ProductSlug::dedupe($base, array_fill_keys($taken, true));
+        });
     }
 
     public function artist(): BelongsTo
@@ -64,6 +106,43 @@ class Product extends Model
     public function variants(): HasMany
     {
         return $this->hasMany(ProductVariant::class);
+    }
+
+    /**
+     * Customer commerce (CONTRACT §6) — syarat kelayakan tampil yang melekat
+     * pada BARIS PRODUK: aktif, sudah terbit (`published_at` terisi dan tidak
+     * di masa depan), bukan pre-order (alur pemenuhannya berbeda; ASUMSI
+     * kontrak), seller aktif, kategori aktif. Baris terhapus lunak, baris mode
+     * data lain dan seller/kategori terhapus tersaring oleh global scope
+     * masing-masing model (whereHas ikut menerapkannya).
+     *
+     * Dipisah dari scopeStorefrontVisible() supaya
+     * ProductVariant::scopeStorefrontSellable() bisa memakai syarat yang SAMA
+     * tanpa lingkaran (produk tampil ⇄ varian layak jual).
+     */
+    public function scopeStorefrontListable(Builder $query): Builder
+    {
+        return $query
+            ->where($query->qualifyColumn('is_active'), true)
+            ->where($query->qualifyColumn('is_preorder'), false)
+            // NULL (belum terbit) otomatis gagal di perbandingan ini.
+            ->where($query->qualifyColumn('published_at'), '<=', now())
+            ->whereHas('artist', fn (Builder $artist) => $artist->where('is_active', true))
+            ->whereHas('category', fn (Builder $category) => $category->where('is_active', true));
+    }
+
+    /**
+     * Customer commerce (CONTRACT §6) — SATU-satunya definisi "produk tampil
+     * di etalase": layak tampil sebagai baris (scopeStorefrontListable) DAN
+     * punya minimal satu varian yang ditawarkan
+     * (ProductVariant::scopeStorefrontOffered). Dipakai daftar, detail dan
+     * kategori etalase; jangan menulis ulang syaratnya di tempat lain.
+     */
+    public function scopeStorefrontVisible(Builder $query): Builder
+    {
+        return $query
+            ->storefrontListable()
+            ->whereHas('variants', fn (Builder $variant) => $variant->storefrontOffered());
     }
 
     /**

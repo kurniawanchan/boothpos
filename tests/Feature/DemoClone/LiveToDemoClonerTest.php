@@ -251,7 +251,20 @@ class LiveToDemoClonerTest extends TestCase
         $report = (new LiveToDemoCloner)->run();
 
         $this->assertSame(1, $report['references_dropped']);
-        $this->assertSame(0, $this->mode('stock_movements', 'demo')->where('reference_id', $this->live['order'])->count());
+
+        // BUG TEST YANG DITEMUKAN & DIPERBAIKI (customer commerce, 2026-11-12) — dulu dicek "tak ada baris
+        // DEMO mana pun dengan reference_id = id order LIVE". Itu gagal di suite penuh walau kloner benar:
+        // baris `return`/`purchase` DEMO merujuk id order_items/preorder_items, dan auto-increment tiap tabel
+        // berjalan sendiri sepanjang proses (test baru menggeser hitungannya), sehingga id baris lain bisa
+        // KEBETULAN bernilai sama. Yang dijaga tetap sama, kini tepat sasaran: salinan baris "Mystery"
+        // rujukannya kosong, dan tidak ada baris DEMO yang merujuk tabel `orders` (sale + order_item = id
+        // order, fitur 036) dengan id LIVE.
+        $mystery = $this->mode('stock_movements', 'demo')->where('reference_type', 'Mystery')->get();
+        $this->assertCount(1, $mystery);
+        $this->assertNull($mystery->first()->reference_id);
+        $this->assertSame(0, $this->mode('stock_movements', 'demo')
+            ->where('type', 'sale')->where('reference_type', 'order_item')
+            ->where('reference_id', $this->live['order'])->count());
     }
 
     public function test_values_timestamps_and_pii_are_copied_verbatim(): void

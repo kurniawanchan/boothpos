@@ -30,6 +30,17 @@ class MenuActionsRouteCoverageTest extends TestCase
         'POST api/v1/payment-proofs' => 'unggah berkas bukti: pembayarannya sendiri digerbang per menu pada langkah berikutnya',
         'POST api/v1/sessions/{session}/reopen' => '063: aturan TETAP khusus peran Owner, diperiksa di CashierSessionController — sengaja bukan aksi yang bisa didelegasikan lewat editor peran',
         'POST api/v1/imports/master-data' => 'berkas satu untuk banyak entitas: aksi `import` diperiksa per menu di MasterDataImportController (MenuActions::userMayImportMasterData)',
+        // Customer commerce — API pelanggan: subjeknya akun pelanggan (guard `customer`), BUKAN peran staf, jadi tak ada
+        // izin menu yang bisa menggerbangnya. Token staf ditolak di sana oleh guard (CustomerTokenBoundaryTest).
+        'POST api/v1/customer/auth/register' => 'API pelanggan: pendaftaran publik, digerbang saklar fitur + limiter customer-register',
+        'POST api/v1/customer/auth/login' => 'API pelanggan: login publik, digerbang limiter customer-login',
+        'POST api/v1/customer/auth/logout' => 'API pelanggan: token milik sendiri (guard customer)',
+        'PUT api/v1/customer/me' => 'API pelanggan: profil milik sendiri (guard customer)',
+        'POST api/v1/customer/addresses' => 'API pelanggan: alamat milik sendiri (guard customer), digerbang saklar fitur',
+        'PUT api/v1/customer/addresses/{addressId}' => 'API pelanggan: alamat milik sendiri, dicari lewat pemiliknya (id akun lain = 404)',
+        'DELETE api/v1/customer/addresses/{addressId}' => 'API pelanggan: alamat milik sendiri, dicari lewat pemiliknya (id akun lain = 404)',
+        'POST api/v1/customer/orders/quote' => 'API pelanggan: hitung keranjang sendiri tanpa efek samping, digerbang saklar fitur',
+        'POST api/v1/customer/orders' => 'API pelanggan: checkout atas nama pemilik token, digerbang saklar fitur + limiter customer-checkout + Idempotency-Key',
     ];
 
     /** Pemetaan yang dikunci: "METODE uri" => "menu.aksi". Hanya rute ber-parameter-bebas diuji perilakunya di bawah. */
@@ -112,6 +123,20 @@ class MenuActionsRouteCoverageTest extends TestCase
             'PUT api/v1/customers/{customer}' => 'ability:customers',
             'POST api/v1/variants/{variant}/bom/complete' => 'ability:products,bom',
             'POST api/v1/sessions/{session}/close' => 'ability:session,edit',
+            // Customer commerce — terbit ke etalase publik adalah aksi bernama tersendiri, BUKAN `edit`.
+            'POST api/v1/products/{product}/publish' => 'ability:products,publish',
+            'POST api/v1/products/{product}/unpublish' => 'ability:products,publish',
+            'POST api/v1/variants/{variant}/publish' => 'ability:products,publish',
+            'POST api/v1/variants/{variant}/unpublish' => 'ability:products,publish',
+            // Customer commerce — fulfilment pesanan pelanggan: satu aksi bernama per transisi; ubah resi memakai `ship`.
+            'POST api/v1/customer-orders/{customerOrder}/confirm' => 'ability:customer_orders,confirm',
+            'POST api/v1/customer-orders/{customerOrder}/pack' => 'ability:customer_orders,pack',
+            'POST api/v1/customer-orders/{customerOrder}/ready' => 'ability:customer_orders,ready',
+            'POST api/v1/customer-orders/{customerOrder}/pickup' => 'ability:customer_orders,pickup',
+            'POST api/v1/customer-orders/{customerOrder}/ship' => 'ability:customer_orders,ship',
+            'PATCH api/v1/customer-orders/{customerOrder}/shipment' => 'ability:customer_orders,ship',
+            'POST api/v1/customer-orders/{customerOrder}/deliver' => 'ability:customer_orders,deliver',
+            'POST api/v1/customer-orders/{customerOrder}/cancel' => 'ability:customer_orders,cancel',
         ];
         $all = $this->gatedRoutes();
         foreach ($expected as $key => $mw) {

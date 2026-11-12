@@ -1,0 +1,28 @@
+meta {
+  name: 16 - Registrasi Email yang Sama (negative - 422)
+  type: http
+  seq: 16
+}
+
+post {
+  url: {{base_url}}/customer/auth/register
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Pelanggan Bruno A",
+    "email": "{{customer_email}}",
+    "password": "{{customer_password}}",
+    "phone": "080000000001"
+  }
+}
+
+tests {
+  test("ditolak 422 registration_failed - generik, tanpa errors.email", function () {
+    expect(res.status).to.equal(422);
+    expect(res.body.code).to.equal("registration_failed");
+    expect(res.body, "galat tidak boleh menyebut bahwa e-mail sudah terdaftar").to.not.have.property("errors");
+  });
+}

@@ -1,0 +1,29 @@
+meta {
+  name: 50 - Token Pelanggan Konfirmasi Pesanan (negative - 401)
+  type: http
+  seq: 50
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_order_staff_id}}/confirm
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+body:json {
+  {
+    "note": "Pelanggan mencoba mengonfirmasi sendiri."
+  }
+}
+
+tests {
+  test("ditolak 401 - token pelanggan tidak berlaku di aksi fulfilment staf POST /customer-orders/{id}/confirm (amplop galat staf tidak berubah)", function () {
+    expect(res.status).to.equal(401);
+    expect(res.body.message).to.equal("Unauthenticated.");
+    expect(res.body).to.not.have.property("code");
+  });
+}

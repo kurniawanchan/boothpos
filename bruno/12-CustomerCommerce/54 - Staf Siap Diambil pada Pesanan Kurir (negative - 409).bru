@@ -1,0 +1,28 @@
+meta {
+  name: 54 - Staf Siap Diambil pada Pesanan Kurir (negative - 409)
+  type: http
+  seq: 54
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_order_staff_id}}/ready
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "note": "Coba tandai siap diambil."
+  }
+}
+
+tests {
+  test("ditolak 409 wrong_fulfilment_method - siap diambil hanya untuk pesanan ambil di tempat", function () {
+    expect(res.status).to.equal(409);
+    expect(res.body.code).to.equal("wrong_fulfilment_method");
+  });
+}

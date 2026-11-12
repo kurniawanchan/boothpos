@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bahasa Indonesia adalah bahasa bawaan; terjemahan lain ditambahkan sebagai values-<kode>/. -->
+<resources>
+    <string name="app_name">BoothPOS Belanja</string>
+
+    <string name="app_nav_shop">Belanja</string>
+    <string name="app_nav_cart">Keranjang</string>
+    <string name="app_nav_orders">Pesanan</string>
+
+    <string name="app_title_shop">Belanja</string>
+    <string name="app_title_product_detail">Detail produk</string>
+    <string name="app_title_cart">Keranjang</string>
+    <string name="app_title_orders">Pesanan Saya</string>
+    <string name="app_title_order_detail">Detail pesanan</string>
+    <string name="app_title_account">Akun</string>
+    <string name="app_title_edit_profile">Ubah profil</string>
+    <string name="app_title_welcome">Akun</string>
+    <string name="app_title_sign_in">Masuk</string>
+    <string name="app_title_register">Daftar</string>
+    <string name="app_title_checkout">Checkout</string>
+    <string name="app_title_addresses">Alamat pengiriman</string>
+    <string name="app_title_address_form">Detail alamat</string>
+
+    <string name="app_action_account">Akun</string>
+    <string name="app_action_back">Kembali</string>
+    <!-- Plurals supaya terjemahan lain dapat membedakan bentuk jamak; bahasa Indonesia hanya punya "other". -->
+    <plurals name="app_cart_badge_description">
+        <item quantity="other">%1$d barang di keranjang</item>
+    </plurals>
+    <string name="app_cart_badge_overflow">99+</string>
+    <string name="app_profile_saved">Profil diperbarui.</string>
+    <!-- %1$s = nomor pesanan. -->
+    <string name="app_order_placed">Pesanan %1$s dibuat.</string>
+</resources>

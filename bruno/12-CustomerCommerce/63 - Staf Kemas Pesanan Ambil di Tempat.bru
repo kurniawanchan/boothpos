@@ -1,0 +1,28 @@
+meta {
+  name: 63 - Staf Kemas Pesanan Ambil di Tempat
+  type: http
+  seq: 63
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_pickup_order_staff_id}}/pack
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "note": "Pesanan sedang dikemas."
+  }
+}
+
+tests {
+  test("status berpindah ke packing", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data.status).to.equal("packing");
+  });
+}

@@ -1,0 +1,67 @@
+meta {
+  name: 6 - Buat Produk Etalase dengan Dua Varian
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/products
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "artist_id": {{storefront_artist_id}},
+    "category_id": {{storefront_category_id}},
+    "product_segment": "{{storefront_product_segment}}",
+    "name": "Etalase Bruno {{storefront_run_id}}",
+    "description": "Produk uji etalase dari koleksi Bruno.",
+    "is_preorder": false,
+    "variants": [
+      { "variant_name": "Ukuran S", "sell_price": 75000, "cost_price": 30000 },
+      { "variant_name": "Ukuran M (stok kosong)", "sell_price": 80000, "cost_price": 32000 }
+    ]
+  }
+}
+
+script:pre-request {
+  // Penanda run: nama produk unik, jadi folder ini bisa dijalankan berulang di database yang sama.
+  bru.setVar("storefront_run_id", String(Date.now()));
+  // code_prefix (ARTIST-KATEGORI-SEGMEN) unik di SELURUH tabel produk, termasuk produk terhapus
+  // (ProductCodeGenerator::buildCodePrefix); segmen acak 6 huruf A-Z mencegah tabrakan antar-run.
+  const huruf = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let segmen = "";
+  for (let i = 0; i < 6; i++) {
+    segmen += huruf.charAt(Math.floor(Math.random() * huruf.length));
+  }
+  bru.setVar("storefront_product_segment", segmen);
+}
+
+script:post-response {
+  if (res.status === 201) {
+    const kecil = res.body.variants.find(function (v) { return v.variant_name === "Ukuran S"; });
+    const kosong = res.body.variants.find(function (v) { return v.variant_name === "Ukuran M (stok kosong)"; });
+    bru.setVar("storefront_product_id", res.body.id);
+    bru.setVar("storefront_product_slug", res.body.slug);
+    if (kecil) {
+      bru.setVar("storefront_variant_id", kecil.id);
+    }
+    if (kosong) {
+      bru.setVar("storefront_empty_variant_id", kosong.id);
+    }
+  }
+}
+
+tests {
+  test("produk dibuat dengan slug publik dan belum terbit", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.slug).to.match(/^[a-z0-9-]+$/);
+    expect(res.body.published_at).to.equal(null);
+    expect(res.body.variants).to.have.length(2);
+  });
+}

@@ -1,0 +1,32 @@
+meta {
+  name: 4 - Ambil Artist Aktif
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{base_url}}/artists?is_active=1&per_page=100
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+script:post-response {
+  // Etalase hanya menampilkan produk dengan seller aktif. Kode artist ikut membentuk code_prefix
+  // (pola ART-CA-SEG), jadi hanya kode tiga huruf A-Z yang dipilih.
+  if (res.status === 200) {
+    const artist = (res.body.data || []).find(function (a) {
+      return a.is_active && /^[A-Za-z]{3}$/.test(a.code || "");
+    });
+    bru.setVar("storefront_artist_id", artist ? artist.id : "");
+  }
+}
+
+tests {
+  test("ada minimal satu artist aktif (prasyarat folder ini)", function () {
+    expect(res.status).to.equal(200);
+    expect(bru.getVar("storefront_artist_id"), "buat atau aktifkan satu artist dulu").to.be.ok;
+  });
+}

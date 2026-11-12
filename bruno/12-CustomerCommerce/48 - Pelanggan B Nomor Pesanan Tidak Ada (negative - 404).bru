@@ -1,0 +1,24 @@
+meta {
+  name: 48 - Pelanggan B Nomor Pesanan Tidak Ada (negative - 404)
+  type: http
+  seq: 48
+}
+
+get {
+  url: {{base_url}}/customer/orders/CO-0000000000
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_b_token}}
+}
+
+tests {
+  test("ditolak 404 not_found - isi respons sama persis dengan pesanan milik akun lain", function () {
+    expect(res.status).to.equal(404);
+    expect(res.body.code).to.equal("not_found");
+    const salinan = Object.assign({}, res.body);
+    delete salinan.request_id;
+    expect(JSON.stringify(salinan), "respons membocorkan keberadaan pesanan akun lain").to.equal(bru.getVar("cross_account_not_found_body"));
+  });
+}

@@ -7,6 +7,7 @@ use App\Models\Concerns\HasSellerScope;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -28,5 +29,20 @@ class Customer extends Model
     public function preorders(): HasMany
     {
         return $this->hasMany(Preorder::class);
+    }
+
+    /**
+     * Customer commerce — akun aplikasi pelanggan (paling banyak satu). Kontak
+     * yang dibuat staf TIDAK punya akun; hanya registrasi yang membuatnya.
+     */
+    public function account(): HasOne
+    {
+        return $this->hasOne(CustomerAccount::class);
+    }
+
+    /** Customer commerce — pesanan dari aplikasi pelanggan (bukan penjualan POS / pre-order). */
+    public function customerOrders(): HasMany
+    {
+        return $this->hasMany(CustomerOrder::class);
     }
 }

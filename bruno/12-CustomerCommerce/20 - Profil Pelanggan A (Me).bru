@@ -1,0 +1,26 @@
+meta {
+  name: 20 - Profil Pelanggan A (Me)
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{base_url}}/customer/me
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+  X-Request-Id: bruno-me-{{storefront_run_id}}
+}
+
+tests {
+  test("profil milik pemegang token, tanpa kata sandi atau id kontak internal", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data.email).to.equal(bru.getVar("customer_email"));
+    expect(res.body.data).to.have.all.keys("id", "name", "email", "phone", "email_verified", "created_at");
+  });
+  test("X-Request-Id dari klien dipantulkan untuk korelasi log", function () {
+    expect(res.getHeader("x-request-id")).to.equal("bruno-me-" + bru.getVar("storefront_run_id"));
+  });
+}

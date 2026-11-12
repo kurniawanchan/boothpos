@@ -1,0 +1,14 @@
+{
+ "data": {
+  "id": 1,
+  "label": "Rumah",
+  "recipient_name": "Pelanggan Bruno A",
+  "phone": "0800****0011",
+  "address_line": "Jl. Contoh Uji No. 1",
+  "city": "Bandung",
+  "province": "Jawa Barat",
+  "postal_code": "40111",
+  "notes": "Pagar hijau",
+  "is_default": true
+ }
+}

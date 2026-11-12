@@ -1,0 +1,29 @@
+{
+ "type": "https://boothpos.local/problems/price_changed",
+ "title": "Harga berubah",
+ "status": 409,
+ "detail": "Harga atau total pesanan berubah. Periksa ringkasan terbaru sebelum memesan.",
+ "code": "price_changed",
+ "errors": {
+  "quote": {
+   "fulfilment_method": "courier",
+   "lines": [
+    {
+     "variant_id": 1,
+     "product_slug": "etalase-bruno-1794456911541",
+     "name": "Etalase Bruno 1794456911541 — Ukuran S",
+     "image_url": null,
+     "unit_price": "80000.00",
+     "qty": 2,
+     "line_total": "160000.00",
+     "max_qty": 10
+    }
+   ],
+   "subtotal": "160000.00",
+   "shipping_cost": "0.00",
+   "shipping_cost_pending": true,
+   "total": "160000.00"
+  }
+ },
+ "request_id": "00000000-0000-4000-8000-000000000409"
+}

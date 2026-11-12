@@ -1,0 +1,16 @@
+{
+ "fulfilment_method": "courier",
+ "address_id": 1,
+ "contact": {
+  "name": "Pelanggan Bruno A",
+  "phone": "0800****0011"
+ },
+ "items": [
+  {
+   "variant_id": 1,
+   "qty": 2
+  }
+ ],
+ "notes": "Mohon dibungkus rapi.",
+ "expected_total": "150000.00"
+}

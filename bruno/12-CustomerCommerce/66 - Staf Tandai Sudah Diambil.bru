@@ -1,0 +1,29 @@
+meta {
+  name: 66 - Staf Tandai Sudah Diambil
+  type: http
+  seq: 66
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_pickup_order_staff_id}}/pickup
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "note": "Sudah diambil pelanggan."
+  }
+}
+
+tests {
+  test("sudah diambil: pesanan selesai", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data.status).to.equal("picked_up");
+    expect(res.body.data.completed_at).to.be.a("string");
+  });
+}

@@ -1,0 +1,38 @@
+meta {
+  name: 52 - Staf Konfirmasi Pesanan Kurir dengan Ongkir
+  type: http
+  seq: 52
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_order_staff_id}}/confirm
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "shipping_cost": 15000,
+    "note": "Ongkir sudah ditetapkan toko."
+  }
+}
+
+tests {
+  test("dikonfirmasi; ongkir ditetapkan toko dan total dihitung ulang", function () {
+    expect(res.status).to.equal(200);
+    const o = res.body.data;
+    expect(o.status).to.equal("confirmed");
+    expect(o.shipping_cost).to.equal("15000.00");
+    expect(o.total).to.equal((Number(o.subtotal) + 15000).toFixed(2));
+    expect(o.shipping_cost_pending).to.equal(false);
+    expect(o.timeline.some(function (e) { return e.event_type === "shipping_cost_set"; })).to.equal(true);
+  });
+  test("stok baru berkurang saat konfirmasi (10 - 2 = 8), bukan saat checkout", function () {
+    expect(res.body.data.stock_deducted_at).to.be.a("string");
+    expect(res.body.data.items[0].available_stock).to.equal(8);
+  });
+}

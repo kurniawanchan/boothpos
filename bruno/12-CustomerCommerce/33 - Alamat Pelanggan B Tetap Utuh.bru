@@ -1,0 +1,26 @@
+meta {
+  name: 33 - Alamat Pelanggan B Tetap Utuh
+  type: http
+  seq: 33
+}
+
+get {
+  url: {{base_url}}/customer/addresses
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_b_token}}
+}
+
+tests {
+  test("percobaan ubah dan hapus oleh akun lain tidak menyentuh alamat B", function () {
+    expect(res.status).to.equal(200);
+    const alamat = res.body.data.find(function (a) {
+      return Number(a.id) === Number(bru.getVar("customer_b_address_id"));
+    });
+    expect(alamat, "alamat B hilang").to.be.an("object");
+    expect(alamat.recipient_name).to.equal("Pelanggan Bruno B");
+    expect(alamat.address_line).to.equal("Jl. Contoh Uji No. 2");
+  });
+}

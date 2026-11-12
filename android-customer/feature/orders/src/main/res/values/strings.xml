@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bahasa Indonesia adalah bahasa bawaan; terjemahan lain ditambahkan sebagai values-<kode>/. -->
+<resources>
+    <!-- Kosakata status pesanan (delapan status kontrak + cadangan netral untuk status baru). -->
+    <string name="orders_status_awaiting_confirmation">Menunggu konfirmasi</string>
+    <string name="orders_status_awaiting_confirmation_explanation">Pesanan Anda sudah masuk dan sedang menunggu konfirmasi toko.</string>
+    <string name="orders_status_confirmed">Dikonfirmasi</string>
+    <string name="orders_status_confirmed_explanation">Toko sudah mengonfirmasi pesanan Anda dan akan segera menyiapkannya.</string>
+    <string name="orders_status_packing">Sedang dikemas</string>
+    <string name="orders_status_packing_explanation">Toko sedang menyiapkan dan mengemas barang pesanan Anda.</string>
+    <string name="orders_status_ready_for_pickup">Siap diambil</string>
+    <string name="orders_status_ready_for_pickup_explanation">Pesanan Anda siap diambil. Ikuti petunjuk pengambilan di bawah.</string>
+    <string name="orders_status_shipped">Dikirim</string>
+    <string name="orders_status_shipped_explanation">Pesanan Anda sudah diserahkan ke kurir. Rincian pengiriman ada di bawah.</string>
+    <string name="orders_status_delivered">Sudah sampai</string>
+    <string name="orders_status_delivered_explanation">Toko mencatat pesanan Anda sudah sampai di alamat tujuan.</string>
+    <string name="orders_status_picked_up">Sudah diambil</string>
+    <string name="orders_status_picked_up_explanation">Pesanan Anda sudah diambil. Terima kasih sudah berbelanja.</string>
+    <string name="orders_status_cancelled">Dibatalkan</string>
+    <string name="orders_status_cancelled_explanation">Pesanan ini dibatalkan dan tidak akan diproses.</string>
+    <string name="orders_status_unknown">Status diperbarui</string>
+    <string name="orders_status_unknown_explanation">Status pesanan ini belum dikenali oleh versi aplikasi ini. Perbarui aplikasi untuk melihat rinciannya.</string>
+
+    <!-- Kalimat peristiwa di riwayat pesanan. -->
+    <string name="orders_event_awaiting_confirmation">Pesanan dibuat, menunggu konfirmasi toko</string>
+    <string name="orders_event_confirmed">Pesanan dikonfirmasi toko</string>
+    <string name="orders_event_packing">Pesanan mulai dikemas</string>
+    <string name="orders_event_ready_for_pickup">Pesanan siap diambil</string>
+    <string name="orders_event_shipped">Pesanan diserahkan ke kurir</string>
+    <string name="orders_event_delivered">Pesanan sampai di tujuan</string>
+    <string name="orders_event_picked_up">Pesanan diambil</string>
+    <string name="orders_event_cancelled">Pesanan dibatalkan</string>
+    <string name="orders_event_unknown_status">Status pesanan diperbarui</string>
+    <string name="orders_event_tracking_updated">Toko memperbarui informasi pengiriman</string>
+    <string name="orders_event_shipping_cost_set">Toko menetapkan ongkos kirim</string>
+    <string name="orders_event_unknown_type">Pesanan diperbarui</string>
+
+    <string name="orders_method_pickup">Ambil di toko</string>
+    <string name="orders_method_courier">Dikirim kurir</string>
+
+    <!-- Daftar pesanan -->
+    <string name="orders_signed_out_title">Masuk untuk melihat pesanan</string>
+    <string name="orders_signed_out_message">Pesanan yang Anda buat dan statusnya tampil di sini setelah Anda masuk.</string>
+    <string name="orders_action_sign_in">Masuk</string>
+    <string name="orders_session_expired">Sesi berakhir, silakan masuk lagi.</string>
+    <string name="orders_empty_title">Belum ada pesanan</string>
+    <string name="orders_empty_message">Pesanan yang Anda buat akan tampil di sini.</string>
+    <string name="orders_refresh">Muat ulang</string>
+    <string name="orders_refresh_description">Muat ulang daftar pesanan</string>
+    <string name="orders_row_click_label">melihat detail pesanan</string>
+    <!-- %1$s = nomor pesanan. -->
+    <string name="orders_row_number">Pesanan %1$s</string>
+    <!-- %1$s = tanggal dan jam. -->
+    <string name="orders_row_created">Dibuat %1$s</string>
+    <!-- %1$s = nama barang pertama, %2$d = banyaknya barang lain. Plurals supaya terjemahan lain dapat membedakan bentuk jamak. -->
+    <plurals name="orders_row_items_more">
+        <item quantity="other">%1$s dan %2$d barang lainnya</item>
+    </plurals>
+    <plurals name="orders_row_items_count">
+        <item quantity="other">%1$d barang</item>
+    </plurals>
+    <!-- %1$s = jumlah uang. -->
+    <string name="orders_row_total">Total %1$s</string>
+    <string name="orders_loading_more">Memuat pesanan berikutnya…</string>
+    <string name="orders_load_more_failed">Pesanan berikutnya belum dapat dimuat.</string>
+    <string name="orders_offline_stale">Anda sedang offline. Menampilkan data yang terakhir dimuat.</string>
+    <string name="orders_refresh_failed">Data terbaru belum dapat dimuat. Yang tampil mungkin belum terbaru.</string>
+
+    <!-- Detail pesanan -->
+    <string name="orders_detail_not_found_title">Pesanan tidak ditemukan</string>
+    <string name="orders_detail_not_found_message">Pesanan ini tidak ada, atau tidak terdaftar di akun yang sedang masuk.</string>
+    <string name="orders_detail_not_found_action">Kembali ke daftar pesanan</string>
+    <string name="orders_detail_signed_out_title">Masuk untuk melihat pesanan ini</string>
+    <string name="orders_detail_signed_out_message">Rincian pesanan hanya ditampilkan untuk akun pemiliknya.</string>
+    <!-- %1$s = nama status; dibacakan pembaca layar sebagai judul bagian status. -->
+    <string name="orders_detail_status_description">Status pesanan: %1$s</string>
+    <!-- %1$s = tanggal dan jam. -->
+    <string name="orders_detail_status_updated">Diperbarui %1$s</string>
+    <string name="orders_detail_cancel_reason_title">Alasan pembatalan</string>
+    <string name="orders_detail_summary_title">Pesanan</string>
+    <string name="orders_detail_number_label">Nomor pesanan</string>
+    <string name="orders_detail_created_label">Dibuat</string>
+    <string name="orders_detail_method_label">Metode</string>
+    <string name="orders_detail_items_title">Barang pesanan</string>
+    <!-- %1$s = jumlah, %2$s = harga satuan. -->
+    <string name="orders_detail_item_quantity">%1$s × %2$s</string>
+    <string name="orders_detail_instructions_pickup_title">Petunjuk pengambilan</string>
+    <string name="orders_detail_instructions_courier_title">Petunjuk pengiriman</string>
+    <string name="orders_detail_instructions_title">Petunjuk dari toko</string>
+    <string name="orders_detail_address_title">Alamat pengiriman</string>
+    <!-- %1$s = catatan alamat dari pelanggan. -->
+    <string name="orders_detail_address_notes">Catatan alamat: %1$s</string>
+    <string name="orders_detail_contact_title">Kontak pesanan</string>
+    <string name="orders_detail_notes_title">Catatan Anda</string>
+    <string name="orders_detail_totals_title">Rincian biaya</string>
+    <string name="orders_detail_subtotal">Subtotal</string>
+    <string name="orders_detail_shipping_cost">Ongkos kirim</string>
+    <string name="orders_detail_shipping_pending">Dikonfirmasi toko</string>
+    <string name="orders_detail_shipping_pending_note">Ongkos kirim ditetapkan toko saat pesanan dikonfirmasi. Total di bawah belum termasuk ongkos kirim.</string>
+    <string name="orders_detail_total">Total</string>
+
+    <!-- Pelacakan -->
+    <string name="orders_tracking_title">Pelacakan</string>
+    <string name="orders_tracking_updated_by_store">Diperbarui oleh toko</string>
+    <string name="orders_tracking_updated_by_store_note">Status dan informasi pengiriman dicatat oleh staf toko, bukan langsung dari kurir.</string>
+    <string name="orders_tracking_courier_label">Kurir</string>
+    <string name="orders_tracking_service_label">Layanan</string>
+    <string name="orders_tracking_number_label">Nomor resi</string>
+    <string name="orders_tracking_number_missing">Belum ada nomor resi</string>
+    <string name="orders_tracking_copy">Salin</string>
+    <string name="orders_tracking_copy_description">Salin nomor resi</string>
+    <string name="orders_tracking_copied">Nomor resi disalin.</string>
+    <string name="orders_tracking_dispatched_label">Diserahkan ke kurir</string>
+    <string name="orders_tracking_delivered_label">Sampai di tujuan</string>
+    <string name="orders_tracking_no_shipment_courier">Informasi pengiriman tampil di sini setelah toko menyerahkan pesanan ke kurir.</string>
+    <string name="orders_tracking_track_parcel">Lacak paket</string>
+    <string name="orders_tracking_handoff_title">Buka situs kurir?</string>
+    <string name="orders_tracking_handoff_message">Anda akan membuka situs kurir di luar aplikasi.</string>
+    <string name="orders_tracking_handoff_confirm">Buka situs kurir</string>
+    <string name="orders_tracking_handoff_cancel">Batal</string>
+    <string name="orders_tracking_open_failed">Tidak ada aplikasi di perangkat ini yang dapat membuka tautan tersebut.</string>
+    <string name="orders_tracking_refresh">Perbarui status</string>
+
+    <!-- Riwayat -->
+    <string name="orders_timeline_title">Riwayat pesanan</string>
+    <string name="orders_timeline_empty">Belum ada riwayat untuk pesanan ini.</string>
+    <string name="orders_time_unknown">Waktu tidak tersedia</string>
+</resources>

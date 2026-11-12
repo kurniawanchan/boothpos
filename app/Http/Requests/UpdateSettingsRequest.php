@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Setting;
 use App\Support\AppName;
+use App\Support\CustomerCommerceGate;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
@@ -88,10 +89,37 @@ class UpdateSettingsRequest extends FormRequest
                     if ($key === 'theme_accent_color' && $value !== null && $value !== '' && ! preg_match('/^#[0-9a-fA-F]{6}$/', $value)) {
                         $fail('Warna tema harus berupa kode hex 6 digit, mis. #2f9e6e.');
                     }
+
+                    // Customer commerce — saklar toko online. Hanya nilai boolean yang jelas: tanpa cabang ini
+                    // kunci apa pun diterima apa adanya, jadi nilai seperti 'banana' ikut tersimpan dan arti
+                    // "aktif/nonaktif"-nya bergantung pada cara baca. Null ditolak: mematikan = false eksplisit.
+                    if ($key === CustomerCommerceGate::KEY && ! in_array($value, [true, false, 1, 0, '1', '0', 'true', 'false'], true)) {
+                        $fail(__('customer_commerce.settings.enabled_must_be_boolean'));
+                    }
+
+                    // Customer commerce — teks petunjuk ambil di tempat / kurir yang ditampilkan ke PELANGGAN di
+                    // aplikasi: teks biasa yang pendek. Tag HTML dan karakter kontrol ditolak supaya isinya tidak
+                    // pernah bisa ditafsirkan sebagai markup oleh klien mana pun. Kosong (null) = tanpa petunjuk.
+                    if (in_array($key, CustomerCommerceGate::INSTRUCTION_KEYS, true) && $value !== null && ! $this->isShortPlainText($value)) {
+                        $fail(__('customer_commerce.settings.instructions_must_be_plain_text', ['max' => CustomerCommerceGate::INSTRUCTIONS_MAX_LENGTH]));
+                    }
                 },
             ],
             'settings.*.type' => ['sometimes', 'in:string,integer,decimal,boolean,json'],
             'settings.*.group' => ['sometimes', 'string', 'max:50'],
         ];
+    }
+
+    /**
+     * Customer commerce — teks biasa: string, paling banyak INSTRUCTIONS_MAX_LENGTH karakter, tanpa tag
+     * HTML dan tanpa karakter kontrol selain baris baru/tab. Tanda `<` atau `&` lepas ("Harga < 50rb")
+     * tetap boleh; yang ditolak adalah bentuk tag (`<b>`, `</a>`, `<script …>`).
+     */
+    private function isShortPlainText(mixed $value): bool
+    {
+        return is_string($value)
+            && mb_strlen($value) <= CustomerCommerceGate::INSTRUCTIONS_MAX_LENGTH
+            && preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $value) !== 1
+            && preg_match('/<\s*\/?\s*[a-zA-Z!][^>]*>/', $value) !== 1;
     }
 }

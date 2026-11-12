@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bahasa Indonesia adalah bahasa bawaan; terjemahan lain ditambahkan sebagai values-<kode>/. -->
+<resources>
+    <!-- Daftar produk -->
+    <string name="catalog_search_label">Cari produk</string>
+    <string name="catalog_search_clear">Hapus pencarian</string>
+    <string name="catalog_categories_label">Filter kategori</string>
+    <string name="catalog_category_all">Semua</string>
+    <string name="catalog_sort_description">Urutkan produk. Urutan sekarang: %1$s</string>
+    <string name="catalog_sort_newest">Terbaru</string>
+    <string name="catalog_sort_name">Nama A–Z</string>
+    <string name="catalog_sort_price_asc">Harga terendah</string>
+    <string name="catalog_sort_price_desc">Harga tertinggi</string>
+    <string name="catalog_refresh">Muat ulang</string>
+    <string name="catalog_price_from">Mulai dari %1$s</string>
+    <string name="catalog_in_stock">Tersedia</string>
+    <string name="catalog_out_of_stock">Stok habis</string>
+    <string name="catalog_card_click_label">melihat detail produk</string>
+    <string name="catalog_empty_title">Belum ada produk</string>
+    <string name="catalog_empty_message">Produk toko akan tampil di sini setelah tersedia.</string>
+    <string name="catalog_no_results_title">Produk tidak ditemukan</string>
+    <string name="catalog_no_results_message">Coba kata kunci lain atau pilih kategori yang berbeda.</string>
+    <string name="catalog_no_results_action">Hapus pencarian dan filter</string>
+    <string name="catalog_loading_more">Memuat produk berikutnya…</string>
+    <string name="catalog_load_more_failed">Produk berikutnya belum dapat dimuat.</string>
+    <string name="catalog_offline_cached">Anda sedang offline. Menampilkan produk yang terakhir dimuat.</string>
+    <string name="catalog_refresh_failed">Data terbaru belum dapat dimuat. Yang tampil mungkin belum terbaru.</string>
+
+    <!-- Detail produk -->
+    <string name="catalog_detail_image_description">Foto %1$s</string>
+    <string name="catalog_detail_seller">Dijual oleh %1$s</string>
+    <string name="catalog_detail_category">Kategori: %1$s</string>
+    <string name="catalog_detail_variants_title">Pilih varian</string>
+    <string name="catalog_detail_quantity_title">Jumlah</string>
+    <string name="catalog_detail_quantity_decrease">Kurangi jumlah</string>
+    <string name="catalog_detail_quantity_increase">Tambah jumlah</string>
+    <!-- Plurals supaya terjemahan lain dapat membedakan bentuk jamak; bahasa Indonesia hanya punya "other". -->
+    <plurals name="catalog_detail_quantity_value">
+        <item quantity="other">Jumlah: %1$d</item>
+    </plurals>
+    <plurals name="catalog_detail_quantity_max">
+        <item quantity="other">Maksimal %1$d per pesanan</item>
+    </plurals>
+    <string name="catalog_detail_description_title">Deskripsi</string>
+    <string name="catalog_detail_add_to_cart">Tambah ke keranjang</string>
+    <string name="catalog_detail_unavailable">Produk ini sedang tidak dapat dibeli karena stoknya habis.</string>
+    <string name="catalog_detail_offline">Anda sedang offline. Menampilkan data yang terakhir dimuat; harga dan stok dipastikan lagi saat checkout.</string>
+    <string name="catalog_detail_not_found_title">Produk tidak lagi tersedia</string>
+    <string name="catalog_detail_not_found_message">Produk ini sudah tidak dijual atau stoknya habis.</string>
+    <string name="catalog_detail_not_found_action">Kembali ke daftar produk</string>
+    <plurals name="catalog_detail_added">
+        <item quantity="other">%1$d barang ditambahkan ke keranjang.</item>
+    </plurals>
+    <plurals name="catalog_detail_added_capped">
+        <item quantity="other">Jumlah di keranjang disesuaikan ke batas %1$d barang.</item>
+    </plurals>
+    <plurals name="catalog_detail_cart_full">
+        <item quantity="other">Keranjang sudah berisi %1$d jenis barang, batas untuk satu pesanan.</item>
+    </plurals>
+    <string name="catalog_detail_variant_unavailable">Varian ini sedang tidak tersedia.</string>
+    <string name="catalog_detail_add_failed">Barang belum dapat ditambahkan ke keranjang. Silakan coba lagi.</string>
+    <string name="catalog_detail_view_cart">Lihat keranjang</string>
+</resources>

@@ -1,0 +1,32 @@
+meta {
+  name: 44 - Detail Pesanan Kurir
+  type: http
+  seq: 44
+}
+
+get {
+  url: {{base_url}}/customer/orders/{{customer_order_number}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("detail memuat snapshot alamat, item, dan kontak", function () {
+    expect(res.status).to.equal(200);
+    const o = res.body.data;
+    expect(o.status).to.equal("awaiting_confirmation");
+    expect(o.fulfilment_method).to.equal("courier");
+    expect(o.items[0].qty).to.equal(2);
+    expect(o.shipping_address.city).to.equal("Bandung");
+    expect(o.contact.email).to.equal(bru.getVar("customer_email"));
+    expect(o.shipment).to.equal(null);
+  });
+  test("linimasa pelanggan tanpa metadata atau identitas staf", function () {
+    res.body.data.timeline.forEach(function (e) {
+      expect(e).to.have.all.keys("status", "event_type", "note", "occurred_at");
+    });
+  });
+}

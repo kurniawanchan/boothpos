@@ -1,0 +1,35 @@
+meta {
+  name: 35 - Quote Varian Stok Nol (negative - 409)
+  type: http
+  seq: 35
+}
+
+post {
+  url: {{base_url}}/customer/orders/quote
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+body:json {
+  {
+    "fulfilment_method": "pickup",
+    "items": [
+      { "variant_id": {{storefront_empty_variant_id}}, "qty": 1 }
+    ]
+  }
+}
+
+tests {
+  test("ditolak 409 cart_invalid - varian stok nol tidak bisa dibeli walau sudah terbit", function () {
+    expect(res.status).to.equal(409);
+    expect(res.body.code).to.equal("cart_invalid");
+    const masalah = res.body.errors.items[0];
+    expect(masalah.variant_id).to.equal(Number(bru.getVar("storefront_empty_variant_id")));
+    expect(masalah.reason).to.equal("unavailable");
+    expect(masalah.max_qty).to.equal(0);
+  });
+}

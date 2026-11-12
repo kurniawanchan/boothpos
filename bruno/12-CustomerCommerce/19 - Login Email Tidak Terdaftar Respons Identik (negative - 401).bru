@@ -1,0 +1,32 @@
+meta {
+  name: 19 - Login Email Tidak Terdaftar Respons Identik (negative - 401)
+  type: http
+  seq: 19
+}
+
+post {
+  url: {{base_url}}/customer/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{unknown_customer_email}}",
+    "password": "{{customer_password}}"
+  }
+}
+
+script:pre-request {
+  bru.setVar("unknown_customer_email", "bruno.tidakada+" + Date.now() + "@example.test");
+}
+
+tests {
+  test("ditolak 401 invalid_credentials - isi respons sama persis dengan password salah", function () {
+    expect(res.status).to.equal(401);
+    expect(res.body.code).to.equal("invalid_credentials");
+    const salinan = Object.assign({}, res.body);
+    delete salinan.request_id;
+    expect(JSON.stringify(salinan), "respons membedakan e-mail terdaftar dari yang tidak").to.equal(bru.getVar("invalid_credentials_body"));
+  });
+}

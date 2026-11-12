@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Bahasa Indonesia adalah bahasa bawaan; terjemahan lain ditambahkan sebagai values-<kode>/. -->
+<resources>
+    <!-- Keadaan layar -->
+    <string name="checkout_sign_in_title">Masuk untuk melanjutkan</string>
+    <string name="checkout_sign_in_message">Pesanan dibuat atas nama akun Anda. Isi keranjang tetap tersimpan.</string>
+    <string name="checkout_sign_in_action">Masuk atau daftar</string>
+    <string name="checkout_empty_cart_title">Keranjang Anda kosong</string>
+    <string name="checkout_empty_cart_message">Tambahkan barang ke keranjang sebelum membuat pesanan.</string>
+    <string name="checkout_empty_cart_action">Kembali ke keranjang</string>
+    <string name="checkout_placed_title">Pesanan dibuat</string>
+    <!-- %1$s = nomor pesanan. -->
+    <string name="checkout_placed_message">Nomor pesanan %1$s. Toko akan memeriksa dan mengonfirmasi pesanan Anda.</string>
+    <string name="checkout_placed_action">Lihat pesanan</string>
+
+    <!-- Langkah -->
+    <string name="checkout_step_method">Langkah 1 dari 3 · Cara menerima pesanan</string>
+    <string name="checkout_step_details">Langkah 2 dari 3 · Alamat dan kontak</string>
+    <string name="checkout_step_review">Langkah 3 dari 3 · Ringkasan pesanan</string>
+    <string name="checkout_action_continue">Lanjut</string>
+    <string name="checkout_action_to_review">Lanjut ke ringkasan</string>
+    <string name="checkout_action_place_order">Buat pesanan</string>
+    <string name="checkout_action_cancel">Batal</string>
+
+    <!-- Langkah 1 -->
+    <string name="checkout_method_title">Cara menerima pesanan</string>
+    <string name="checkout_method_missing">Pilih cara menerima pesanan.</string>
+    <string name="checkout_method_pickup">Ambil di toko</string>
+    <string name="checkout_method_pickup_hint">Anda mengambil sendiri pesanan di toko.</string>
+    <string name="checkout_method_courier">Dikirim kurir</string>
+    <string name="checkout_method_courier_hint">Dikirim ke alamat Anda. Ongkos kirim dikonfirmasi toko.</string>
+    <string name="checkout_instructions_title">Petunjuk dari toko</string>
+
+    <!-- Langkah 2 -->
+    <string name="checkout_address_title">Alamat pengiriman</string>
+    <string name="checkout_address_missing">Pilih atau tambahkan alamat pengiriman.</string>
+    <string name="checkout_address_loading">Memuat alamat…</string>
+    <!-- %1$s = penyebab (mis. "Periksa koneksi internet Anda, lalu coba lagi."). -->
+    <string name="checkout_address_load_failed">Alamat belum dapat dimuat. %1$s</string>
+    <string name="checkout_address_empty">Belum ada alamat tersimpan. Tambahkan alamat untuk pengiriman.</string>
+    <string name="checkout_address_add">Tambah alamat</string>
+    <string name="checkout_address_edit">Ubah</string>
+    <string name="checkout_contact_title">Kontak pemesan</string>
+    <string name="checkout_contact_hint">Dipakai toko untuk menghubungi Anda tentang pesanan ini.</string>
+    <string name="checkout_contact_name">Nama</string>
+    <string name="checkout_contact_phone">Nomor telepon</string>
+    <string name="checkout_notes">Catatan</string>
+    <string name="checkout_notes_optional">Catatan untuk toko (opsional)</string>
+    <string name="checkout_notes_hint">Maksimal 500 karakter.</string>
+
+    <!-- Langkah 3 -->
+    <string name="checkout_quote_loading">Menghitung total dari toko…</string>
+    <string name="checkout_review_items_title">Barang</string>
+    <!-- %1$s = jumlah, %2$s = harga satuan terformat. -->
+    <string name="checkout_review_line_quantity">%1$s × %2$s</string>
+    <string name="checkout_review_fulfilment_title">Cara menerima pesanan</string>
+    <!-- %1$s = nama, %2$s = nomor telepon. -->
+    <string name="checkout_review_contact">%1$s · %2$s</string>
+    <!-- %1$s = catatan pelanggan. -->
+    <string name="checkout_review_notes">Catatan: %1$s</string>
+    <string name="checkout_review_cost_title">Rincian biaya</string>
+    <string name="checkout_review_subtotal">Subtotal</string>
+    <string name="checkout_review_shipping">Ongkos kirim</string>
+    <string name="checkout_review_shipping_pending">Ongkos kirim dikonfirmasi toko</string>
+    <string name="checkout_review_total">Total</string>
+    <string name="checkout_review_total_excludes_shipping">Belum termasuk ongkos kirim, yang dikonfirmasi toko setelah pesanan dibuat.</string>
+    <string name="checkout_notice_prices_updated">Harga di bawah adalah harga terbaru dari toko dan berbeda dari yang tampil di keranjang.</string>
+    <string name="checkout_notice_confirm_again">Rincian pesanan dihitung ulang. Periksa kembali, lalu tekan Buat pesanan.</string>
+    <string name="checkout_price_changed_title">Harga berubah</string>
+    <!-- %1$s = total sebelumnya, %2$s = total baru. -->
+    <string name="checkout_price_changed_message">Total sebelumnya %1$s, sekarang %2$s. Pesanan belum dibuat. Periksa rincian terbaru, lalu tekan Buat pesanan bila Anda setuju.</string>
+    <string name="checkout_price_changed_action">Lihat rincian</string>
+
+    <string name="checkout_cart_invalid_message">Beberapa barang perlu diperbaiki sebelum pesanan dapat dibuat. Pesanan belum dibuat.</string>
+    <string name="checkout_cart_invalid_action">Perbaiki keranjang</string>
+    <string name="checkout_cart_invalid_unknown_item">Barang di keranjang</string>
+    <string name="checkout_cart_issue_unavailable">Tidak lagi tersedia.</string>
+    <!-- %1$s = jumlah maksimum yang dapat dipesan. -->
+    <string name="checkout_cart_issue_stock">Stok tidak cukup. Tersedia paling banyak %1$s.</string>
+    <string name="checkout_cart_issue_limit">Melebihi batas per pesanan. Paling banyak %1$s.</string>
+
+    <string name="checkout_unknown_title">Status pesanan belum diketahui</string>
+    <string name="checkout_unknown_message">Jawaban dari toko tidak sampai, jadi belum diketahui apakah pesanan Anda sudah tercatat. Tekan tombol di bawah untuk memeriksanya. Pesanan tidak akan dibuat dua kali.</string>
+    <string name="checkout_unknown_action">Periksa status pesanan</string>
+    <string name="checkout_leave_unknown_title">Keluar dari checkout?</string>
+    <string name="checkout_leave_unknown_message">Status pesanan belum diketahui. Bila keluar sekarang, periksa menu Pesanan sebelum memesan lagi supaya tidak terpesan dua kali.</string>
+    <string name="checkout_leave_unknown_stay">Tetap di sini</string>
+    <string name="checkout_leave_unknown_leave">Keluar</string>
+
+    <!-- Alamat: tampilan -->
+    <!-- %1$s = label alamat atau nama penerima. -->
+    <string name="checkout_address_title_default">%1$s (alamat utama)</string>
+    <!-- %1$s = nama penerima, %2$s = nomor telepon. -->
+    <string name="checkout_address_recipient">%1$s · %2$s</string>
+    <!-- %1$s = catatan alamat. -->
+    <string name="checkout_address_notes">Catatan: %1$s</string>
+
+    <!-- Alamat: daftar -->
+    <string name="checkout_address_list_empty_title">Belum ada alamat</string>
+    <string name="checkout_address_list_empty_message">Simpan alamat supaya pesanan dengan kurir lebih cepat dibuat.</string>
+    <string name="checkout_address_set_default">Jadikan alamat utama</string>
+    <string name="checkout_address_delete">Hapus</string>
+    <!-- %1$s = label alamat atau nama penerima. -->
+    <string name="checkout_address_edit_named">Ubah alamat %1$s</string>
+    <string name="checkout_address_delete_named">Hapus alamat %1$s</string>
+    <string name="checkout_address_delete_title">Hapus alamat?</string>
+    <string name="checkout_address_delete_message">Alamat %1$s akan dihapus. Pesanan yang sudah dibuat tidak berubah.</string>
+    <string name="checkout_address_updating">Memperbarui alamat…</string>
+    <string name="checkout_address_reload">Muat ulang</string>
+    <string name="checkout_address_limit_reached">Jumlah alamat sudah mencapai batas. Hapus salah satu alamat lebih dulu.</string>
+    <string name="checkout_address_gone">Alamat ini sudah tidak ada. Mungkin sudah dihapus dari perangkat lain.</string>
+    <string name="checkout_address_not_found_title">Alamat tidak ditemukan</string>
+    <string name="checkout_address_not_found_action">Kembali</string>
+
+    <!-- Alamat: formulir -->
+    <string name="checkout_address_field_label">Label alamat</string>
+    <string name="checkout_address_field_label_hint">Contoh: Rumah, Kantor.</string>
+    <string name="checkout_address_field_recipient">Nama penerima</string>
+    <string name="checkout_address_field_phone">Nomor telepon penerima</string>
+    <string name="checkout_address_field_line">Alamat lengkap</string>
+    <string name="checkout_address_field_city">Kota/Kabupaten</string>
+    <string name="checkout_address_field_province">Provinsi</string>
+    <string name="checkout_address_field_postal">Kode pos</string>
+    <string name="checkout_address_field_notes">Catatan untuk kurir</string>
+    <string name="checkout_address_field_notes_hint">Contoh: patokan atau warna pagar.</string>
+    <!-- %1$s = nama kolom. -->
+    <string name="checkout_field_optional">%1$s (opsional)</string>
+    <string name="checkout_address_default_toggle">Jadikan alamat utama</string>
+    <string name="checkout_address_default_hint">Alamat utama dipilih otomatis saat checkout.</string>
+    <string name="checkout_address_default_locked">Ini alamat utama Anda. Untuk menggantinya, jadikan alamat lain sebagai alamat utama.</string>
+    <string name="checkout_address_save">Simpan alamat</string>
+
+    <!-- Galat kolom. %1$s = nama kolom, %2$d = batas karakter. -->
+    <string name="checkout_error_required">%1$s wajib diisi.</string>
+    <!-- Plurals supaya terjemahan lain dapat membedakan bentuk jamak; bahasa Indonesia hanya punya "other". -->
+    <plurals name="checkout_error_too_long">
+        <item quantity="other">%1$s maksimal %2$d karakter.</item>
+    </plurals>
+    <string name="checkout_error_invalid">%1$s tidak valid.</string>
+</resources>

@@ -1,0 +1,36 @@
+meta {
+  name: 49 - Staf Cari ID Pesanan Kurir
+  type: http
+  seq: 49
+}
+
+get {
+  url: {{base_url}}/customer-orders?q={{customer_order_number}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+script:post-response {
+  // Rute staf memakai id numerik; pelanggan hanya mengenal order_number. Id dicari lewat ?q=.
+  if (res.status === 200) {
+    const pesanan = (res.body.data || []).find(function (o) {
+      return o.order_number === bru.getVar("customer_order_number");
+    });
+    bru.setVar("customer_order_staff_id", pesanan ? pesanan.id : "");
+  }
+}
+
+tests {
+  test("pesanan kurir tampil di daftar staf dan masih menunggu konfirmasi", function () {
+    expect(res.status).to.equal(200);
+    const pesanan = res.body.data.find(function (o) {
+      return o.order_number === bru.getVar("customer_order_number");
+    });
+    expect(pesanan, "pesanan tidak ditemukan").to.be.an("object");
+    expect(pesanan.status).to.equal("awaiting_confirmation");
+    expect(pesanan.fulfilment_method).to.equal("courier");
+  });
+}

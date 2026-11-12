@@ -1,0 +1,17 @@
+{
+ "data": {
+  "order_number": "CO-V1NKWSJQCN",
+  "status": "awaiting_confirmation",
+  "fulfilment_method": "courier",
+  "updated_by": "store",
+  "shipment": null,
+  "timeline": [
+   {
+    "status": "awaiting_confirmation",
+    "event_type": "status_changed",
+    "note": null,
+    "occurred_at": "2026-11-12T04:15:26+00:00"
+   }
+  ]
+ }
+}

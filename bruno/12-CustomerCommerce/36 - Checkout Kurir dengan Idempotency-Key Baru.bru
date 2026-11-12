@@ -1,0 +1,61 @@
+meta {
+  name: 36 - Checkout Kurir dengan Idempotency-Key Baru
+  type: http
+  seq: 36
+}
+
+post {
+  url: {{base_url}}/customer/orders
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+  Idempotency-Key: {{idempotency_key}}
+}
+
+body:json {
+  {
+    "fulfilment_method": "courier",
+    "address_id": {{customer_address_id}},
+    "contact": { "name": "Pelanggan Bruno A", "phone": "080000000011" },
+    "items": [
+      { "variant_id": {{storefront_variant_id}}, "qty": 2 }
+    ],
+    "notes": "Mohon dibungkus rapi.",
+    "expected_total": "{{quote_total}}"
+  }
+}
+
+script:pre-request {
+  function uuidv4() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === "x" ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+  // Kunci dibuat SEKALI di sini. Request 37 mengirim ulang kunci yang sama TANPA pre-request,
+  // seperti aplikasi yang mengulang permintaan setelah koneksi putus.
+  bru.setVar("idempotency_key", uuidv4());
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("customer_order_number", res.body.data.order_number);
+  }
+}
+
+tests {
+  test("pesanan dibuat 201 dengan nomor publik acak, menunggu konfirmasi toko", function () {
+    expect(res.status).to.equal(201);
+    const o = res.body.data;
+    expect(o.order_number).to.match(/^CO-[0-9A-HJKMNP-TV-Z]{10}$/);
+    expect(o.status).to.equal("awaiting_confirmation");
+    expect(o.total).to.equal(bru.getVar("quote_total"));
+    expect(o.shipping_cost_pending).to.equal(true);
+    expect(o.timeline).to.have.length(1);
+    expect(o.timeline[0].status).to.equal("awaiting_confirmation");
+  });
+}

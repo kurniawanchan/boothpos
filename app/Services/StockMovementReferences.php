@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Models\CustomerOrderItem;
 use App\Models\OrderItem;
 use App\Models\PreorderItem;
 use App\Models\StockMovement;
+use App\Support\ModeGate;
 use Illuminate\Support\Collection;
 
 /**
@@ -18,6 +20,8 @@ use Illuminate\Support\Collection;
  *   - return + order_item     : id ITEM order      (OrderService::void)
  *   - purchase/preorder_handover + preorder_item : id ITEM pre-order (tiba / serah terima)
  *   - purchase + preorder     : id PRE-ORDER       (selisih edit pre-order, sejak 036)
+ *   - sale/return + customer_order_item : id ITEM pesanan pelanggan (konfirmasi / pembatalan
+ *     oleh staf, customer commerce) — id item di KEDUA arah, tidak meniru konvensi POS di atas
  * Baris lama dari jalur edit pre-order tersimpan sebagai `preorder_item`
  * berisi id pre-order; ia diselesaikan sebagai item dan hanya lolos bila item
  * itu memang milik varian yang sama (risiko sisa: id pre-order kebetulan sama
@@ -34,7 +38,8 @@ class StockMovementReferences
 {
     /**
      * @param  Collection<int, StockMovement>  $movements
-     * @return array<int, array{type: string, id: int, number: string}|null> dikunci id pergerakan
+     * @return array<int, array{type: string, id: int, number: string}|null> dikunci id pergerakan;
+     *                                                                         type = order | preorder | customer_order
      */
     public function resolve(Collection $movements): array
     {
@@ -42,8 +47,38 @@ class StockMovementReferences
 
         $this->resolveOrders($movements, $result);
         $this->resolvePreorders($movements, $result);
+        $this->resolveCustomerOrders($movements, $result);
 
         return $result;
+    }
+
+    /**
+     * Customer commerce — pengurangan stok saat staf mengonfirmasi pesanan pelanggan (`sale`) dan
+     * pengembaliannya saat dibatalkan (`return`). reference_id = id item pesanan; sah bila item itu
+     * milik varian pergerakannya. `customer_order_items` tidak punya data_mode, jadi mode disaring
+     * eksplisit lewat pesanannya (aturan query pada tabel anak).
+     */
+    private function resolveCustomerOrders(Collection $movements, array &$result): void
+    {
+        $rowsOf = $movements->filter(fn ($m) => in_array($m->type, ['sale', 'return'], true) && $m->reference_type === 'customer_order_item' && $m->reference_id);
+
+        if ($rowsOf->isEmpty()) {
+            return;
+        }
+
+        $rows = CustomerOrderItem::query()
+            ->join('customer_orders', 'customer_orders.id', '=', 'customer_order_items.customer_order_id')
+            ->where('customer_orders.data_mode', ModeGate::current())
+            ->whereIn('customer_order_items.id', $rowsOf->pluck('reference_id')->unique())
+            ->get(['customer_order_items.id as item_id', 'customer_order_items.variant_id', 'customer_order_items.customer_order_id', 'customer_orders.order_number'])
+            ->keyBy('item_id');
+
+        foreach ($rowsOf as $m) {
+            $hit = $rows->get($m->reference_id);
+            $result[$m->id] = $hit && (int) $hit->variant_id === (int) $m->variant_id
+                ? ['type' => 'customer_order', 'id' => (int) $hit->customer_order_id, 'number' => $hit->order_number]
+                : null;
+        }
     }
 
     private function resolveOrders(Collection $movements, array &$result): void
