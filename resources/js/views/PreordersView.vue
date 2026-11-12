@@ -291,6 +291,8 @@ const columns = computed(() => [
   { key: 'status', label: t('preorders.col_status'), sortable: true },
   { key: 'dispatch_status', label: t('preorders.col_dispatch_status') },
   { key: 'fulfillment', label: t('preorders.col_fulfillment'), sortable: true },
+  // 068 — diurutkan di server (whitelist applySort()); baris Ambil Sendiri ("—") selalu di akhir.
+  { key: 'shipping_cost', label: t('preorders.col_shipping_fee'), sortable: true },
   { key: 'total_amount', label: t('preorders.col_total'), sortable: true },
   { key: 'outstanding', label: t('preorders.col_outstanding'), sortable: true },
   { key: 'created_at', label: t('preorders.col_created'), sortable: true },
@@ -1442,6 +1444,11 @@ async function saveShipmentChanges() {
         <span class="text-[11.5px] text-muted-3">{{ t('preorders.summary_grand_total') }}</span>
         <span class="text-[19px] font-extrabold tracking-tight">{{ formatIDR(summary.grand_total) }}</span>
       </div>
+      <!-- 068 — total ongkir himpunan terfilter yang sama (Mail Order, tanpa cancelled). Respons lama tanpa kunci ini tampil Rp 0 karena formatIDR menolak nilai non-numerik. -->
+      <div class="flex min-w-[150px] flex-col gap-0.5 border-l border-line-6 pl-4" data-testid="summary-shipping-fee">
+        <span class="text-[11.5px] text-muted-3">{{ t('preorders.summary_shipping_fee') }}</span>
+        <span class="text-[19px] font-extrabold tracking-tight">{{ formatIDR(summary.total_shipping_fee) }}</span>
+      </div>
       <div class="flex min-w-[150px] flex-col gap-0.5 border-l border-line-6 pl-4">
         <span class="text-[11.5px] text-muted-3">{{ t('preorders.summary_outstanding') }}</span>
         <span class="text-[19px] font-extrabold tracking-tight text-warn-text">{{ formatIDR(summary.total_outstanding) }}</span>
@@ -1675,6 +1682,21 @@ async function saveShipmentChanges() {
         </template>
         <template #cell-fulfillment="{ row }">{{ FULFILLMENT_LABEL[row.fulfillment] }}</template>
         <template #cell-sellers="{ row }">{{ row.sellers?.length ? row.sellers.map((s) => s.name).join(', ') : '—' }}</template>
+        <!-- 068 — hanya Mail Order: API menerima ongkir untuk Ambil Sendiri juga (dan ongkir lama tetap tersimpan
+             saat diganti jadi pickup), jadi sel ini mengikuti aturan statistik "Total ongkos kirim" (courier saja). -->
+        <!-- Isi sel: {kurir} / {ongkir} / {catatan}. Kurir dan catatan dilewati bila kosong; ongkir
+             selalu tampil. Catatan dipotong 2 baris agar baris tabel tidak membengkak, teks penuhnya
+             ada di BaseTooltip (bukan `title` native: harus terjangkau keyboard). -->
+        <template #cell-shipping_cost="{ row }">
+          <div v-if="row.fulfillment === 'courier'" class="flex max-w-[220px] flex-col gap-0.5">
+            <span v-if="row.courier_name" class="text-[12px] font-semibold text-muted-4" data-testid="row-shipping-courier">{{ row.courier_name }}</span>
+            <span class="whitespace-nowrap" data-testid="row-shipping-fee">{{ formatIDR(row.shipping_cost) }}</span>
+            <BaseTooltip v-if="row.notes?.trim()" :text="row.notes">
+              <span class="line-clamp-2 whitespace-pre-line break-words text-[12px] text-muted-3" data-testid="row-shipping-notes">{{ row.notes }}</span>
+            </BaseTooltip>
+          </div>
+          <span v-else class="text-muted-3" data-testid="row-shipping-fee">—</span>
+        </template>
         <!-- 053 — formatIDR memakai spasi biasa, jadi `Rp` bisa terpisah dari angkanya.
              formatIDR sengaja TIDAK diubah (dipakai struk/invoice/ekspor); cukup sel ini nowrap. -->
         <template #cell-total_amount="{ row }"><span class="whitespace-nowrap">{{ formatIDR(row.total_amount) }}</span></template>

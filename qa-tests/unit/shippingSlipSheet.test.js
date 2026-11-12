@@ -167,3 +167,68 @@ describe('buildSheetPageHtml (067 T007)', () => {
     expect(rows.map((r) => r.style.height)).toEqual(['101px', '150px', '90px']);
   });
 });
+
+/**
+ * 068-slip-notes-shipping-fee-stat (T002) — catatan pre-order dicetak persis di bawah
+ * judul "Shipping Info" (research D1/D2). Teks bebas buatan staf → harus di-escape,
+ * karena markup ini disuntik lewat innerHTML (pengukuran) lalu diklon html2canvas.
+ */
+describe('buildShippingSlipCellHtml — notes (068 T002)', () => {
+  const base = {
+    preorder_number: 'PO-NOTE-0001',
+    store_identity: { name: 'Test Store', address: 'Jl. Contoh 1', contact_phone: '0000', contact_person: 'Tester' },
+    customer: { name: 'Test Recipient', phone: '0000', address: 'Jl. Uji 2' },
+  };
+  const parse = (htmlString) => {
+    const host = document.createElement('div');
+    host.innerHTML = htmlString;
+    return host;
+  };
+
+  it('shows the note after "Shipping Info" and before the pre-order number', () => {
+    const out = buildShippingSlipCellHtml({ ...base, notes: 'Fragile, wrap twice' });
+    const title = out.indexOf('Shipping Info');
+    const note = out.indexOf('Fragile, wrap twice');
+    const number = out.indexOf('PO-NOTE-0001');
+    expect(title).toBeGreaterThan(-1);
+    expect(note).toBeGreaterThan(title);
+    expect(number).toBeGreaterThan(note);
+    expect(out.indexOf('>From<')).toBeGreaterThan(note);
+  });
+
+  it.each([undefined, null, '', '   ', '\n\t '])('is identical to a slip without notes when notes is %j', (blank) => {
+    const without = buildShippingSlipCellHtml(base);
+    expect(buildShippingSlipCellHtml({ ...base, notes: blank })).toBe(without);
+    expect(parse(without).querySelector('[data-slip-notes]')).toBeNull();
+  });
+
+  it('renders markup-looking text literally, never as markup', () => {
+    const raw = '<b>x</b> & "y" <img src=x onerror=1>';
+    const host = parse(buildShippingSlipCellHtml({ ...base, notes: raw }));
+    expect(host.querySelector('b, img')).toBeNull();
+    expect(host.querySelector('[data-slip-notes]').textContent).toBe(raw);
+  });
+
+  it('wraps long words and keeps the user line breaks (pre-wrap, no <br>)', () => {
+    const multi = 'Line one\nLine two';
+    const host = parse(buildShippingSlipCellHtml({ ...base, notes: multi }));
+    const el = host.querySelector('[data-slip-notes]');
+    expect(el.style.whiteSpace).toBe('pre-wrap');
+    expect(el.getAttribute('style')).toContain('overflow-wrap:anywhere');
+    expect(el.textContent).toBe(multi);
+    expect(el.querySelector('br')).toBeNull();
+  });
+
+  it('never clips: no fixed height, overflow:hidden or line-clamp on the notes block', () => {
+    const el = parse(buildShippingSlipCellHtml({ ...base, notes: 'x'.repeat(600) })).querySelector('[data-slip-notes]');
+    expect(el.style.height).toBe('');
+    expect(el.outerHTML).not.toMatch(/overflow:\s*hidden|line-clamp|text-overflow/);
+    expect(el.textContent).toHaveLength(600);
+  });
+
+  it('a tall note raises only its own row; neighbours keep their own height', () => {
+    // jsdom has no layout: heights are what measureSlipHeights would return for a 600-char note.
+    const { pages } = layoutSlipRows([120, 480, 120, 100, 100, 100]);
+    expect(pages[0].rows.map((r) => r.height)).toEqual([480, 100]);
+  });
+});

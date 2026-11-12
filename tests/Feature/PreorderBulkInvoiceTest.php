@@ -68,6 +68,31 @@ class PreorderBulkInvoiceTest extends TestCase
         $this->assertArrayHasKey('items', $data[0]);
     }
 
+    /**
+     * 068-slip-notes-shipping-fee-stat (T003, research D1) — surat jalan massal membaca
+     * `notes` pre-order dari payload ini; kalau `present()` suatu hari berhenti
+     * mengirimnya, slip diam-diam kosong. Tes ini yang menjaganya.
+     */
+    public function test_bulk_invoices_carry_the_preorder_notes_or_null_for_the_shipping_slip(): void
+    {
+        $customer = Customer::factory()->create();
+        $withNotes = $this->postJson('/api/v1/preorders', [
+            'customer_id' => $customer->id,
+            'fulfillment' => 'courier',
+            'notes' => "Fragile, wrap twice\nLeave with security",
+            'items' => [['variant_id' => $this->variant->id, 'qty' => 1]],
+        ])->assertCreated()->json('id');
+        $withoutNotes = $this->createPreorder('c@example.test');
+
+        $data = collect($this->postJson('/api/v1/preorders/bulk-invoices', [
+            'preorder_ids' => [$withNotes, $withoutNotes],
+            'document' => 'invoice',
+        ])->assertOk()->json('data'))->keyBy('id');
+
+        $this->assertSame("Fragile, wrap twice\nLeave with security", $data[$withNotes]['notes']);
+        $this->assertNull($data[$withoutNotes]['notes']);
+    }
+
     public function test_bulk_email_sends_one_email_per_preorder_with_an_email_on_file(): void
     {
         Mail::fake();

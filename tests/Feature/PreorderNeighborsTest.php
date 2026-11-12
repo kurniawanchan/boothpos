@@ -163,6 +163,7 @@ class PreorderNeighborsTest extends TestCase
                 'fulfillment' => $i % 2 === 0 ? 'pickup' : 'courier',
                 'total_amount' => $i % 4 === 0 ? 150000 : 100000,
                 'paid_amount' => $i % 5 === 0 ? 50000 : 0,
+                'shipping_cost' => $i % 3 === 0 ? 0 : ($i % 2 === 0 ? 25000 : 15000),
             ], $customers[$i % 4]);
 
             DB::table('preorders')->where('id', $p->id)->update([
@@ -171,7 +172,7 @@ class PreorderNeighborsTest extends TestCase
             ]);
         }
 
-        $sorts = ['preorder_number', 'customer_name', 'status', 'fulfillment', 'total_amount', 'outstanding', 'created_at', 'updated_at'];
+        $sorts = ['preorder_number', 'customer_name', 'status', 'fulfillment', 'shipping_cost', 'total_amount', 'outstanding', 'created_at', 'updated_at'];
 
         foreach ($sorts as $sortBy) {
             foreach (['asc', 'desc'] as $dir) {

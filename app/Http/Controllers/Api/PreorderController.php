@@ -78,6 +78,10 @@ class PreorderController extends Controller
             // flag on that itself rather than this being computed here
             // (keeps the same field usable regardless of fulfillment).
             'shipping_cost' => number_format((float) $p->shipping_cost, 2, '.', ''),
+            // 068 — kolom "Ongkos kirim" menampilkan kurir + ongkir + catatan. Kurir pilihan
+            // pre-order (Preorder::courier_name, sama dengan invoice), BUKAN shipments.courier_name;
+            // kolomnya sudah di baris pre-order, jadi tanpa query tambahan.
+            'courier_name' => $p->courier_name,
             'customer_has_address' => filled($p->customer->address),
             // Alamat pelanggan sendiri (bukan hanya ada/tidaknya) supaya popup
             // bendera "ongkir/alamat belum diisi" bisa langsung menampilkannya —
@@ -538,11 +542,22 @@ class PreorderController extends Controller
         $grandTotal = (float) (clone $query)->where('status', '!=', 'cancelled')->sum('total_amount');
         $totalPaid = (float) (clone $query)->where('status', '!=', 'cancelled')->sum('paid_amount');
 
+        // 068-slip-notes-shipping-fee-stat (research D3/D4) — jumlah ongkir himpunan
+        // yang SAMA dengan grand_total (satu rantai filter, applyFilters()), tanpa
+        // 'cancelled' (barangnya tidak akan dikirim). Hanya Mail Order: API menerima
+        // shipping_cost untuk pickup juga, jadi tanpa syarat `courier` angka ini bisa
+        // memuat ongkir pre-order Ambil Sendiri — padahal itu harus selalu Rp 0.
+        $totalShippingFee = (float) (clone $query)
+            ->where('status', '!=', 'cancelled')
+            ->where('fulfillment', 'courier')
+            ->sum('shipping_cost');
+
         return response()->json([
             'transaction_count' => $transactionCount,
             'by_status' => $byStatus,
             'grand_total' => number_format($grandTotal, 2, '.', ''),
             'total_outstanding' => number_format($grandTotal - $totalPaid, 2, '.', ''),
+            'total_shipping_fee' => number_format($totalShippingFee, 2, '.', ''),
         ]);
     }
 
@@ -604,6 +619,18 @@ class PreorderController extends Controller
 
         if ($sortBy === 'outstanding') {
             return $query->orderByRaw("(preorders.total_amount - preorders.paid_amount) {$sortDir}")
+                ->orderBy('preorders.id', $sortDir);
+        }
+
+        // 068 — kolom "Ongkos kirim" menampilkan "—" untuk Ambil Sendiri (ongkir lama bisa
+        // saja masih tersimpan), jadi yang bukan Mail Order SELALU di akhir, naik maupun
+        // turun; kalau tidak, pickup berongkir-lama terselip di tengah angka yang tampil.
+        // Kunci kedua juga NULL untuk non-courier: di dalam kelompok "—" ongkir lama tidak
+        // boleh ikut menentukan urutan (semuanya tampil sama), jadi hanya pengikat id yang
+        // memisahkan. Pengikat preorders.id tetap di ujung (052).
+        if ($sortBy === 'shipping_cost') {
+            return $query->orderByRaw("(preorders.fulfillment = 'courier') desc")
+                ->orderByRaw("(CASE WHEN preorders.fulfillment = 'courier' THEN preorders.shipping_cost END) {$sortDir}")
                 ->orderBy('preorders.id', $sortDir);
         }
 

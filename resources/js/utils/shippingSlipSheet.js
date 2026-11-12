@@ -85,6 +85,14 @@ export function layoutSlipRows(heights, { cols = COLS, pageHeight = PAGE_H } = {
  * Isinya sama dengan surat jalan lama (judul, nomor, Dari | Kepada) tetapi
  * dibentuk ulang untuk sel ±70 mm. Tanpa tinggi tetap dan tanpa clip (D3).
  * Padding 6 px berada DI DALAM garis (FR-005).
+ *
+ * 068 (research D1/D2): catatan pre-order (`invoice.notes`) dicetak persis di
+ * bawah judul "Shipping Info", sebelum nomor, hanya bila tidak kosong — tanpa
+ * label, tanpa baris kosong (slip tanpa catatan identik dengan sebelumnya).
+ * Teks bebas buatan staf, jadi SELALU lewat escapeHtml (markup ini disuntik via
+ * innerHTML untuk pengukuran dan diklon html2canvas). `pre-wrap` menjaga baris
+ * baru dari pengguna tanpa menyisipkan <br>. Tidak ada tinggi tetap / clip:
+ * catatan panjang menaikkan baris karena tinggi diukur dari markup asli (D3).
  */
 export function buildShippingSlipCellHtml(invoice) {
   const store = invoice?.store_identity;
@@ -92,10 +100,14 @@ export function buildShippingSlipCellHtml(invoice) {
   const wrap = 'overflow-wrap:anywhere;word-break:break-word;';
   const muted = `font-size:9px;line-height:12px;color:#444;${wrap}`;
   const label = 'font-size:8px;line-height:10px;font-weight:700;text-transform:uppercase;color:#666;margin-bottom:2px;';
+  const notes = String(invoice?.notes ?? '').trim();
+  const notesHtml = notes
+    ? `<div data-slip-notes style="margin-top:2px;font-size:9px;line-height:12px;color:#222;white-space:pre-wrap;${wrap}">${escapeHtml(notes)}</div>`
+    : '';
 
   return `<div style="padding:6px;font-family:Arial,sans-serif;color:#000;background:#fff;">
   <div style="text-align:center;padding-bottom:4px;margin-bottom:6px;border-bottom:1px dashed #999;">
-    <div style="font-size:11px;line-height:14px;font-weight:700;">Shipping Info</div>
+    <div style="font-size:11px;line-height:14px;font-weight:700;">Shipping Info</div>${notesHtml}
     <div style="font-family:monospace;font-size:11px;line-height:14px;font-weight:700;${wrap}">${escapeHtml(invoice?.preorder_number)}</div>
   </div>
   <div style="display:flex;gap:6px;">
