@@ -2943,7 +2943,7 @@ paths:
         - { name: dispatch_status, in: query, description: "Penanda manual invoice-terkirim/pengiriman-berjalan. Boleh diulang (`dispatch_status[]=a&dispatch_status[]=b`); nilai berbeda di-OR-kan. Berlaku juga untuk `/preorders/summary` dan `/preorders/export`.", schema: { type: array, items: { type: string, enum: [pending, invoice_sent, shipping] } } }
         - { name: search, in: query, description: "Cocok parsial, tidak peka huruf besar/kecil, terhadap nomor pre-order, nama pelanggan, nama/SKU item di dalamnya, dan sisa tagihan (digit saja). 066: ekspor kini memakai pencarian yang SAMA (dulu hanya nama pelanggan).", schema: { type: string } }
         - { name: artist_id, in: query, description: "013-preorder-list-filters-receipt (US1) — hanya pre-order yang punya minimal satu item milik penjual ini (via `whereHas`, tidak menduplikasi baris pre-order yang punya beberapa item dari penjual yang sama).", schema: { type: integer } }
-        - { name: sort_by, in: query, description: "Kolom urutan (whitelist; nilai lain → urutan bawaan `created_at desc`). 052-preorder-detail-prev-next: setiap urutan diakhiri pengikat `preorders.id` searah `sort_dir` (bawaan `created_at desc, id desc`), jadi baris bernilai sama selalu tampil dalam urutan tetap dan tidak pernah muncul di dua halaman.", schema: { type: string, enum: [preorder_number, customer_name, status, fulfillment, total_amount, outstanding, created_at, updated_at] } }
+        - { name: sort_by, in: query, description: "Kolom urutan (whitelist; nilai lain → urutan bawaan `created_at desc`). 052-preorder-detail-prev-next: setiap urutan diakhiri pengikat `preorders.id` searah `sort_dir` (bawaan `created_at desc, id desc`), jadi baris bernilai sama selalu tampil dalam urutan tetap dan tidak pernah muncul di dua halaman. 068: `shipping_cost` mengurutkan ongkir; pre-order yang bukan Mail Order (`fulfillment!=courier`, tampil '—') SELALU di akhir, naik maupun turun.", schema: { type: string, enum: [preorder_number, customer_name, status, fulfillment, shipping_cost, total_amount, outstanding, created_at, updated_at] } }
         - { name: sort_dir, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PerPage'
@@ -3087,7 +3087,7 @@ paths:
         - { name: shipping_flag, in: query, description: "066 — bendera Mail Order yang sudah tampil di layar (baris kuning). Boleh diulang (`shipping_flag[]=no_cost&shipping_flag[]=no_address`, di-OR-kan). `no_cost` = ongkir ≤ 0; `no_address` = alamat pelanggan kosong/spasi. Hanya pre-order `fulfillment=courier`. Nilai lain diabaikan. Berlaku sama untuk summary, matching-ids, neighbors dan export.", schema: { type: array, items: { type: string, enum: [no_cost, no_address] } } }
         - { name: event_id, in: query, schema: { type: integer } }
         - { name: search, in: query, schema: { type: string } }
-        - { name: sort_by, in: query, schema: { type: string, enum: [preorder_number, customer_name, status, fulfillment, total_amount, outstanding, created_at, updated_at] } }
+        - { name: sort_by, in: query, schema: { type: string, enum: [preorder_number, customer_name, status, fulfillment, shipping_cost, total_amount, outstanding, created_at, updated_at] } }
         - { name: sort_dir, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
       responses:
         '200':
@@ -3383,7 +3383,8 @@ paths:
         pernah berbeda dari apa yang sedang ditampilkan di layar. `total_amount`/
         `paid_amount` diambil langsung dari kolom `Preorder` yang sudah
         otoritatif (bukan rekonsiliasi ulang dari `payments`) — lihat
-        research.md R3 fitur ini untuk alasannya.
+        research.md R3 fitur ini untuk alasannya. 068: `total_shipping_fee`
+        ditambahkan (jumlah ongkir Mail Order pada himpunan terfilter yang sama).
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [ordered, dp_paid, arrived, settled, handed_over, cancelled] } }
         - { name: event_id, in: query, schema: { type: integer } }
@@ -3413,6 +3414,7 @@ paths:
                         total_amount: { $ref: '#/components/schemas/Money' }
                   grand_total: { $ref: '#/components/schemas/Money', description: "BUG YANG DITEMUKAN & DIPERBAIKI — mengecualikan preorder berstatus 'cancelled' (sebelumnya ikut terjumlah). by_status['cancelled'] tetap menampilkan total uangnya sendiri secara terpisah." }
                   total_outstanding: { $ref: '#/components/schemas/Money', description: "Sama seperti grand_total — mengecualikan preorder 'cancelled'." }
+                  total_shipping_fee: { $ref: '#/components/schemas/Money', description: "068 — jumlah ongkir (`shipping_cost`) pre-order Mail Order (`fulfillment=courier`) pada himpunan terfilter yang SAMA dengan grand_total, tanpa yang 'cancelled'. Ambil Sendiri tidak pernah ikut (walau API menerima ongkir untuk pickup). '0.00' bila tidak ada yang cocok." }
 
   /preorders/export:
     get:
@@ -7563,7 +7565,7 @@ paths:
               type: object
               required: [courier_name]
               properties:
-                courier_name: { type: string, description: Salah satu `Couriers::OPTIONS` }
+                courier_name: { type: string, description: "Salah satu `Couriers::OPTIONS`" }
                 service_name: { type: string, maxLength: 50, nullable: true }
                 tracking_number: { type: string, maxLength: 50, pattern: '^[A-Za-z0-9-]+$', nullable: true }
                 dispatched_at: { type: string, format: date-time, nullable: true }
@@ -9863,6 +9865,9 @@ components:
         customer_address: { type: string, nullable: true, description: "Alamat pelanggan (Customer.address) — dipakai popup bendera Mail Order 'ongkir/alamat belum diisi'; sudah tersedia tanpa query tambahan karena pelanggan dimuat untuk tiap baris." }
         has_payments: { type: boolean, description: "027-preorder-duplicate-split — true bila ADA baris pembayaran apa pun (bahkan bernilai kecil). Dipakai UI untuk menonaktifkan aksi Split; satu subquery EXISTS untuk seluruh halaman." }
         outstanding: { $ref: '#/components/schemas/Money' }
+        shipping_cost: { $ref: '#/components/schemas/Money', description: "Ongkir pre-order (hanya bermakna untuk Mail Order; Ambil Sendiri bisa masih menyimpan ongkir lama)." }
+        courier_name: { type: string, nullable: true, description: "068 — kurir pilihan pre-order (Preorder.courier_name, sama dengan invoice; BUKAN shipments.courier_name). Dipakai kolom 'Ongkos kirim' di daftar." }
+        notes: { type: string, nullable: true, description: "Catatan pre-order (juga tampil di kolom 'Ongkos kirim' dan di surat jalan)." }
         created_at: { type: string, format: date-time }
         sellers:
           type: array
