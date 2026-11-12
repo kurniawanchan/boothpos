@@ -566,6 +566,19 @@ Frontend only: no migration, route or OpenAPI change. Pre-orders → select → 
 - `cashier_session_reopens` has no `data_mode`; it rides `cashier_sessions` in `CloneRegistry` (`via cashier_sessions.session_id`; `reopened_by` → shared `users`). A deliberate, logged exception to "a closed shift's stored figures are never rewritten" (028/054) — PRD carries a dated note.
 - Not verified in a real browser in the build session (T029).
 
+## Slip notes and total shipping fee (feature 068, 2026-11-12)
+
+No migration, no new route. Two additions on Pre-orders; rules a future change must not break:
+
+- **Bulk shipping slip prints the pre-order's own `notes`** directly under "Shipping Info", before the number, only when non-blank (`buildShippingSlipCellHtml`, `data-slip-notes`). **Which "notes" was decided BY DEFAULT** (the requester did not answer): `preorders.notes`, NOT `shipments.notes` — the bulk-invoices query does not load `shipment` (the `relationLoaded()` trap) and slips are usually printed before a shipment exists. `PreorderBulkInvoiceTest::test_bulk_invoices_carry_the_preorder_notes…` pins that `present()` keeps sending it. Switching to shipment notes also needs `shipment` in that query's `with()`.
+- The text is user-typed and the cell HTML goes through `innerHTML` (measuring) and html2canvas, so it is ALWAYS `escapeHtml`'d; `white-space:pre-wrap` keeps the user's line breaks (no `<br>`); no label, no blank line when empty (output is byte-identical to a slip without notes). No fixed height or clip: the row height is measured from the real markup (067 D3), so a long note grows its row; a row taller than a page still throws `SlipTooTallError`. The notes block is centred like the rest of the header.
+- **`GET /preorders/summary` → `total_shipping_fee`** = Σ `shipping_cost` of the filtered, non-cancelled, **`fulfillment = courier`** pre-orders, over the same `applyFilters()` set as `grand_total` (no second filter chain). Courier-only on purpose: the API accepts `shipping_cost` for pickup too, and a Mail Order edited to Self Pickup KEEPS its stored fee (the SPA omits `shipping_cost`; verified by `PreorderSummaryShippingFeeTest`), so such an order's `total_amount` includes a fee the statistic does not. Known, untouched (fee storage is out of scope).
+- **List column (added same day):** `PreordersView` has a non-sortable "Shipping fee" column after Fulfillment (`preorders.col_shipping_fee`, cell `data-testid="row-shipping-fee"`). It reads the `shipping_cost` the list already returns and shows it ONLY for `fulfillment = courier`, "—" for pickup (same rule as the statistic, so a stale stored pickup fee is never shown). **Cell value (changed same day):** three parts, `{courier}` / `{shipping cost}` / `{notes}` — courier = `Preorder::courier_name` (additive field on the list rows; NOT `shipments.courier_name`), shown only when set; notes = `preorders.notes`, only when non-blank, `line-clamp-2` with the full text in a `BaseTooltip`. Pickup rows still show only "—" (stored courier/notes of a pickup order never leak). Because notes are now visible in the table, tests that look for the flag popup's text must scope to the dialog. **Sortable** (`sort_by=shipping_cost`, `applySort()` branch): non-courier rows are ALWAYS last in both directions and their stored fee is ignored (the second key is NULL for them), because the cell shows "—" for all of them — sorting by the raw column put a stale-fee pickup row between Mail Order fees (found by the first test run). The `preorders.id` tie-breaker (052) stays last; neighbors/prev-next inherit it.
+- UI: one block in the `PreordersView` statistics bar (`data-testid="summary-shipping-fee"`), key `preorders.summary_shipping_fee`. `formatIDR` already turns a missing/non-numeric value into "Rp 0", so no `?? 0` guard (a mutation removing one stayed green).
+- Unchanged on purpose: the detail drawer's single slip, the Excel export, reports and the dashboard.
+- Test trap: `PreordersView.test.js` has load-sensitive tests (a different one failed in each of two full runs, all green alone and in a quiet re-run) — judge a failure by re-running the file before blaming a change.
+- **Not verified in a real browser:** the html2canvas → PDF path with a long note, print at 100 %, and the statistic in the running SPA (only a headless-Chrome render of the slip markup and component tests exist).
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -573,7 +586,18 @@ Frontend only: no migration, route or OpenAPI change. Pre-orders → select → 
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/067-bulk-shipping-slips-a4-grid/plan.md`
+Active feature plan: `specs/068-slip-notes-shipping-fee-stat/plan.md`
+(branch `085-slip-notes-shipping-fee-stat`, from `develop`; spec dir number ≠ branch number) — NO migration, no new route.
+Two small additions on Pre-orders. (1) Bulk shipping slip (067 grid) prints the pre-order's own `notes` directly under the
+"Shipping Info" title when non-blank (frontend only: `buildShippingSlipCellHtml`, text through `escapeHtml`, `pre-wrap`; the
+bulk-invoices payload already carries `notes` via `present()`; row height is already measured from the real markup, so a long
+note grows the row). Which "notes" (pre-order vs shipment) was resolved BY DEFAULT to the pre-order's — requester to confirm.
+(2) `GET /preorders/summary` gains `total_shipping_fee` = Σ `shipping_cost` of the filtered, non-cancelled, `fulfillment=courier`
+pre-orders (same `applyFilters()` set as `grand_total`; pickup never counts), shown in the statistics bar of `PreordersView`
+with one new locale key per language; OpenAPI moves in the same commit. Detail-drawer slip, Excel export, reports: unchanged.
+See research.md D1–D6.
+
+Previous feature: `specs/067-bulk-shipping-slips-a4-grid/plan.md`
 (branch `097-bulk-shipping-slips-a4-grid`, from `develop`; spec dir number ≠ branch number) — frontend only, NO migration,
 no route, OpenAPI unchanged. Pre-orders bulk "download shipping slips" stops zipping one PDF per slip and produces ONE A4
 portrait PDF: slips in a 3-column grid, 1 px solid black border, neighbours share one line (no margin/gap), rows of equal

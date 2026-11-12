@@ -237,6 +237,68 @@ describe('PreordersView — summary panel (013 US5)', () => {
     expect(await screen.findByText('Rp 200.000')).toBeInTheDocument();
   });
 
+  // 068-slip-notes-shipping-fee-stat (T013) — total ongkir ikut di bar statistik.
+  it('shows the total shipping fee from the summary with its label (068 US2)', async () => {
+    getPreorderSummary.mockResolvedValue({ ...SUMMARY, total_shipping_fee: '50000.00' });
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    const block = await screen.findByTestId('summary-shipping-fee');
+    expect(block).toHaveTextContent('Total ongkos kirim');
+    expect(block).toHaveTextContent('Rp 50.000');
+  });
+
+  it('shows Rp 0, never NaN, when the summary response has no total_shipping_fee (068 US2)', async () => {
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    const block = await screen.findByTestId('summary-shipping-fee');
+    expect(block).toHaveTextContent('Rp 0');
+    expect(block).not.toHaveTextContent('NaN');
+  });
+
+  // 068 — kolom "Ongkos kirim" di tabel: hanya Mail Order; pickup selalu "—" walau API menyimpan ongkir lama
+  // (sama dengan aturan statistik "Total ongkos kirim").
+  it('shows a Shipping fee column as courier / cost / notes for Mail Order rows, and only a dash for Self Pickup even with stored values (068)', async () => {
+    listPreorders.mockResolvedValue({
+      data: [
+        { ...ROWS[0], id: 31, preorder_number: 'PO-0031', fulfillment: 'courier', shipping_cost: '25000.00', courier_name: 'JNE', notes: 'Fragile, wrap twice' },
+        { ...ROWS[1], id: 32, preorder_number: 'PO-0032', fulfillment: 'pickup', shipping_cost: '45000.00', courier_name: 'SiCepat', notes: 'Catatan pickup lama' },
+        { ...ROWS[1], id: 33, preorder_number: 'PO-0033', fulfillment: 'courier', shipping_cost: '0.00', courier_name: null, notes: '   ' },
+      ],
+      meta: { current_page: 1, per_page: 25, total: 3, last_page: 1 },
+    });
+    await renderPreorders();
+    await screen.findByText('PO-0031');
+
+    expect(screen.getByRole('columnheader', { name: /Ongkos kirim/ })).toBeInTheDocument();
+    // Ongkir: Mail Order apa adanya, pickup "—".
+    expect(screen.getAllByTestId('row-shipping-fee').map((c) => c.textContent.trim())).toEqual(['Rp 25.000', '—', 'Rp 0']);
+    // Kurir dan catatan: hanya baris Mail Order yang memilikinya (kosong/spasi dilewati, pickup tidak bocor).
+    expect(screen.getAllByTestId('row-shipping-courier').map((c) => c.textContent.trim())).toEqual(['JNE']);
+    expect(screen.getAllByTestId('row-shipping-notes').map((c) => c.textContent.trim())).toEqual(['Fragile, wrap twice']);
+    expect(screen.queryByText('Rp 45.000')).toBeNull();
+    expect(screen.queryByText('SiCepat')).toBeNull();
+    expect(screen.queryByText('Catatan pickup lama')).toBeNull();
+  });
+
+  it('sorts by the Shipping fee column on the server: header click sends sort_by=shipping_cost, a second click flips the direction (068)', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const user = userEvent.setup();
+    await renderPreorders();
+    await screen.findByText('PO-0010');
+
+    const header = screen.getByRole('columnheader', { name: /Ongkos kirim/ });
+    await user.click(header);
+    await waitFor(() => expect(listPreorders).toHaveBeenLastCalledWith(expect.objectContaining({ sort_by: 'shipping_cost', sort_dir: 'asc' })));
+    expect(header).toHaveAttribute('aria-sort', 'ascending');
+
+    await user.click(header);
+    await waitFor(() => expect(listPreorders).toHaveBeenLastCalledWith(expect.objectContaining({ sort_by: 'shipping_cost', sort_dir: 'desc' })));
+    // Ringkasan memakai filter yang sama (urutan tidak mengubahnya, tetapi tidak boleh macet).
+    expect(getPreorderSummary).toHaveBeenCalled();
+  });
+
   it('refetches getPreorderSummary with updated filter params when a filter changes', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');
     const user = userEvent.setup();
@@ -560,9 +622,11 @@ describe('PreordersView — missing-shipping-info flag and customer info (post-0
     const flaggedRow = screen.getByText('PO-0020').closest('tr');
     await user.click(within(flaggedRow).getByRole('button', { name: /Mail Order/i }));
 
-    await waitFor(() => expect(screen.getByText('Alamat: Jl. Mawar No. 3 (dititip via WA)')).toBeInTheDocument());
+    // 068 — catatan baris ini kini juga tampil di sel tabel "Ongkos kirim", jadi cari di dalam popup saja.
+    const popup = await screen.findByRole('dialog');
+    await waitFor(() => expect(within(popup).getByText('Alamat: Jl. Mawar No. 3 (dititip via WA)')).toBeInTheDocument());
     // Rp 0 appears for the flagged row's shipping cost inside the popup.
-    expect(screen.getAllByText('Rp 0').length).toBeGreaterThan(0);
+    expect(within(popup).getAllByText('Rp 0').length).toBeGreaterThan(0);
   });
 
   it('shows the customer address in the flag popup, or a dash when none is on file', async () => {
