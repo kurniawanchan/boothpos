@@ -1,0 +1,21 @@
+meta {
+  name: 32 - Pelanggan A Hapus Alamat Milik B (negative - 404)
+  type: http
+  seq: 32
+}
+
+delete {
+  url: {{base_url}}/customer/addresses/{{customer_b_address_id}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("ditolak 404 not_found - akun lain tidak bisa menghapus alamat B", function () {
+    expect(res.status).to.equal(404);
+    expect(res.body.code).to.equal("not_found");
+  });
+}

@@ -1,0 +1,56 @@
+meta {
+  name: 41 - Checkout Ambil di Tempat
+  type: http
+  seq: 41
+}
+
+post {
+  url: {{base_url}}/customer/orders
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+  Idempotency-Key: {{pickup_idempotency_key}}
+}
+
+body:json {
+  {
+    "fulfilment_method": "pickup",
+    "items": [
+      { "variant_id": {{storefront_variant_id}}, "qty": 1 }
+    ],
+    "notes": "Diambil saat acara hari pertama.",
+    "expected_total": "{{storefront_variant_price}}"
+  }
+}
+
+script:pre-request {
+  function uuidv4() {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === "x" ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+  bru.setVar("pickup_idempotency_key", uuidv4());
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("customer_pickup_order_number", res.body.data.order_number);
+  }
+}
+
+tests {
+  test("pesanan ambil di tempat: tanpa alamat, tanpa ongkir tertunda, kontak dari profil", function () {
+    expect(res.status).to.equal(201);
+    const o = res.body.data;
+    expect(o.fulfilment_method).to.equal("pickup");
+    expect(o.shipping_address).to.equal(null);
+    expect(o.shipping_cost_pending).to.equal(false);
+    expect(o.total).to.equal(bru.getVar("storefront_variant_price"));
+    expect(o.contact.phone).to.equal("080000000011");
+  });
+}

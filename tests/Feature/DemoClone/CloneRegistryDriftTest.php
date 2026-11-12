@@ -21,13 +21,22 @@ class CloneRegistryDriftTest extends TestCase
 
     /** 058: users.artist_id dijaga cek awal di LiveToDemoCloner (pengguna terikat ke seller DEMO).
      * Anak yang SENGAJA tidak disalin tetapi menunjuk tabel terdaftar (ditangani cek awal/cascade). */
-    private const UNREGISTERED_CHILDREN = ['pos_drafts.event_id', 'preorder_notifications.preorder_id', 'users.artist_id'];
+    private const UNREGISTERED_CHILDREN = [
+        'pos_drafts.event_id', 'preorder_notifications.preorder_id', 'users.artist_id',
+        // Customer commerce: tabel wipe-only (CloneRegistry::wipeOnly()). DEMO-nya dihapus sebelum tabel
+        // tercermin, dan baris LIVE yang menunjuk induk DEMO dicegat cek awal (CloneRegistry::wipeOnlyReferences()).
+        'customer_accounts.customer_id', 'customer_orders.customer_id', 'customer_order_items.variant_id',
+    ];
 
     /** Induk bersama (tidak dimoded) yang boleh ditunjuk tabel terdaftar tanpa dipetakan. */
     private const SHARED_PARENTS = ['users', 'payment_channels', 'roles'];
 
     /** Tabel ber-data_mode yang SENGAJA tidak disalin. */
-    private const EXCLUDED_DATA_MODE_TABLES = ['users', 'companies', 'invoices', 'pos_drafts'];
+    private const EXCLUDED_DATA_MODE_TABLES = [
+        'users', 'companies', 'invoices', 'pos_drafts',
+        // Customer commerce: hanya dihapus di DEMO, tidak dicerminkan (akun membawa hash kata sandi).
+        'customer_accounts', 'customer_orders',
+    ];
 
     /** @return list<object{child:string,column:string,parent:string}> */
     private function foreignKeys(): array
@@ -108,6 +117,44 @@ class CloneRegistryDriftTest extends TestCase
         $this->assertSame(['signature_path' => 'local'], CloneRegistry::spec('seller_settlement_acknowledgements')['files']);
         $this->assertSame(['proof_path' => 'local'], CloneRegistry::spec('seller_settlement_payments')['files']);
         $this->assertSame(['client_ref'], CloneRegistry::spec('seller_settlement_payments')['uuid']);
+    }
+
+    /**
+     * Customer commerce — daftar pengecualian di atas hanya sah selama tabelnya benar-benar ditangani
+     * sebagai wipe-only. Tabel anak tanpa data_mode (alamat, pengiriman, riwayat status) tidak terlihat
+     * oleh test "data_mode" di bawah, dan FK antar-tabel wipe-only tidak terlihat oleh test FK di atas;
+     * test ini menjaganya dari skema: setiap tabel yang (lewat FK) bergantung pada tabel wipe-only harus
+     * ikut wipe-only dan dihapus LEBIH DULU, dan setiap FK wipe-only ke tabel tercermin harus punya cek awal.
+     */
+    public function test_customer_commerce_tables_are_wipe_only_and_their_foreign_keys_are_guarded(): void
+    {
+        $wipeOnly = array_keys(CloneRegistry::wipeOnly());
+        $registered = CloneRegistry::tables();
+        $guarded = CloneRegistry::wipeOnlyReferences();
+        $problems = [];
+
+        foreach ($this->foreignKeys() as $fk) {
+            $childAt = array_search($fk->child, $wipeOnly, true);
+            $parentAt = array_search($fk->parent, $wipeOnly, true);
+
+            if ($parentAt !== false && $fk->child !== $fk->parent) {
+                if ($childAt === false) {
+                    $problems[] = "{$fk->child}.{$fk->column} -> {$fk->parent}: anak tabel wipe-only harus ikut didaftarkan di CloneRegistry::wipeOnly().";
+                } elseif ($childAt > $parentAt) {
+                    $problems[] = "{$fk->child} harus dihapus SEBELUM {$fk->parent} (urutan wipeOnly()).";
+                }
+            }
+
+            if ($childAt !== false && isset($registered[$fk->parent]) && ($guarded["{$fk->child}.{$fk->column}"] ?? null) !== $fk->parent) {
+                $problems[] = "{$fk->child}.{$fk->column} -> {$fk->parent}: tambahkan ke CloneRegistry::wipeOnlyReferences() (cek LIVE → DEMO).";
+            }
+        }
+
+        foreach (array_keys($guarded) as $reference) {
+            $this->assertContains(explode('.', $reference)[0], $wipeOnly, "{$reference}: hanya tabel wipe-only yang boleh ada di wipeOnlyReferences().");
+        }
+
+        $this->assertSame([], $problems, "Registry tidak sinkron dengan skema:\n".implode("\n", $problems));
     }
 
     public function test_every_table_with_a_data_mode_column_is_registered_or_explicitly_excluded(): void

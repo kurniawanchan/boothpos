@@ -1,0 +1,32 @@
+meta {
+  name: 59 - Staf Tandai Pesanan Kurir Terkirim
+  type: http
+  seq: 59
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_order_staff_id}}/deliver
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "note": "Paket diterima pelanggan."
+  }
+}
+
+tests {
+  test("terkirim: waktu diterima dicatat dan pesanan selesai", function () {
+    expect(res.status).to.equal(200);
+    const o = res.body.data;
+    expect(o.status).to.equal("delivered");
+    expect(o.shipment.delivered_at).to.be.a("string");
+    expect(o.completed_at).to.be.a("string");
+    expect(o.available_actions).to.be.an("array").that.is.empty;
+  });
+}

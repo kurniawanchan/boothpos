@@ -1,0 +1,31 @@
+meta {
+  name: 25 - Token Pelanggan Buat Order POS (negative - 401)
+  type: http
+  seq: 25
+}
+
+post {
+  url: {{base_url}}/orders
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+body:json {
+  {
+    "items": [
+      { "variant_id": {{storefront_variant_id}}, "qty": 1 }
+    ]
+  }
+}
+
+tests {
+  test("ditolak 401 - token pelanggan tidak berlaku di POST /orders POS (amplop galat staf tidak berubah)", function () {
+    expect(res.status).to.equal(401);
+    expect(res.body.message).to.equal("Unauthenticated.");
+    expect(res.body).to.not.have.property("code");
+  });
+}

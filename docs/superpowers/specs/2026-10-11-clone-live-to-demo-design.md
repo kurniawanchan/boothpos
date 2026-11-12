@@ -139,3 +139,15 @@ Any failure → rollback, exit non-zero, report the failed check.
 2. Run dry run against `boothpos`, review counts with the product owner.
 3. Run with `--force` (the safety backup is taken automatically); spot-check in the UI with `system_mode = demo`.
 4. Add a RUNBOOK entry: purpose, flags, the verbatim-PII warning, and recovery via the printed backup id.
+
+## 11. Dated decision — 2026-11-11: customer-commerce tables are wiped, not mirrored
+
+The customer-commerce feature (`docs/android-customer-commerce/design.md`) adds six tables: `customer_accounts`, `customer_addresses`, `customer_orders`, `customer_order_items`, `customer_order_shipments`, `customer_order_status_events`. They are the one deliberate exception to "DEMO is an exact mirror of LIVE":
+
+- **DEMO rows of these tables are deleted and nothing is copied from LIVE.** Mirroring would copy customer password hashes and account data into DEMO, and would need rewrite rules for the account e-mail, the public order number and the idempotency key. Taken at the conservative default; the product owner can ask for `customer_orders` (without accounts) to be mirrored later as a separate change.
+- They are listed in `CloneRegistry::wipeOnly()` (child first), **not** in `CloneRegistry::tables()`: anything in `tables()` is cloned and count-verified.
+- `wipeDemo()` removes them **before** the mirrored tables, because their foreign keys into `customers` and `product_variants` are `RESTRICT` (without the wipe, one DEMO registration makes the whole command fail with MySQL 1451). The `personal_access_tokens` rows of DEMO customer accounts are removed first (polymorphic table, no FK, would otherwise be orphaned). Staff tokens and LIVE account tokens are never touched.
+- **LIVE stays protected the same way as every other table**: `LiveFingerprint` covers the LIVE rows of all six tables and every token that is not a DEMO-account token; `assertNoLiveReferencesToDemo()` stops, before anything is wiped, when a LIVE row points at a DEMO parent through `CloneRegistry::wipeOnlyReferences()` (`customer_accounts.customer_id`, `customer_orders.customer_id`, `customer_orders.customer_account_id`, `customer_order_items.variant_id`); `verifyIntegrity()` fails if any DEMO row is left in a wipe-only table.
+- LIVE stock movements written by a staff confirmation (`reference_type = 'customer_order_item'`) are still mirrored so DEMO stock equals LIVE stock, but their `reference_id` becomes `NULL` (counted in `references_dropped`): the item they point at is not cloned and a LIVE id must never sit on a DEMO row.
+- `products.slug` is unique per data mode (`data_mode`, `slug`), so the verbatim copy keeps working; `published_at` on products and variants is mirrored as-is.
+- Guard tests: `tests/Feature/DemoClone/CustomerCommerceCloneTest.php` and the allowlists plus `test_customer_commerce_tables_are_wipe_only_and_their_foreign_keys_are_guarded` in `CloneRegistryDriftTest`. A new table with a foreign key into one of the six must be added to `wipeOnly()` before its parent.

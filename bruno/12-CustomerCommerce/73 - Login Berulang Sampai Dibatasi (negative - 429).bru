@@ -1,0 +1,68 @@
+meta {
+  name: 73 - Login Berulang Sampai Dibatasi (negative - 429)
+  type: http
+  seq: 73
+}
+
+post {
+  url: {{base_url}}/customer/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{rate_limit_email}}",
+    "password": "{{customer_password}}"
+  }
+}
+
+script:pre-request {
+  // SENGAJA request terakhir: setelahnya ember customer-login e-mail ini penuh dan ember per IP
+  // hampir penuh (8 dari 10) sampai menit berikutnya, jadi login/daftar pelanggan sesudahnya bisa 429.
+  // Percobaan ke-n dalam satu run; penghitung dikosongkan di post-response saat loop selesai.
+  const n = (Number(bru.getVar("rate_limit_attempt")) || 0) + 1;
+  bru.setVar("rate_limit_attempt", n);
+  if (n === 1) {
+    // E-mail yang TIDAK PERNAH didaftarkan, dengan ember per-e-mail sendiri (5 per menit).
+    bru.setVar("rate_limit_email", "bruno.batas+" + Date.now() + "@example.test");
+  }
+}
+
+script:post-response {
+  // Ulangi request ini sampai 429 (paling banyak 12 percobaan). Lompat ke request yang sama hanya
+  // bekerja di runner (Run folder / bru run): bru.runner.setNextRequest ada di Bruno desktop 4.3.0
+  // (dicek statis, belum dijalankan); bru.setNextRequest adalah nama lamanya. CLI belum diverifikasi.
+  const n = Number(bru.getVar("rate_limit_attempt")) || 0;
+  let lanjut = res.status !== 429 && n < 12;
+  if (lanjut) {
+    const nama = "73 - Login Berulang Sampai Dibatasi (negative - 429)";
+    if (bru.runner && typeof bru.runner.setNextRequest === "function") {
+      bru.runner.setNextRequest(nama);
+    } else if (typeof bru.setNextRequest === "function") {
+      bru.setNextRequest(nama);
+    } else {
+      // Tanpa fungsi lompat request, loop tidak bisa berjalan: biarkan tes 429 gagal dengan jelas.
+      lanjut = false;
+    }
+  }
+  bru.setVar("rate_limit_continue", lanjut ? "ya" : "tidak");
+  if (!lanjut) {
+    bru.setVar("rate_limit_attempt", 0);
+  }
+}
+
+tests {
+  if (bru.getVar("rate_limit_continue") === "ya") {
+    test("percobaan sebelum batas ditolak 401 invalid_credentials", function () {
+      expect(res.status).to.equal(401);
+      expect(res.body.code).to.equal("invalid_credentials");
+    });
+  } else {
+    test("ditolak 429 too_many_requests - dengan header Retry-After", function () {
+      expect(res.status).to.equal(429);
+      expect(res.body.code).to.equal("too_many_requests");
+      expect(res.getHeader("retry-after")).to.exist;
+    });
+  }
+}

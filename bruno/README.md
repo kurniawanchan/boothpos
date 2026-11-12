@@ -96,3 +96,18 @@ sejenis yang sudah ada:
   `{{customer_id}}` sudah pasti punya order/preorder untuk memicu 409-nya.
   Jangan pindahkan ke lebih awal — akan false-negative (200/204) kalau
   dijalankan sebelum 05-Order/06-Preorder membuat transaksinya.
+
+## 12-CustomerCommerce — toko online / aplikasi pelanggan (2026-11-11)
+
+Folder mandiri untuk API etalase publik, akun pelanggan, alamat, checkout
+idempoten, pesanan/pelacakan, dan fulfilment pesanan pelanggan oleh staf. Ia
+menyiapkan datanya sendiri (menyalakan saklar `customer_commerce_enabled`,
+membuat dan menerbitkan produk uji); yang dibutuhkan hanya server berjalan,
+`php artisan db:seed`, instalasi teraktivasi, dan minimal satu artist serta
+satu kategori aktif. Awalan `12-` yang sama dengan `12-Language` hanya soal
+urutan; keduanya tidak saling bergantung. Request terakhir sengaja memicu 429
+pada login pelanggan, jadi tunggu minimal satu menit sebelum menjalankan folder
+ini lagi. Variabel barunya (snake_case) ada di `environments/local.bru`.
+Prasyarat lengkap, perintah headless (belum diverifikasi), anggaran rate
+limit, dan isi tiap bagian: `12-CustomerCommerce/CATATAN.md`. Seperti folder
+lain, folder ini belum pernah dijalankan terhadap server sungguhan.

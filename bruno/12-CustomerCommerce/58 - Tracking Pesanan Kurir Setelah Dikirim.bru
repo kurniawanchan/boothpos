@@ -1,0 +1,38 @@
+meta {
+  name: 58 - Tracking Pesanan Kurir Setelah Dikirim
+  type: http
+  seq: 58
+}
+
+get {
+  url: {{base_url}}/customer/orders/{{customer_order_number}}/tracking
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("pelacakan oleh toko: kurir, resi terbaru, dan waktu kirim tampil", function () {
+    expect(res.status).to.equal(200);
+    const t = res.body.data;
+    expect(t.updated_by).to.equal("store");
+    expect(t.status).to.equal("shipped");
+    expect(t.shipment.courier_name).to.equal("JNE");
+    expect(t.shipment.service_name).to.equal("YES");
+    expect(t.shipment.tracking_number).to.equal(bru.getVar("customer_tracking_number") + "-R");
+    expect(t.shipment.dispatched_at).to.be.a("string");
+    expect(t.shipment.delivered_at).to.equal(null);
+    // Tanpa literal regex: skrip tes dibersihkan dari komentar (decomment) sebelum dijalankan.
+    const url = t.shipment.tracking_url;
+    expect(url === null || String(url).indexOf("https://") === 0, "tautan hanya dari templat https server").to.equal(true);
+  });
+  test("linimasa memuat riwayat resi tanpa metadata atau identitas staf", function () {
+    const t = res.body.data;
+    expect(t.timeline.map(function (e) { return e.event_type; })).to.include("tracking_updated");
+    t.timeline.forEach(function (e) {
+      expect(e).to.have.all.keys("status", "event_type", "note", "occurred_at");
+    });
+  });
+}

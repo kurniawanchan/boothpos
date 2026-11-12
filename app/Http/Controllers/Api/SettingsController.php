@@ -9,6 +9,7 @@ use App\Models\Setting;
 use App\Services\ActivityLogger;
 use App\Services\ImageUploadService;
 use App\Support\AppName;
+use App\Support\CustomerCommerceGate;
 use App\Support\LicenseGate;
 use App\Support\ModeGate;
 use App\Support\SchemaStatus;
@@ -71,6 +72,9 @@ class SettingsController extends Controller
             'bulk_approve_max' => (int) config('approvals.bulk_max'),
             // 065 — batas pre-order per aksi massal. Hanya kemudahan UI; server tetap penegaknya (PreorderBulkRequest).
             'preorder_bulk_max' => (int) config('preorders.bulk_max'),
+            // Customer commerce — saklar toko online (etalase + aplikasi pelanggan). Hanya status untuk UI staf;
+            // penegaknya middleware `customer.commerce` pada rute pelanggan. Diubah lewat PUT /settings.
+            'customer_commerce_enabled' => CustomerCommerceGate::enabled(),
         ]);
     }
 

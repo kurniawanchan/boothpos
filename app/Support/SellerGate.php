@@ -17,7 +17,14 @@ class SellerGate
 {
     public static function current(): ?int
     {
-        return self::forUser(auth()->user());
+        $user = auth()->user();
+
+        // Customer commerce — pengguna guard `customer` adalah App\Models\CustomerAccount, BUKAN staf: ia tak punya
+        // seller maupun peran, jadi tidak ada batasan seller untuknya (visibilitas etalase diatur scope-nya sendiri).
+        // Tanpa pengecekan ini setiap query model ber-SellerScope di rute pelanggan berakhir TypeError (500). Aman
+        // hanya karena config/auth.php mengikat guard staf ke provider `users`: subjek non-User tidak pernah sampai
+        // ke rute staf. forUser() sengaja tetap bertipe ketat.
+        return $user instanceof \App\Models\User ? self::forUser($user) : null;
     }
 
     /**

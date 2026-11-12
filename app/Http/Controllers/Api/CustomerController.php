@@ -192,6 +192,21 @@ class CustomerController extends Controller
             ], 409);
         }
 
+        // Customer commerce — kontak yang punya AKUN aplikasi pelanggan atau
+        // pesanan pelanggan juga tidak boleh dihapus: soft delete membuat
+        // relasi `customer` akun itu menjadi null (akun yatim yang tidak bisa
+        // masuk maupun dibaca), dan FK RESTRICT di basis data tidak menjaga
+        // soft delete. Dicek tanpa scope mode, seperti guard hapus PO: guard
+        // "boleh dihapus?" harus melihat kedua mode.
+        $hasCustomerCommerce = $customer->account()->withoutGlobalScopes()->exists()
+            || $customer->customerOrders()->withoutGlobalScopes()->exists();
+
+        if ($hasCustomerCommerce) {
+            return response()->json([
+                'message' => __('master_data.customer_delete_has_customer_account'),
+            ], 409);
+        }
+
         // F13.4 — hapus data adalah tindakan sensitif; log ditulis DI DALAM
         // transaksi yang sama dengan delete-nya (atomik, ikut rollback
         // bersama). CATATAN PII: snapshot fillable Customer memuat

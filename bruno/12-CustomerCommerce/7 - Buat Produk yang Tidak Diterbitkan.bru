@@ -1,0 +1,56 @@
+meta {
+  name: 7 - Buat Produk yang Tidak Diterbitkan
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{base_url}}/products
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "artist_id": {{storefront_artist_id}},
+    "category_id": {{storefront_category_id}},
+    "product_segment": "{{hidden_product_segment}}",
+    "name": "Tersembunyi Bruno {{storefront_run_id}}",
+    "description": "Produk uji yang sengaja tidak diterbitkan.",
+    "is_preorder": false,
+    "variants": [
+      { "variant_name": "Standar", "sell_price": 50000, "cost_price": 20000 }
+    ]
+  }
+}
+
+script:pre-request {
+  // code_prefix (ARTIST-KATEGORI-SEGMEN) unik di SELURUH tabel produk, termasuk produk terhapus
+  // (ProductCodeGenerator::buildCodePrefix); segmen acak 6 huruf A-Z mencegah tabrakan antar-run.
+  const huruf = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let segmen = "";
+  for (let i = 0; i < 6; i++) {
+    segmen += huruf.charAt(Math.floor(Math.random() * huruf.length));
+  }
+  bru.setVar("hidden_product_segment", segmen);
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("hidden_product_id", res.body.id);
+    bru.setVar("hidden_product_slug", res.body.slug);
+    bru.setVar("hidden_variant_id", res.body.variants[0].id);
+  }
+}
+
+tests {
+  test("produk kedua dibuat dan tetap belum terbit", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.published_at).to.equal(null);
+    expect(res.body.slug).to.not.equal(bru.getVar("storefront_product_slug"));
+  });
+}

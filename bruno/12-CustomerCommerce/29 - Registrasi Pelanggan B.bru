@@ -1,0 +1,39 @@
+meta {
+  name: 29 - Registrasi Pelanggan B
+  type: http
+  seq: 29
+}
+
+post {
+  url: {{base_url}}/customer/auth/register
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Pelanggan Bruno B",
+    "email": "{{customer_b_email}}",
+    "password": "{{customer_password}}",
+    "phone": "080000000002"
+  }
+}
+
+script:pre-request {
+  // Akun kedua untuk membuktikan batas kepemilikan alamat dan pesanan antar-akun.
+  bru.setVar("customer_b_email", "bruno.custb+" + Date.now() + "@example.test");
+}
+
+script:post-response {
+  if (res.status === 201) {
+    bru.setVar("customer_b_token", res.body.token);
+  }
+}
+
+tests {
+  test("akun kedua dibuat dan langsung mendapat token sendiri", function () {
+    expect(res.status).to.equal(201);
+    expect(res.body.token).to.be.a("string");
+    expect(res.body.account.email).to.equal(bru.getVar("customer_b_email"));
+  });
+}

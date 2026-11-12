@@ -2,6 +2,7 @@
 
 namespace App\Services\DemoClone;
 
+use App\Models\CustomerAccount;
 use App\Services\ActivityLogger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -11,6 +12,10 @@ use Illuminate\Support\Str;
 
 /**
  * Mengganti seluruh data DEMO dengan salinan persis data LIVE.
+ *
+ * Pengecualian yang disengaja (customer commerce, 2026-11-11): enam tabel
+ * pesanan pelanggan (CloneRegistry::wipeOnly()) TIDAK disalin — baris DEMO-nya
+ * hanya dihapus, bersama token akun DEMO. Baris LIVE-nya tetap dijaga sidik jari.
  *
  * Aturan yang tidak boleh dilanggar: baris LIVE hanya DIBACA. Setiap SELECT
  * sumber memakai scope 'live', setiap tulisan memberi data_mode 'demo',
@@ -53,6 +58,14 @@ class LiveToDemoCloner
                     $paths[$disk][(string) $path] = true;
                 }
             }
+        }
+
+        // Customer commerce: hanya dihapus di DEMO, tidak ada yang disalin dari LIVE.
+        foreach (array_keys(CloneRegistry::wipeOnly()) as $table) {
+            $tables[$table] = [
+                'demo_delete' => DB::table($table)->whereRaw(CloneRegistry::wipeOnlyScope($table, 'demo'))->count(),
+                'live_clone' => 0,
+            ];
         }
 
         $files = ['files' => 0, 'bytes' => 0, 'missing' => 0];
@@ -244,6 +257,16 @@ class LiveToDemoCloner
             }
         }
 
+        // Customer commerce: tabel wipe-only harus KOSONG di sisi DEMO sesudah proses —
+        // tidak ada yang disalin ke sana (hash kata sandi/data akun LIVE tidak boleh muncul di DEMO).
+        foreach (array_keys(CloneRegistry::wipeOnly()) as $table) {
+            $left = DB::table($table)->whereRaw(CloneRegistry::wipeOnlyScope($table, 'demo'))->count();
+
+            if ($left > 0) {
+                throw new CloneException("{$table}: {$left} baris DEMO tersisa; tabel ini hanya dihapus, tidak pernah disalin.");
+            }
+        }
+
         // Stok: salinan tidak boleh mengubah hubungan current_stock ↔ riwayat
         // (kalau LIVE sendiri tidak konsisten, DEMO harus sama persis, bukan "diperbaiki").
         $mismatch = fn (string $mode) => (int) DB::scalar(
@@ -297,9 +320,10 @@ class LiveToDemoCloner
     /** Jumlah baris mode $childMode di $table yang kolom $column-nya menunjuk baris mode $parentMode di $parent. */
     private function crossModeCount(string $table, string $column, string $parent, string $childMode, string $parentMode): int
     {
+        // anyScope: tabel wipe-only (customer commerce) memakai pemeriksaan yang sama.
         return DB::table($table)
-            ->whereRaw(CloneRegistry::scope($table, $childMode))
-            ->whereRaw("`{$column}` IN (SELECT id FROM `{$parent}` WHERE ".CloneRegistry::scope($parent, $parentMode).')')
+            ->whereRaw(CloneRegistry::anyScope($table, $childMode))
+            ->whereRaw("`{$column}` IN (SELECT id FROM `{$parent}` WHERE ".CloneRegistry::anyScope($parent, $parentMode).')')
             ->count();
     }
 
@@ -342,6 +366,18 @@ class LiveToDemoCloner
         if ($linkedUsers > 0) {
             throw new CloneException("users.artist_id: {$linkedUsers} pengguna terikat ke seller milik DEMO; lepas atau ganti seller-nya dulu, tidak ada yang diubah.");
         }
+
+        // Customer commerce — tabel pesanan pelanggan tidak disalin, tapi FK-nya (RESTRICT) ke customers /
+        // product_variants / customer_accounts menahan penghapusan DEMO. Akun atau pesanan LIVE yang menunjuk
+        // induk DEMO harus dibereskan dulu: berhenti di sini dengan pesan jelas, bukan galat FK mentah di tengah proses.
+        foreach (CloneRegistry::wipeOnlyReferences() as $reference => $parent) {
+            [$table, $column] = explode('.', $reference);
+            $count = $this->crossModeCount($table, $column, $parent, 'live', 'demo');
+
+            if ($count > 0) {
+                throw new CloneException("{$reference}: {$count} baris LIVE menunjuk induk {$parent} milik DEMO; data lintas mode harus dibereskan dulu, tidak ada yang diubah.");
+            }
+        }
     }
 
     /** @return list<string> */
@@ -365,6 +401,19 @@ class LiveToDemoCloner
     private function wipeDemo(): array
     {
         $deleted = [];
+
+        // Customer commerce — lebih dulu dari tabel tercermin, karena FK-nya RESTRICT ke customers dan
+        // product_variants. Token akun DEMO dihapus paling awal (selagi akunnya masih bisa dikenali):
+        // personal_access_tokens polimorfik tanpa FK, jadi tidak ikut terhapus dan akan menjadi yatim.
+        // Hanya token milik CustomerAccount DEMO; token staf dan token akun LIVE tidak tersentuh.
+        $deleted['personal_access_tokens'] = DB::table('personal_access_tokens')
+            ->where('tokenable_type', (new CustomerAccount)->getMorphClass())
+            ->whereIn('tokenable_id', DB::table('customer_accounts')->whereRaw(CloneRegistry::wipeOnlyScope('customer_accounts', 'demo'))->select('id'))
+            ->delete();
+
+        foreach (array_keys(CloneRegistry::wipeOnly()) as $table) {
+            $deleted[$table] = DB::table($table)->whereRaw(CloneRegistry::wipeOnlyScope($table, 'demo'))->delete();
+        }
 
         foreach (array_reverse(array_keys(CloneRegistry::tables())) as $table) {
             $where = CloneRegistry::scope($table, 'demo');

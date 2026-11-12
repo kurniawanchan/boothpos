@@ -1,0 +1,35 @@
+meta {
+  name: 61 - Staf Cari ID Pesanan Ambil di Tempat
+  type: http
+  seq: 61
+}
+
+get {
+  url: {{base_url}}/customer-orders?q={{customer_pickup_order_number}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+script:post-response {
+  // Rute staf memakai id numerik; pelanggan hanya mengenal order_number. Id dicari lewat ?q=.
+  if (res.status === 200) {
+    const pesanan = (res.body.data || []).find(function (o) {
+      return o.order_number === bru.getVar("customer_pickup_order_number");
+    });
+    bru.setVar("customer_pickup_order_staff_id", pesanan ? pesanan.id : "");
+  }
+}
+
+tests {
+  test("pesanan ambil di tempat tampil di daftar staf", function () {
+    expect(res.status).to.equal(200);
+    const pesanan = res.body.data.find(function (o) {
+      return o.order_number === bru.getVar("customer_pickup_order_number");
+    });
+    expect(pesanan, "pesanan tidak ditemukan").to.be.an("object");
+    expect(pesanan.fulfilment_method).to.equal("pickup");
+  });
+}

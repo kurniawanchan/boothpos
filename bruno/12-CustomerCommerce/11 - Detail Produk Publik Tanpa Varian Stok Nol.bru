@@ -1,0 +1,41 @@
+meta {
+  name: 11 - Detail Produk Publik Tanpa Varian Stok Nol
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{base_url}}/storefront/products/{{storefront_product_slug}}
+  auth: none
+}
+
+script:post-response {
+  if (res.status === 200) {
+    const varian = (res.body.data.variants || []).find(function (v) {
+      return Number(v.id) === Number(bru.getVar("storefront_variant_id"));
+    });
+    if (varian) {
+      bru.setVar("storefront_variant_price", varian.price);
+    }
+  }
+}
+
+tests {
+  test("hanya varian berstok yang ditawarkan, dengan batas beli alih-alih angka stok", function () {
+    expect(res.status).to.equal(200);
+    const ids = res.body.data.variants.map(function (v) { return Number(v.id); });
+    expect(ids).to.deep.equal([Number(bru.getVar("storefront_variant_id"))]);
+    expect(ids, "varian stok nol bocor").to.not.include(Number(bru.getVar("storefront_empty_variant_id")));
+    const v = res.body.data.variants[0];
+    expect(v.price).to.equal("75000.00");
+    expect(v.in_stock).to.equal(true);
+    expect(v.max_qty).to.equal(Math.min(10, Number(bru.getVar("storefront_max_qty_per_line"))));
+  });
+  test("detail tanpa field staf dan tanpa id numerik produk", function () {
+    const teks = JSON.stringify(res.body);
+    ["cost_price", "current_stock", "sku", "code_prefix", "data_mode", "image_path", "low_stock_alert"].forEach(function (kunci) {
+      expect(teks, "field staf bocor: " + kunci).to.not.include('"' + kunci + '":');
+    });
+    expect(res.body.data).to.not.have.property("id");
+  });
+}

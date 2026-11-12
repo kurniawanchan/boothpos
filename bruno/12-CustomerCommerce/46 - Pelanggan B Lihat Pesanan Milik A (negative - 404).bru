@@ -1,0 +1,31 @@
+meta {
+  name: 46 - Pelanggan B Lihat Pesanan Milik A (negative - 404)
+  type: http
+  seq: 46
+}
+
+get {
+  url: {{base_url}}/customer/orders/{{customer_order_number}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_b_token}}
+}
+
+script:post-response {
+  // Disimpan tanpa request_id untuk dibandingkan dengan pelacakan akun lain (request 47) dan
+  // dengan nomor pesanan yang tidak ada (request 48).
+  if (res.status === 404) {
+    const salinan = Object.assign({}, res.body);
+    delete salinan.request_id;
+    bru.setVar("cross_account_not_found_body", JSON.stringify(salinan));
+  }
+}
+
+tests {
+  test("ditolak 404 not_found - pesanan akun lain tidak bisa dibaca", function () {
+    expect(res.status).to.equal(404);
+    expect(res.body.code).to.equal("not_found");
+  });
+}

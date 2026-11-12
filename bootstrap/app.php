@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureInstallationIsActivated;
+use App\Support\CustomerCommerceProblem;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -27,11 +28,38 @@ return Application::configure(basePath: dirname(__DIR__))
             'ability' => \App\Http\Middleware\EnsureMenuAction::class,
             // 058 — tolak pengguna ber-seller dari permukaan administratif (lihat EnsureNotSellerScoped).
             'seller.forbidden' => \App\Http\Middleware\EnsureNotSellerScoped::class,
+            // Customer commerce — HANYA untuk grup rute /customer dan /storefront (lihat routes/api.php).
+            // `customer.account`: pengguna guard `customer` yang sah (bukan alias `ability`, itu gerbang menu staf).
+            'customer.account' => \App\Http\Middleware\EnsureCustomerAccount::class,
+            // `customer.commerce`: saklar fitur `customer_commerce_enabled` (503 saat mati).
+            'customer.commerce' => \App\Http\Middleware\EnsureCustomerCommerceEnabled::class,
+            // `customer.body`: tolak badan > customer_commerce.max_body_bytes (413) sebelum diurai; paling depan di grup.
+            'customer.body' => \App\Http\Middleware\LimitCustomerRequestBody::class,
         ]);
+
+        // Framework mengurutkan middleware yang ada di daftar prioritasnya (auth, throttle) LEBIH DULU
+        // daripada yang tidak terdaftar, apa pun urutan di rute. Tanpa ini `customer.body` yang dipasang
+        // "paling depan" tetap berjalan SESUDAH `auth:customer` (401 untuk badan raksasa) dan sesudah
+        // limiter (badan yang ditolak ikut menghabiskan jatahnya). Ditaruh tepat di depan
+        // AuthenticatesRequests, jadi urutannya: customer.body → auth → throttle.
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Contracts\Auth\Middleware\AuthenticatesRequests::class,
+            prepend: \App\Http\Middleware\LimitCustomerRequestBody::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
+        );
+
+        // Customer commerce (CONTRACT §3) — amplop galat `application/problem+json` untuk
+        // /api/v1/customer/* dan /api/v1/storefront/* SAJA. Callback mengembalikan null
+        // untuk permintaan lain, sehingga galat staf tetap ditangani persis seperti
+        // sebelumnya (bentuknya dikunci StaffErrorShapeRegressionTest). Didaftarkan
+        // SEBELUM renderer QueryException di bawah supaya rute pelanggan tidak pernah
+        // menerima bentuk `{message, code}` milik staf; pelaporan ke log tidak diubah.
+        $exceptions->render(
+            fn (Throwable $e, Request $request) => CustomerCommerceProblem::fromThrowable($e, $request),
         );
 
         // 035-po-row-actions — database yang TERTINGGAL dari versi aplikasi

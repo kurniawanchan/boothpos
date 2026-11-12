@@ -27,6 +27,8 @@ class ProductVariantResource extends JsonResource
             'low_stock_alert' => $this->low_stock_alert,
             'is_low_stock' => $this->isLowStock(),
             'is_active' => $this->is_active,
+            // Customer commerce: null = belum terbit di etalase. Hanya berubah lewat POST …/publish|unpublish.
+            'published_at' => $this->published_at?->toIso8601String(),
             // 034-seller-po-bom — selama true, cost_price mengikuti biaya BOM
             // dan dikunci terhadap edit manual.
             'bom_complete' => (bool) $this->bom_complete,

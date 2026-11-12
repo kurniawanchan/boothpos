@@ -29,6 +29,14 @@ use Maatwebsite\Excel\Facades\Excel;
  * Dua baris di file yang sama dengan email yang sama diperlakukan sebagai
  * pembaruan berurutan ke pelanggan yang sama — baris terakhir menang untuk
  * field yang diisinya (research.md Decision 3).
+ *
+ * KONTAK MILIK AKUN APLIKASI dikecualikan dari pencocokan (customer commerce):
+ * registrasi aplikasi selalu membuat baris `customers` sendiri dengan e-mail
+ * akunnya, dan pemiliknya mengelola nama/teleponnya lewat aplikasi. Tanpa
+ * pengecualian ini satu baris impor dengan e-mail yang sama akan menimpa nama,
+ * telepon, dan catatan kontak itu. Baris impor seperti itu membuat kontak baru
+ * (atau mencocokkan kontak staf lain ber-e-mail sama), tidak pernah menyentuh
+ * kontak milik akun.
  */
 class CustomerExportImportService
 {
@@ -279,6 +287,9 @@ class CustomerExportImportService
 
         return Customer::query()
             ->whereIn('email', $normalizedEmails)
+            // Kontak milik akun aplikasi tidak boleh ikut dicocokkan (lihat docblock kelas). Tanpa scope
+            // pada akunnya: akun dari mode data mana pun tetap menandai kontaknya sebagai milik akun.
+            ->whereDoesntHave('account', fn ($account) => $account->withoutGlobalScopes())
             ->get()
             ->keyBy(fn (Customer $c) => strtolower($c->email));
     }

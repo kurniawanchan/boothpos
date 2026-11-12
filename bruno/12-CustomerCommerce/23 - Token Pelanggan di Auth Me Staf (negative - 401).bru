@@ -1,0 +1,22 @@
+meta {
+  name: 23 - Token Pelanggan di Auth Me Staf (negative - 401)
+  type: http
+  seq: 23
+}
+
+get {
+  url: {{base_url}}/auth/me
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("ditolak 401 - token pelanggan tidak berlaku di GET /auth/me staf (amplop galat staf tidak berubah)", function () {
+    expect(res.status).to.equal(401);
+    expect(res.body.message).to.equal("Unauthenticated.");
+    expect(res.body).to.not.have.property("code");
+  });
+}

@@ -35,6 +35,8 @@ class MenuKeys
         'purchase_orders' => 'Purchase Order',
         'customers' => 'Pelanggan',
         'preorders' => 'Pre-order',
+        // Customer commerce — pesanan dari aplikasi pelanggan (fulfilment oleh staf), bukan POS / pre-order.
+        'customer_orders' => 'Pesanan Pelanggan',
         'companies' => 'Perusahaan',
         'licenses' => 'Lisensi',
         'invoices' => 'Invoice',

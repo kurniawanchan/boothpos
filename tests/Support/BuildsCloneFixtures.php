@@ -94,6 +94,8 @@ trait BuildsCloneFixtures
             'artist_id' => $g['artist'], 'category_id' => $g['category'],
             'code_prefix' => "{$c['artist']}-{$c['cat']}-{$c['seg']}", 'product_segment' => $c['seg'],
             'name' => "Product {$tag}", 'image_path' => "products/{$mode}-product.jpg",
+            // Customer commerce: slug wajib (NOT NULL) dan unik per mode; insert mentah tidak melewati hook model.
+            'slug' => "product-{$mode}",
         ]);
         $g['variant1'] = $this->row('product_variants', $m + [
             'product_id' => $g['product'], 'sku' => "{$c['artist']}-{$c['cat']}-{$c['seg']}-001",
@@ -229,5 +231,62 @@ trait BuildsCloneFixtures
         ]);
 
         return $g;
+    }
+
+    /**
+     * Customer commerce — enam tabel pesanan pelanggan + token akunnya untuk
+     * satu mode, menempel pada graf dari buildGraph($mode). Tabel-tabel ini
+     * TIDAK disalin LIVE→DEMO (hanya DEMO-nya yang dihapus), jadi sengaja
+     * dipisah dari buildGraph(): test klon lama tetap menguji 24 tabel yang
+     * dicerminkan tanpa ikut berubah. Kata sandi adalah teks sintetis, bukan hash sungguhan.
+     *
+     * @param  array<string,int>  $g  hasil buildGraph($mode)
+     * @return array<string,int>
+     */
+    private function buildCustomerCommerceGraph(string $mode, array $g): array
+    {
+        $tag = strtoupper($mode);
+        $c = [];
+
+        $c['account'] = $this->row('customer_accounts', [
+            'data_mode' => $mode, 'customer_id' => $g['customer'], 'email' => "{$mode}.akun@example.test",
+            'password' => 'sintetis-bukan-hash',
+        ]);
+        $c['address'] = $this->row('customer_addresses', [
+            'customer_account_id' => $c['account'], 'recipient_name' => "Penerima {$tag}", 'phone' => '+62-000-ADDR-0001',
+            'address_line' => 'Jl. Contoh No. 2', 'city' => 'Bandung', 'province' => 'Jawa Barat', 'is_default' => true,
+        ]);
+        $c['order'] = $this->row('customer_orders', [
+            'data_mode' => $mode, 'order_number' => "CO-{$tag}000001", 'customer_account_id' => $c['account'],
+            'customer_id' => $g['customer'], 'fulfilment_method' => 'courier', 'status' => 'shipped',
+            'contact_name' => "Customer {$tag}", 'contact_phone' => '+62-000-CONT-0001', 'contact_email' => "{$mode}.akun@example.test",
+            'shipping_address' => json_encode(['recipient_name' => "Penerima {$tag}", 'city' => 'Bandung']),
+            'subtotal' => '10000.00', 'shipping_cost' => '5000.00', 'total' => '15000.00',
+            'idempotency_key' => "idem-{$mode}-0123456789", 'idempotency_hash' => hash('sha256', "payload-{$mode}"),
+            'stock_deducted_at' => now(), 'confirmed_at' => now(),
+        ]);
+        $c['item'] = $this->row('customer_order_items', [
+            'customer_order_id' => $c['order'], 'variant_id' => $g['variant1'], 'sku_snapshot' => "SKU-{$tag}-001",
+            'name_snapshot' => "Product {$tag} — Standard", 'unit_price' => '10000.00', 'qty' => 1, 'line_total' => '10000.00',
+        ]);
+        $c['shipment'] = $this->row('customer_order_shipments', [
+            'customer_order_id' => $c['order'], 'courier_name' => 'JNE', 'tracking_number' => "RESI-{$tag}-1",
+            'shipping_cost' => '5000.00', 'dispatched_at' => now(),
+        ]);
+        $c['event'] = $this->row('customer_order_status_events', [
+            'customer_order_id' => $c['order'], 'status' => 'shipped', 'actor_type' => 'staff', 'actor_user_id' => $g['user'],
+            'note' => "Dikirim {$tag}", 'occurred_at' => now(),
+        ]);
+        $c['token'] = $this->row('personal_access_tokens', [
+            'tokenable_type' => (new \App\Models\CustomerAccount)->getMorphClass(), 'tokenable_id' => $c['account'],
+            'name' => 'customer-app', 'token' => hash('sha256', "token-{$mode}"), 'abilities' => '["customer"]',
+        ]);
+        // Pengurangan stok saat staf mengonfirmasi pesanan pelanggan (qty 0 supaya stok fixture tetap konsisten).
+        $c['stock'] = $this->row('stock_movements', [
+            'data_mode' => $mode, 'variant_id' => $g['variant1'], 'type' => 'sale', 'qty_change' => 0, 'stock_before' => 4,
+            'stock_after' => 4, 'reference_type' => 'customer_order_item', 'reference_id' => $c['item'],
+        ]);
+
+        return $c;
     }
 }

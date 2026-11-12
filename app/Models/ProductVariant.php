@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasDataMode;
 use App\Models\Concerns\HasSellerScope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -54,6 +55,8 @@ class ProductVariant extends Model
             'sku_is_typed' => 'boolean',
             'bom_complete' => 'boolean',
             'bom_completed_at' => 'datetime',
+            // Customer commerce: NULL = belum terbit di etalase. Sengaja bukan fillable (hanya lewat aksi terbit staf).
+            'published_at' => 'datetime',
         ];
     }
 
@@ -65,6 +68,49 @@ class ProductVariant extends Model
     public function bomLines(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(ProductVariantBomLine::class);
+    }
+
+    /**
+     * Customer commerce (CONTRACT §6) — syarat yang melekat pada BARIS VARIAN:
+     * aktif, sudah terbit, dan berstok. Varian terhapus lunak dan varian mode
+     * data lain tersaring oleh global scope. Dipakai untuk varian sebuah
+     * produk yang SUDAH diketahui tampil (detail, rentang harga kartu).
+     */
+    public function scopeStorefrontOffered(Builder $query): Builder
+    {
+        return $query
+            ->where($query->qualifyColumn('is_active'), true)
+            // NULL (belum terbit) otomatis gagal di perbandingan ini.
+            ->where($query->qualifyColumn('published_at'), '<=', now())
+            ->where($query->qualifyColumn('current_stock'), '>', 0);
+    }
+
+    /**
+     * Customer commerce (CONTRACT §6) — SATU-satunya definisi "varian layak
+     * jual di etalase": ditawarkan (scopeStorefrontOffered) DAN produknya
+     * layak tampil (Product::scopeStorefrontListable). Inilah yang dipakai
+     * quote dan checkout untuk memvalidasi keranjang.
+     *
+     * Aman dipakai bersama lockForUpdate(): syarat produk berupa subquery
+     * EXISTS, jadi yang terkunci hanya baris varian. Muat produknya dengan
+     * with('product') (satu query tambahan, bukan satu per varian).
+     */
+    public function scopeStorefrontSellable(Builder $query): Builder
+    {
+        return $query
+            ->storefrontOffered()
+            ->whereHas('product', fn (Builder $product) => $product->storefrontListable());
+    }
+
+    /**
+     * Customer commerce — batas beli per baris keranjang yang boleh dilihat
+     * publik: stok dibatasi `customer_commerce.max_qty_per_line`. Stok
+     * persisnya tidak pernah dikirim ke pelanggan; angka inilah gantinya
+     * (detail etalase, quote, galat keranjang).
+     */
+    public function storefrontMaxQty(): int
+    {
+        return max(0, min((int) $this->current_stock, (int) config('customer_commerce.max_qty_per_line')));
     }
 
     public function isLowStock(): bool

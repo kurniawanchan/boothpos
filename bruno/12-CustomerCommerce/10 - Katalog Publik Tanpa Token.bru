@@ -1,0 +1,32 @@
+meta {
+  name: 10 - Katalog Publik Tanpa Token
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{base_url}}/storefront/products?q={{storefront_run_id}}&per_page=500
+  auth: none
+}
+
+tests {
+  test("tanpa token, hanya produk yang terbit dan berstok yang tampil", function () {
+    expect(res.status).to.equal(200);
+    const slugs = res.body.data.map(function (p) { return p.slug; });
+    expect(slugs).to.include(bru.getVar("storefront_product_slug"));
+    expect(slugs, "produk belum terbit bocor").to.not.include(bru.getVar("hidden_product_slug"));
+    expect(res.body.meta.total).to.equal(1);
+    expect(res.body.meta.per_page, "per_page di atas 50 dipangkas, bukan ditolak").to.equal(50);
+  });
+  test("kartu tanpa field staf; rentang harga hanya dari varian berstok", function () {
+    const teks = JSON.stringify(res.body);
+    ["cost_price", "current_stock", "sku", "code_prefix", "data_mode", "image_path", "low_stock_alert"].forEach(function (kunci) {
+      expect(teks, "field staf bocor: " + kunci).to.not.include('"' + kunci + '":');
+    });
+    const kartu = res.body.data.find(function (p) { return p.slug === bru.getVar("storefront_product_slug"); });
+    expect(kartu, "id numerik produk tidak dikirim").to.not.have.property("id");
+    expect(kartu.price_min).to.equal("75000.00");
+    expect(kartu.price_max, "harga varian stok nol (80000) tidak boleh terbaca").to.equal("75000.00");
+    expect(kartu.in_stock).to.equal(true);
+  });
+}

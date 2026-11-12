@@ -28,7 +28,8 @@ class MenuActions
         'pos' => ['standard' => ['create'], 'named' => ['draft']],
         'session' => ['standard' => ['create', 'edit'], 'named' => []],
         'events' => ['standard' => self::CRUD, 'named' => ['status']],
-        'products' => ['standard' => self::CRUD, 'named' => ['bom', 'catalog', 'import', 'export']],
+        // `publish` (customer commerce): terbit/tarik produk dan varian di etalase publik, terpisah dari Ubah.
+        'products' => ['standard' => self::CRUD, 'named' => ['bom', 'catalog', 'import', 'export', 'publish']],
         'artists' => ['standard' => self::CRUD, 'named' => ['import', 'export']],
         'categories' => ['standard' => self::CRUD, 'named' => ['import', 'export']],
         'stock' => ['standard' => [], 'named' => ['adjust', 'import', 'export']],
@@ -37,6 +38,9 @@ class MenuActions
         'purchase_orders' => ['standard' => self::CRUD, 'named' => ['status', 'payment']],
         'customers' => ['standard' => self::CRUD, 'named' => ['import', 'export']],
         'preorders' => ['standard' => self::CRUD, 'named' => ['status', 'dispatch', 'payment', 'verify', 'split', 'duplicate', 'notify', 'import', 'export']],
+        // Customer commerce: tanpa CRUD (pesanan dibuat pelanggan lewat aplikasi); satu aksi bernama per transisi
+        // status supaya "boleh konfirmasi" bisa dipisah dari "boleh kirim" atau "boleh batalkan".
+        'customer_orders' => ['standard' => [], 'named' => ['confirm', 'pack', 'ready', 'pickup', 'ship', 'deliver', 'cancel']],
         'companies' => ['standard' => self::CRUD, 'named' => ['activate']],
         'licenses' => ['standard' => self::CRUD, 'named' => []],
         'invoices' => ['standard' => self::CRUD, 'named' => ['mark_paid', 'cancel', 'import', 'export']],

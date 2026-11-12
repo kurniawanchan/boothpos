@@ -1,0 +1,31 @@
+meta {
+  name: 62 - Staf Konfirmasi Pesanan Ambil di Tempat
+  type: http
+  seq: 62
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_pickup_order_staff_id}}/confirm
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "note": "Pesanan dikonfirmasi toko."
+  }
+}
+
+tests {
+  test("dikonfirmasi tanpa ongkir; stok berkurang lagi (8 - 1 = 7)", function () {
+    expect(res.status).to.equal(200);
+    const o = res.body.data;
+    expect(o.status).to.equal("confirmed");
+    expect(o.shipping_cost).to.equal("0.00");
+    expect(o.items[0].available_stock).to.equal(7);
+  });
+}

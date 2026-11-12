@@ -45,6 +45,11 @@ class UpdateProductRequest extends FormRequest
             // FormRequest, tidak perlu ditolak keras). Konsisten dengan
             // catatan di openapi-pos-mvp.yaml: "Perubahan nama tidak
             // mengubah code_prefix maupun SKU yang sudah ada."
+            //
+            // Customer commerce: `slug` dan `published_at` juga SENGAJA tidak
+            // ada di sini. Slug adalah pengenal publik produk di etalase dan
+            // tidak boleh berubah saat ganti nama (tautan/cache aplikasi
+            // pelanggan); penerbitan hanya lewat aksi terbit tersendiri.
             'artist_id' => ['sometimes', 'integer', 'exists:artists,id'],
             'category_id' => ['sometimes', 'integer', 'exists:categories,id'],
             // Spec 044: segmen boleh diubah; server meregenerasi SKU (ProductSegmentChangeService).

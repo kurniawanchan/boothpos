@@ -17,6 +17,9 @@ class ForbiddenSurfacesTest extends TestCase
         'auth', 'license', 'server-info', 'settings', 'products', 'variants', 'catalog', 'stock', 'bom', 'orders',
         'preorders', 'customers', 'purchase-orders', 'reports', 'settlements', 'sessions', 'pos-drafts',
         'payment-proofs', 'payment-channels', 'events', 'categories', 'artists', 'vendors', 'materials', 'shipments',
+        // Customer commerce — rute etalase/pelanggan: pengguna staf (ber-seller atau tidak) ditolak oleh guard, bukan
+        // oleh seller scope. Token staf tidak pernah diterima di sana (lihat CustomerTokenBoundaryTest).
+        'storefront', 'customer',
     ];
 
     public function test_admin_only_surfaces_are_refused_for_a_scoped_user(): void

@@ -1,0 +1,45 @@
+meta {
+  name: 1 - Login Owner (lewati bila token sudah ada)
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{base_url}}/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "username": "owner",
+    "password": "password123"
+  }
+}
+
+script:pre-request {
+  // Login staf dibatasi throttle:5,1 per IP. Bila folder ini berjalan setelah 01-Auth dalam satu
+  // runner, owner_token sudah ada: request ini dilewati supaya jatah login staf tidak terpakai.
+  // bru.runner.skipRequest() ada di runner Bruno desktop 4.3.0 (dicek statis, belum dijalankan;
+  // CLI belum diverifikasi). Tanpa fungsi itu login tetap berjalan satu kali (masih di bawah 5 per menit).
+  if (bru.getVar("owner_token") && bru.runner && typeof bru.runner.skipRequest === "function") {
+    try {
+      bru.runner.skipRequest();
+    } catch (e) {
+      // Di luar runner: login berjalan seperti biasa.
+    }
+  }
+}
+
+script:post-response {
+  if (res.status === 200) {
+    bru.setVar("owner_token", res.body.token);
+  }
+}
+
+tests {
+  test("login owner berhasil", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.token).to.be.a("string");
+  });
+}

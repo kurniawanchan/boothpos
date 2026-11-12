@@ -1,0 +1,18 @@
+meta {
+  name: 14 - Katalog dengan Urutan Tidak Dikenal (negative - 422)
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{base_url}}/storefront/products?sort=acak
+  auth: none
+}
+
+tests {
+  test("ditolak 422 validation_failed - sort hanya newest, name, price_asc, price_desc", function () {
+    expect(res.status).to.equal(422);
+    expect(res.body.code).to.equal("validation_failed");
+    expect(res.body.errors.sort).to.be.an("array");
+  });
+}

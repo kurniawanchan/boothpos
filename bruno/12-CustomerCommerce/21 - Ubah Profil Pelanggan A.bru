@@ -1,0 +1,32 @@
+meta {
+  name: 21 - Ubah Profil Pelanggan A
+  type: http
+  seq: 21
+}
+
+put {
+  url: {{base_url}}/customer/me
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+body:json {
+  {
+    "name": "Pelanggan Bruno A Diperbarui",
+    "phone": "080000000011",
+    "email": "ganti.email@example.test"
+  }
+}
+
+tests {
+  test("nama dan telepon berubah; e-mail tidak bisa diubah lewat profil", function () {
+    expect(res.status).to.equal(200);
+    expect(res.body.data.name).to.equal("Pelanggan Bruno A Diperbarui");
+    expect(res.body.data.phone).to.equal("080000000011");
+    expect(res.body.data.email).to.equal(bru.getVar("customer_email"));
+  });
+}

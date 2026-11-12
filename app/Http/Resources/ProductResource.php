@@ -17,6 +17,8 @@ class ProductResource extends JsonResource
             'category_id' => $this->category_id,
             'category_name' => $this->whenLoaded('category', fn () => $this->category->name),
             'code_prefix' => $this->code_prefix,
+            // Customer commerce: pengenal publik produk di etalase; dibuat sekali, tidak berubah saat ganti nama.
+            'slug' => $this->slug,
             // Segmen tersimpan (spec 044 US4). Kolom product_segment NOT NULL, jadi selalu ada.
             'product_segment' => $this->product_segment,
             'name' => $this->name,
@@ -27,6 +29,8 @@ class ProductResource extends JsonResource
             'is_preorder' => $this->is_preorder,
             'preorder_eta' => $this->preorder_eta?->toDateString(),
             'is_active' => $this->is_active,
+            // Customer commerce: null = belum terbit di etalase. Hanya berubah lewat POST …/publish|unpublish.
+            'published_at' => $this->published_at?->toIso8601String(),
             'variants' => ProductVariantResource::collection($this->whenLoaded('variants')),
             // 048 — hanya ada bila query daftar menghitungnya (jebakan relationLoaded yang SENGAJA dipakai):
             // respons show/store/update tidak memuatnya, jadi tidak pernah menampilkan nol palsu.

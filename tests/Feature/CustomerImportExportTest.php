@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\ActivityLog;
 use App\Models\Customer;
+use App\Models\CustomerAccount;
 use App\Models\User;
 use App\Support\ModeGate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -289,6 +290,100 @@ class CustomerImportExportTest extends TestCase
         $real = $this->post('/api/v1/customers/import', ['file' => $file2]);
         $real->assertStatus(201);
         $real->assertJson(['created_count' => 2, 'updated_count' => 0]);
+    }
+
+    // --- Customer commerce: kontak milik akun aplikasi ---------------------
+
+    /** Kontak yang dibuat registrasi aplikasi: ber-akun, dan dikelola pemiliknya lewat aplikasi. */
+    private function accountOwnedContact(string $email, string $name = 'Rina Aplikasi', string $phone = '0811'): Customer
+    {
+        $customer = Customer::factory()->create(['name' => $name, 'email' => $email, 'phone' => $phone, 'notes' => 'catatan pemilik', 'artist_id' => null]);
+        CustomerAccount::factory()->create(['customer_id' => $customer->id, 'email' => $email]);
+
+        return $customer;
+    }
+
+    public function test_an_imported_row_never_overwrites_a_contact_owned_by_an_app_account(): void
+    {
+        $this->actingAsRole('owner');
+        $owned = $this->accountOwnedContact('rina@example.com');
+        $addressBefore = $owned->address;
+
+        $file = $this->workbook([
+            ['name' => 'Ditimpa Impor', 'phone' => '0000', 'address' => 'Jl. Baru', 'email' => 'RINA@example.com', 'social_handle' => '@x', 'notes' => 'timpa'],
+        ]);
+
+        $response = $this->post('/api/v1/customers/import', ['file' => $file]);
+
+        $response->assertStatus(201)->assertJson(['created_count' => 1, 'updated_count' => 0, 'row_errors' => []]);
+
+        // Kontak milik akun utuh.
+        $owned->refresh();
+        $this->assertSame('Rina Aplikasi', $owned->name);
+        $this->assertSame('0811', $owned->phone);
+        $this->assertSame('catatan pemilik', $owned->notes);
+        $this->assertSame($addressBefore, $owned->address);
+
+        // Baris impor menjadi kontak BARU, bukan akun.
+        $created = Customer::where('name', 'Ditimpa Impor')->sole();
+        $this->assertNotSame($owned->id, $created->id);
+        $this->assertNull($created->account);
+        $this->assertSame(2, Customer::count());
+    }
+
+    public function test_an_imported_row_still_updates_a_staff_contact_that_shares_the_email_with_an_app_account(): void
+    {
+        $this->actingAsRole('owner');
+        $owned = $this->accountOwnedContact('rina@example.com');
+        $staffContact = Customer::factory()->create(['name' => 'Rina Kontak Staf', 'email' => 'rina@example.com', 'phone' => '0822', 'artist_id' => null]);
+
+        $file = $this->workbook([
+            ['name' => 'Rina Diperbarui', 'phone' => null, 'address' => null, 'email' => 'rina@example.com', 'social_handle' => null, 'notes' => null],
+        ]);
+
+        $this->post('/api/v1/customers/import', ['file' => $file])
+            ->assertStatus(201)->assertJson(['created_count' => 0, 'updated_count' => 1]);
+
+        $this->assertSame('Rina Diperbarui', $staffContact->fresh()->name);
+        $this->assertSame('0822', $staffContact->fresh()->phone);
+        $this->assertSame('Rina Aplikasi', $owned->fresh()->name);
+        $this->assertSame(2, Customer::count());
+    }
+
+    public function test_the_dry_run_counts_an_app_account_email_as_a_new_contact_and_matches_the_real_import(): void
+    {
+        $this->actingAsRole('owner');
+        $owned = $this->accountOwnedContact('rina@example.com');
+        $rows = [
+            ['name' => 'Baris Satu', 'phone' => null, 'address' => null, 'email' => 'rina@example.com', 'social_handle' => null, 'notes' => null],
+        ];
+
+        $this->post('/api/v1/customers/import', ['file' => $this->workbook($rows), 'dry_run' => '1'])
+            ->assertStatus(200)->assertJson(['dry_run' => true, 'created_count' => 1, 'updated_count' => 0]);
+        $this->assertSame(1, Customer::count());
+
+        $this->post('/api/v1/customers/import', ['file' => $this->workbook($rows)])
+            ->assertStatus(201)->assertJson(['created_count' => 1, 'updated_count' => 0]);
+        $this->assertSame('Rina Aplikasi', $owned->fresh()->name);
+    }
+
+    public function test_two_rows_with_an_app_account_email_update_the_same_new_contact_in_sequence(): void
+    {
+        $this->actingAsRole('owner');
+        $owned = $this->accountOwnedContact('rina@example.com');
+
+        $file = $this->workbook([
+            ['name' => 'Baris Pertama', 'phone' => '0001', 'address' => null, 'email' => 'rina@example.com', 'social_handle' => null, 'notes' => null],
+            ['name' => 'Baris Kedua', 'phone' => null, 'address' => null, 'email' => 'rina@example.com', 'social_handle' => null, 'notes' => null],
+        ]);
+
+        $this->post('/api/v1/customers/import', ['file' => $file])
+            ->assertStatus(201)->assertJson(['created_count' => 1, 'updated_count' => 1]);
+
+        $this->assertSame('Rina Aplikasi', $owned->fresh()->name);
+        $contact = Customer::where('id', '!=', $owned->id)->sole();
+        $this->assertSame('Baris Kedua', $contact->name);
+        $this->assertSame('0001', $contact->phone);
     }
 
     // --- Template ---------------------------------------------------------

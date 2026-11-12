@@ -1,0 +1,29 @@
+meta {
+  name: 51 - Staf Kirim Sebelum Dikonfirmasi (negative - 409)
+  type: http
+  seq: 51
+}
+
+post {
+  url: {{base_url}}/customer-orders/{{customer_order_staff_id}}/ship
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{owner_token}}
+}
+
+body:json {
+  {
+    "courier_name": "JNE",
+    "tracking_number": "BRUNO-TERLALU-DINI"
+  }
+}
+
+tests {
+  test("ditolak 409 invalid_transition - pesanan yang belum dikonfirmasi tidak bisa dikirim", function () {
+    expect(res.status).to.equal(409);
+    expect(res.body.code).to.equal("invalid_transition");
+  });
+}

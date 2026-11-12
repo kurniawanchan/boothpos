@@ -1,0 +1,21 @@
+meta {
+  name: 22 - Profil Tanpa Token (negative - 401)
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{base_url}}/customer/me
+  auth: none
+}
+
+tests {
+  test("ditolak 401 unauthenticated dalam amplop problem+json", function () {
+    expect(res.status).to.equal(401);
+    expect(res.getHeader("content-type")).to.include("application/problem+json");
+    expect(res.body.code).to.equal("unauthenticated");
+    expect(res.body.status).to.equal(401);
+    expect(res.body.type).to.equal("https://boothpos.local/problems/unauthenticated");
+    expect(res.body.request_id).to.be.a("string");
+  });
+}

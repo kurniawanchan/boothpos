@@ -1,0 +1,26 @@
+meta {
+  name: 45 - Tracking Pesanan Kurir Sebelum Dikirim
+  type: http
+  seq: 45
+}
+
+get {
+  url: {{base_url}}/customer/orders/{{customer_order_number}}/tracking
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("pelacakan diperbarui oleh toko, belum ada data pengiriman", function () {
+    expect(res.status).to.equal(200);
+    const t = res.body.data;
+    expect(t.order_number).to.equal(bru.getVar("customer_order_number"));
+    expect(t.updated_by).to.equal("store");
+    expect(t.status).to.equal("awaiting_confirmation");
+    expect(t.shipment).to.equal(null);
+    expect(t.timeline[0].status).to.equal("awaiting_confirmation");
+  });
+}

@@ -1,0 +1,21 @@
+meta {
+  name: 71 - Token Setelah Logout Ditolak (negative - 401)
+  type: http
+  seq: 71
+}
+
+get {
+  url: {{base_url}}/customer/me
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{customer_token}}
+}
+
+tests {
+  test("ditolak 401 unauthenticated - token yang sudah logout tidak berlaku lagi", function () {
+    expect(res.status).to.equal(401);
+    expect(res.body.code).to.equal("unauthenticated");
+  });
+}
