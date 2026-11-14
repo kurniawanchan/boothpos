@@ -2,18 +2,12 @@ package com.boothpos.customer.feature.orders.presentation
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Create
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import com.boothpos.customer.core.data.domain.model.FulfilmentMethod
 import com.boothpos.customer.core.ui.component.StatusTone
+import com.boothpos.customer.core.ui.icon.SkyIcons
 import com.boothpos.customer.feature.orders.R
 import com.boothpos.customer.feature.orders.domain.OrderEvent
 import com.boothpos.customer.feature.orders.domain.OrderEventType
@@ -27,7 +21,10 @@ import java.util.Locale
 // daftar, kepala detail, dan linimasa. Status selalu dibawa ikon + teks; ikon tiap status berbeda
 // BENTUK (jam, centang, kotak, toko, truk, rumah, lingkaran bercentang, silang), bukan hanya warna.
 
-/** Ikon dari pustaka inti atau vector drawable modul ini (hanya material-icons-core yang tersedia). */
+/**
+ * Ikon garis desain (`SkyIcons` di :core:ui) atau vector drawable modul ini. Semua status memakai
+ * ikon garis, supaya lencana, kepala detail, dan riwayat segaris dengan ikon lain di aplikasi.
+ */
 internal sealed interface OrderIcon {
     data class Vector(val image: ImageVector) : OrderIcon
     data class Drawable(@DrawableRes val id: Int) : OrderIcon
@@ -55,56 +52,59 @@ internal fun OrderStatus.visual(): OrderStatusVisual = when (this) {
         R.string.orders_status_awaiting_confirmation,
         R.string.orders_status_awaiting_confirmation_explanation,
         R.string.orders_event_awaiting_confirmation,
-        OrderIcon.Drawable(R.drawable.orders_ic_status_awaiting),
+        OrderIcon.Vector(SkyIcons.Clock),
         StatusTone.Warning,
     )
     OrderStatus.Confirmed -> OrderStatusVisual(
         R.string.orders_status_confirmed,
         R.string.orders_status_confirmed_explanation,
         R.string.orders_event_confirmed,
-        OrderIcon.Vector(Icons.Filled.Check),
+        OrderIcon.Vector(SkyIcons.Check),
         StatusTone.Info,
     )
     OrderStatus.Packing -> OrderStatusVisual(
         R.string.orders_status_packing,
         R.string.orders_status_packing_explanation,
         R.string.orders_event_packing,
-        OrderIcon.Drawable(R.drawable.orders_ic_status_packing),
-        StatusTone.Info,
+        OrderIcon.Vector(SkyIcons.Box),
+        // Kuning lembut ("sedang berjalan"), seperti lencana "Sedang dikemas" di desain.
+        StatusTone.Warning,
     )
     OrderStatus.ReadyForPickup -> OrderStatusVisual(
         R.string.orders_status_ready_for_pickup,
         R.string.orders_status_ready_for_pickup_explanation,
         R.string.orders_event_ready_for_pickup,
-        OrderIcon.Drawable(R.drawable.orders_ic_status_ready),
+        OrderIcon.Vector(SkyIcons.Store),
         StatusTone.Info,
     )
     OrderStatus.Shipped -> OrderStatusVisual(
         R.string.orders_status_shipped,
         R.string.orders_status_shipped_explanation,
         R.string.orders_event_shipped,
-        OrderIcon.Drawable(R.drawable.orders_ic_status_shipped),
+        OrderIcon.Vector(SkyIcons.Truck),
         StatusTone.Info,
     )
     OrderStatus.Delivered -> OrderStatusVisual(
         R.string.orders_status_delivered,
         R.string.orders_status_delivered_explanation,
         R.string.orders_event_delivered,
-        OrderIcon.Vector(Icons.Filled.Home),
+        OrderIcon.Vector(SkyIcons.Home),
         StatusTone.Success,
     )
     OrderStatus.PickedUp -> OrderStatusVisual(
         R.string.orders_status_picked_up,
         R.string.orders_status_picked_up_explanation,
         R.string.orders_event_picked_up,
-        OrderIcon.Vector(Icons.Filled.CheckCircle),
+        OrderIcon.Vector(SkyIcons.CheckCircle),
         StatusTone.Success,
     )
     OrderStatus.Cancelled -> OrderStatusVisual(
         R.string.orders_status_cancelled,
         R.string.orders_status_cancelled_explanation,
         R.string.orders_event_cancelled,
-        OrderIcon.Vector(Icons.Filled.Close),
+        OrderIcon.Vector(SkyIcons.Close),
+        // Desain menggambar "Dibatalkan" abu-abu, tetapi abu-abu adalah nada status yang belum
+        // dikenal; pembatalan tetap memakai nada bahaya supaya keduanya tidak tertukar.
         StatusTone.Danger,
     )
     // Status baru dari server yang belum dikenal versi aplikasi ini: netral, tidak menebak.
@@ -112,7 +112,7 @@ internal fun OrderStatus.visual(): OrderStatusVisual = when (this) {
         R.string.orders_status_unknown,
         R.string.orders_status_unknown_explanation,
         R.string.orders_event_unknown_status,
-        OrderIcon.Vector(Icons.Filled.Info),
+        OrderIcon.Vector(SkyIcons.Info),
         StatusTone.Neutral,
     )
 }
@@ -128,8 +128,28 @@ internal fun OrderEvent.labelRes(): Int = when (type) {
 
 internal fun OrderEvent.icon(): OrderIcon = when (type) {
     OrderEventType.StatusChanged -> status.visual().icon
-    OrderEventType.TrackingUpdated -> OrderIcon.Vector(Icons.Filled.Create)
-    OrderEventType.ShippingCostSet, OrderEventType.Unknown -> OrderIcon.Vector(Icons.Filled.Info)
+    OrderEventType.TrackingUpdated -> OrderIcon.Vector(SkyIcons.Edit)
+    OrderEventType.ShippingCostSet, OrderEventType.Unknown -> OrderIcon.Vector(SkyIcons.Info)
+}
+
+/** Banyaknya tahap pada batang progres di kepala detail pesanan. */
+internal const val ORDER_STAGE_COUNT = 5
+
+/**
+ * Berapa dari [ORDER_STAGE_COUNT] tahap yang sudah dicapai status ini. Pesanan kurir dan pesanan
+ * ambil-di-toko sama-sama lima tahap (menunggu konfirmasi, dikonfirmasi, dikemas, lalu dikirim
+ * dan sampai, atau siap diambil dan diambil), jadi metode pemenuhan tidak perlu diketahui di sini.
+ *
+ * Null berarti batang progres tidak digambar: pesanan yang dibatalkan tidak sedang menuju tahap
+ * mana pun, dan posisi status yang belum dikenal versi aplikasi ini tidak boleh ditebak.
+ */
+internal fun OrderStatus.reachedStages(): Int? = when (this) {
+    OrderStatus.AwaitingConfirmation -> 1
+    OrderStatus.Confirmed -> 2
+    OrderStatus.Packing -> 3
+    OrderStatus.ReadyForPickup, OrderStatus.Shipped -> 4
+    OrderStatus.Delivered, OrderStatus.PickedUp -> ORDER_STAGE_COUNT
+    OrderStatus.Cancelled, OrderStatus.Unknown -> null
 }
 
 /** Null untuk metode yang belum dikenal versi aplikasi ini (barisnya tidak ditampilkan). */

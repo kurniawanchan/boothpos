@@ -1,22 +1,22 @@
 package com.boothpos.customer.feature.catalog.presentation
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,13 +24,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.boothpos.customer.core.ui.component.ProductImage
+import com.boothpos.customer.core.ui.component.AppCard
+import com.boothpos.customer.core.ui.component.ProductCapsule
 import com.boothpos.customer.core.ui.component.StatusBadge
 import com.boothpos.customer.core.ui.component.StatusTone
+import com.boothpos.customer.core.ui.component.paletteSeed
 import com.boothpos.customer.core.ui.format.RupiahFormatter
+import com.boothpos.customer.core.ui.icon.SkyIcons
+import com.boothpos.customer.core.ui.theme.BoothTheme
 import com.boothpos.customer.core.ui.theme.Spacing
 import com.boothpos.customer.feature.catalog.R
 import com.boothpos.customer.feature.catalog.domain.ProductSort
@@ -63,7 +66,7 @@ internal fun priceLabel(product: ProductSummary): String {
 internal fun AvailabilityBadge(inStock: Boolean, modifier: Modifier = Modifier) {
     StatusBadge(
         text = stringResource(if (inStock) R.string.catalog_in_stock else R.string.catalog_out_of_stock),
-        icon = if (inStock) Icons.Filled.CheckCircle else Icons.Filled.Info,
+        icon = if (inStock) SkyIcons.CheckCircle else SkyIcons.Info,
         tone = if (inStock) StatusTone.Success else StatusTone.Neutral,
         modifier = modifier,
     )
@@ -78,65 +81,79 @@ internal fun AvailabilityBadge(inStock: Boolean, modifier: Modifier = Modifier) 
 private fun AvailabilityLabel(inStock: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
-            imageVector = if (inStock) Icons.Filled.CheckCircle else Icons.Filled.Info,
+            imageVector = if (inStock) SkyIcons.CheckCircle else SkyIcons.Info,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(14.dp),
         )
         Spacer(Modifier.width(Spacing.xs))
         Text(
             text = stringResource(if (inStock) R.string.catalog_in_stock else R.string.catalog_out_of_stock),
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
 /**
- * Kartu produk di daftar: gambar, nama, penjual, harga, ketersediaan. Seluruh kartu adalah satu
- * aksi (buka detail), jadi pembaca layar membacanya sebagai satu tombol.
+ * Kartu produk di grid: ubin berwarna dengan gambar di dalam kapsul, lalu nama, penjual, harga,
+ * ketersediaan. Seluruh kartu adalah satu aksi (buka detail), jadi pembaca layar membacanya
+ * sebagai satu tombol.
  */
 @Composable
 internal fun ProductCard(product: ProductSummary, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    OutlinedCard(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(CardDefaults.outlinedShape)
-            .clickable(
-                onClickLabel = stringResource(R.string.catalog_card_click_label),
-                role = Role.Button,
-                onClick = onClick,
-            ),
+    val seed = paletteSeed(product.name)
+    val tint = BoothTheme.sky.tint(seed)
+    AppCard(
+        modifier = modifier.fillMaxWidth(),
+        interaction = Modifier.clickable(
+            onClickLabel = stringResource(R.string.catalog_card_click_label),
+            role = Role.Button,
+            onClick = onClick,
+        ),
+        contentPadding = PaddingValues(0.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(Spacing.md),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = Spacing.sm, end = Spacing.sm, top = Spacing.sm)
+                .height(CardTileHeight)
+                .clip(RoundedCornerShape(CardTileCorner))
+                .background(tint),
+            contentAlignment = Alignment.Center,
         ) {
-            // Dekoratif di daftar: nama produk di sebelahnya sudah menjelaskannya.
-            ProductImage(imageUrl = product.imageUrl, contentDescription = null, size = CardImageSize)
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                Text(
-                    text = product.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = product.sellerName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = priceLabel(product),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                AvailabilityLabel(inStock = product.inStock)
-            }
+            // Dekoratif di daftar: nama produk di bawahnya sudah menjelaskannya.
+            ProductCapsule(
+                imageUrl = product.imageUrl,
+                contentDescription = null,
+                diameter = CardCapsuleSize,
+                seamColor = tint,
+                paletteSeed = seed,
+            )
+        }
+        Column(
+            modifier = Modifier.padding(start = Spacing.md, end = Spacing.md, top = Spacing.sm, bottom = Spacing.md),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+        ) {
+            Text(
+                text = product.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = product.sellerName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(text = priceLabel(product), style = MaterialTheme.typography.titleMedium)
+            AvailabilityLabel(inStock = product.inStock)
         }
     }
 }
 
-private val CardImageSize = 88.dp
+private val CardTileHeight = 124.dp
+private val CardTileCorner = 20.dp
+private val CardCapsuleSize = 104.dp

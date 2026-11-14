@@ -2,19 +2,20 @@ package com.boothpos.customer.feature.checkout.presentation.address
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.Surface
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,12 +32,16 @@ import com.boothpos.customer.core.data.domain.model.Address
 import com.boothpos.customer.core.network.error.ApiError
 import com.boothpos.customer.core.network.error.ApiErrorCodes
 import com.boothpos.customer.core.ui.component.ApiErrorState
+import com.boothpos.customer.core.ui.component.AppCard
 import com.boothpos.customer.core.ui.component.EmptyState
 import com.boothpos.customer.core.ui.component.InlineMessage
 import com.boothpos.customer.core.ui.component.InlineMessageTone
 import com.boothpos.customer.core.ui.component.LoadingState
 import com.boothpos.customer.core.ui.component.PrimaryButton
+import com.boothpos.customer.core.ui.component.SecondaryButton
 import com.boothpos.customer.core.ui.component.apiErrorMessage
+import com.boothpos.customer.core.ui.icon.SkyIcons
+import com.boothpos.customer.core.ui.theme.BoothTheme
 import com.boothpos.customer.core.ui.theme.Dimens
 import com.boothpos.customer.core.ui.theme.Spacing
 import com.boothpos.customer.feature.checkout.R
@@ -82,7 +87,7 @@ internal fun AddressListScreen(
             EmptyState(
                 title = stringResource(R.string.checkout_address_list_empty_title),
                 message = stringResource(R.string.checkout_address_list_empty_message),
-                icon = rememberVectorPainter(Icons.Filled.LocationOn),
+                icon = rememberVectorPainter(SkyIcons.Pin),
                 actionLabel = stringResource(R.string.checkout_address_add),
                 onAction = onAddAddress,
                 modifier = modifier,
@@ -113,7 +118,12 @@ internal fun AddressListScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = onConfirmDelete, modifier = Modifier.heightIn(min = Dimens.MinTouchTarget)) {
+                // Aksi yang menghapus: warna galat menguatkan teks "Hapus", bukan menggantikannya.
+                TextButton(
+                    onClick = onConfirmDelete,
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
+                ) {
                     Text(stringResource(R.string.checkout_address_delete))
                 }
             },
@@ -143,14 +153,17 @@ private fun AddressListContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics { contentDescription = busyLabel },
+                color = BoothTheme.sky.progress,
+                trackColor = BoothTheme.sky.progressTrack,
             )
         }
         Column(
             modifier = Modifier
                 .weight(1f)
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+                .padding(start = Spacing.lg, end = Spacing.lg, top = Spacing.sm, bottom = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.ms),
         ) {
             state.actionError?.let { error ->
                 InlineMessage(
@@ -168,23 +181,22 @@ private fun AddressListContent(
                     onSetDefault = { onSetDefault(address.id) },
                     onDelete = { onRequestDelete(address.id) },
                 )
-                HorizontalDivider()
             }
         }
-        HorizontalDivider()
-        Surface {
-            PrimaryButton(
-                text = stringResource(R.string.checkout_address_add),
-                onClick = onAddAddress,
-                enabled = !state.busy,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-            )
-        }
+        // Tanpa Surface: Surface memotong isinya, sehingga pendar tombol utama ikut terpotong.
+        PrimaryButton(
+            text = stringResource(R.string.checkout_address_add),
+            onClick = onAddAddress,
+            enabled = !state.busy,
+            icon = SkyIcons.Plus,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.md),
+        )
     }
 }
 
+/** Satu alamat tersimpan sebagai kartu: isi alamat, lalu aksinya sebagai tombol sekunder dan tautan. */
 @Composable
 private fun AddressCard(
     address: Address,
@@ -194,32 +206,40 @@ private fun AddressCard(
     onDelete: () -> Unit,
 ) {
     val name = address.label?.takeIf { it.isNotBlank() } ?: address.recipientName
-    Column {
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        // Baris tautan di dasar kartu sudah membawa ruang kosongnya sendiri (tinggi sentuh 48 dp).
+        contentPadding = PaddingValues(start = Spacing.md, top = Spacing.md, end = Spacing.md, bottom = Spacing.xs),
+    ) {
         AddressText(address)
         if (!address.isDefault) {
-            TextButton(
+            Spacer(Modifier.height(Spacing.sm))
+            SecondaryButton(
+                text = stringResource(R.string.checkout_address_set_default),
                 onClick = onSetDefault,
                 enabled = enabled,
-                modifier = Modifier.heightIn(min = Dimens.MinTouchTarget),
-            ) { Text(stringResource(R.string.checkout_address_set_default)) }
+            )
         }
-        Row {
+        // FlowRow: dengan huruf besar "Hapus" turun ke baris berikutnya alih-alih terpotong.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             val editLabel = stringResource(R.string.checkout_address_edit_named, name)
-            TextButton(
+            CardLink(
+                text = stringResource(R.string.checkout_address_edit),
                 onClick = onEdit,
                 enabled = enabled,
-                modifier = Modifier
-                    .heightIn(min = Dimens.MinTouchTarget)
-                    .semantics { contentDescription = editLabel },
-            ) { Text(stringResource(R.string.checkout_address_edit)) }
+                icon = SkyIcons.Edit,
+                modifier = Modifier.semantics { contentDescription = editLabel },
+            )
             val deleteLabel = stringResource(R.string.checkout_address_delete_named, name)
-            TextButton(
+            // Aksi yang menghapus: warna galat menguatkan ikon + teksnya, bukan menggantikannya.
+            CardLink(
+                text = stringResource(R.string.checkout_address_delete),
                 onClick = onDelete,
                 enabled = enabled,
-                modifier = Modifier
-                    .heightIn(min = Dimens.MinTouchTarget)
-                    .semantics { contentDescription = deleteLabel },
-            ) { Text(stringResource(R.string.checkout_address_delete)) }
+                icon = SkyIcons.Trash,
+                contentColor = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { contentDescription = deleteLabel },
+            )
         }
     }
 }
