@@ -8,19 +8,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -31,26 +29,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.boothpos.customer.core.data.domain.model.FulfilmentMethod
 import com.boothpos.customer.core.ui.component.ApiErrorState
+import com.boothpos.customer.core.ui.component.AppCard
 import com.boothpos.customer.core.ui.component.EmptyState
 import com.boothpos.customer.core.ui.component.InlineMessage
 import com.boothpos.customer.core.ui.component.InlineMessageTone
 import com.boothpos.customer.core.ui.component.LoadingState
 import com.boothpos.customer.core.ui.format.RupiahFormatter
+import com.boothpos.customer.core.ui.icon.SkyIcons
 import com.boothpos.customer.core.ui.theme.Dimens
 import com.boothpos.customer.core.ui.theme.Spacing
 import com.boothpos.customer.feature.orders.R
+import com.boothpos.customer.feature.orders.domain.OrderStatus
 import com.boothpos.customer.feature.orders.domain.OrderSummary
 import com.boothpos.customer.core.ui.R as CoreUiR
 
@@ -76,9 +79,9 @@ internal fun OrdersScreenRoute(
 }
 
 /**
- * Daftar "Pesanan Saya". Tata letak: ponsel kecil lebih dulu (satu kolom); di layar lebar bingkai
- * aplikasi memusatkan konten dengan lebar maksimum, jadi tetap satu kolom, bukan dasbor.
- * Tidak ada mockup desain untuk aplikasi ini: Material 3 polos dengan tema :core:ui.
+ * Daftar "Pesanan Saya", desain "Sky Capsule": satu kartu putih per pesanan. Tata letak: ponsel
+ * kecil lebih dulu (satu kolom); di layar lebar bingkai aplikasi memusatkan konten dengan lebar
+ * maksimum, jadi tetap satu kolom, bukan dasbor. Judul layar digambar bingkai aplikasi, bukan di sini.
  */
 @Composable
 internal fun OrdersScreen(
@@ -143,8 +146,8 @@ private fun OrderList(
     val currentOnLoadMore by rememberUpdatedState(onLoadMore)
     PullToRefreshBox(isRefreshing = content.refreshing, onRefresh = onRefresh, modifier = modifier.fillMaxSize()) {
         LazyColumn(
-            contentPadding = PaddingValues(bottom = Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+            contentPadding = PaddingValues(bottom = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.ms),
             modifier = Modifier
                 .fillMaxSize()
                 .testTag(OrdersTestTags.ORDER_LIST),
@@ -172,7 +175,7 @@ private fun OrderList(
                     order = order,
                     dateFormatter = dateFormatter,
                     onClick = { onOrderClick(order.orderNumber) },
-                    modifier = Modifier.padding(horizontal = Spacing.md),
+                    modifier = Modifier.padding(horizontal = Spacing.lg),
                 )
             }
             when {
@@ -183,7 +186,7 @@ private fun OrderList(
                         tone = InlineMessageTone.Error,
                         actionLabel = stringResource(CoreUiR.string.core_ui_retry),
                         onAction = onRetryLoadMore,
-                        modifier = Modifier.padding(horizontal = Spacing.md),
+                        modifier = Modifier.padding(horizontal = Spacing.lg),
                     )
                 }
             }
@@ -197,7 +200,8 @@ private fun RefreshRow(refreshing: Boolean, onRefresh: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Spacing.xs),
+            // Teks tombolnya sendiri masuk 12 dp, jadi tepi teks sejajar dengan tepi kartu (24 dp).
+            .padding(horizontal = Spacing.ms),
         horizontalArrangement = Arrangement.End,
     ) {
         TextButton(
@@ -208,7 +212,7 @@ private fun RefreshRow(refreshing: Boolean, onRefresh: () -> Unit) {
                 .heightIn(min = Dimens.MinTouchTarget)
                 .semantics { contentDescription = description },
         ) {
-            Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(SkyIcons.Refresh, contentDescription = null, modifier = Modifier.size(RefreshIconSize))
             Spacer(Modifier.width(Spacing.xs))
             Text(stringResource(R.string.orders_refresh))
         }
@@ -216,8 +220,9 @@ private fun RefreshRow(refreshing: Boolean, onRefresh: () -> Unit) {
 }
 
 /**
- * Satu pesanan sebagai satu tombol: nomor, status (ikon + teks), tanggal, ringkasan barang, total.
- * Isinya teks dan ikon polos, sehingga pembaca layar membacakan seluruh baris sebagai satu item.
+ * Satu pesanan sebagai satu kartu yang seluruhnya satu tombol: status (ikon + teks) dan tanggal,
+ * nomor pesanan, ringkasan barang, lalu cara menerima pesanan dan total. Isinya teks dan ikon
+ * polos, sehingga pembaca layar membacakan seluruh kartu sebagai satu item.
  */
 @Composable
 private fun OrderRow(
@@ -226,46 +231,87 @@ private fun OrderRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    OutlinedCard(
-        shape = MaterialTheme.shapes.medium,
+    val scheme = MaterialTheme.colorScheme
+    val cancelled = order.status == OrderStatus.Cancelled
+    // Isi kartu pesanan batal diredupkan. Teks sekundernya lalu memakai tinta penuh: tinta sekunder
+    // yang ikut diredupkan tidak lagi lolos kontras AA di atas kartu putih.
+    val secondary = if (cancelled) scheme.onSurface else scheme.onSurfaceVariant
+    AppCard(
         modifier = modifier.fillMaxWidth(),
+        // Klik (dan tag tesnya) lewat `interaction`, bukan `modifier`: ia dipasang di dalam clip
+        // kartu, sehingga riak sentuh mengikuti sudut kartu dan bayangan kartu tidak terpotong.
+        interaction = Modifier
+            .testTag(OrdersTestTags.ORDER_ROW)
+            .clickable(
+                onClickLabel = stringResource(R.string.orders_row_click_label),
+                role = Role.Button,
+                onClick = onClick,
+            ),
     ) {
+        // Yang diredupkan hanya isinya; permukaan dan bayangan kartu tetap utuh. Kartu lain tidak
+        // diberi `alpha(1f)`: itu tetap membuat lapisan gambar sendiri untuk setiap baris daftar.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag(OrdersTestTags.ORDER_ROW)
-                .clickable(
-                    onClickLabel = stringResource(R.string.orders_row_click_label),
-                    role = Role.Button,
-                    onClick = onClick,
-                )
-                .padding(Spacing.md),
-            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                .then(if (cancelled) Modifier.alpha(CANCELLED_CONTENT_ALPHA) else Modifier),
         ) {
+            EndsOrStack(
+                start = { OrderStatusChip(status = order.status) },
+                end = {
+                    order.createdAt?.let { createdAt ->
+                        Text(
+                            text = stringResource(R.string.orders_row_created, dateFormatter.format(createdAt)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = secondary,
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(Spacing.sm))
             Text(
                 text = stringResource(R.string.orders_row_number, order.orderNumber),
                 style = MaterialTheme.typography.titleMedium,
             )
-            OrderStatusChip(status = order.status)
-            order.createdAt?.let { createdAt ->
-                Text(
-                    text = stringResource(R.string.orders_row_created, dateFormatter.format(createdAt)),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
             Text(
                 text = itemSummary(order),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
+                color = secondary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                text = stringResource(R.string.orders_row_total, RupiahFormatter.format(order.total)),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
+            Spacer(Modifier.height(Spacing.xs))
+            EndsOrStack(
+                // Metode yang belum dikenal versi aplikasi ini tidak diberi label karangan.
+                start = { order.fulfilmentMethod?.let { method -> MethodLabel(method = method, color = secondary) } },
+                end = {
+                    Text(
+                        text = stringResource(R.string.orders_row_total, RupiahFormatter.format(order.total)),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
             )
         }
+    }
+}
+
+/** Cara menerima pesanan: ikon kecil (truk atau toko) + teks. Ikonnya dekoratif. */
+@Composable
+private fun MethodLabel(method: FulfilmentMethod, color: Color) {
+    val label = method.labelRes() ?: return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            imageVector = when (method) {
+                FulfilmentMethod.Courier -> SkyIcons.Truck
+                FulfilmentMethod.Pickup -> SkyIcons.Store
+            },
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(MethodIconSize),
+        )
+        Spacer(Modifier.width(MethodIconGap))
+        Text(text = stringResource(label), style = MaterialTheme.typography.bodySmall, color = color)
     }
 }
 
@@ -286,16 +332,16 @@ private fun LoadingMoreRow() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(Spacing.md)
+            .padding(horizontal = Spacing.lg, vertical = Spacing.md)
             .semantics(mergeDescendants = true) {},
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        CircularProgressIndicator(modifier = Modifier.size(LoadingMoreIndicatorSize), strokeWidth = 2.dp)
         Spacer(Modifier.width(Spacing.sm))
         Text(
             text = stringResource(R.string.orders_loading_more),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -303,6 +349,14 @@ private fun LoadingMoreRow() {
 
 /** Jarak (dalam baris) dari akhir daftar saat halaman berikutnya mulai diminta. */
 private const val LOAD_MORE_THRESHOLD = 4
+
+/** Keredupan isi kartu pesanan yang dibatalkan (desain: 72 %). */
+private const val CANCELLED_CONTENT_ALPHA = 0.72f
+
+private val RefreshIconSize = 18.dp
+private val MethodIconSize = 16.dp
+private val MethodIconGap = 6.dp
+private val LoadingMoreIndicatorSize = 20.dp
 
 // Kunci item daftar. Nomor pesanan berasal dari server, jadi kuncinya diberi awalan supaya tidak
 // pernah bertabrakan dengan kunci item tetap: kunci ganda membuat LazyColumn crash.

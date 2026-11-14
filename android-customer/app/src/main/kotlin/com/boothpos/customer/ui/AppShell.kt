@@ -3,34 +3,41 @@ package com.boothpos.customer.ui
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -38,7 +45,9 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -50,8 +59,18 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.boothpos.customer.R
+import com.boothpos.customer.core.ui.component.Mascot
+import com.boothpos.customer.core.ui.component.RoundIconButton
 import com.boothpos.customer.core.ui.component.StoreUnavailableState
+import com.boothpos.customer.core.ui.icon.SkyIcons
+import com.boothpos.customer.core.ui.theme.BoothTheme
 import com.boothpos.customer.core.ui.theme.Dimens
+import com.boothpos.customer.core.ui.theme.DockShape
+import com.boothpos.customer.core.ui.theme.HeroBackdropRequests
+import com.boothpos.customer.core.ui.theme.LocalHeroBackdropRequests
+import com.boothpos.customer.core.ui.theme.SoftShadow
+import com.boothpos.customer.core.ui.theme.Spacing
+import com.boothpos.customer.core.ui.theme.softShadow
 import com.boothpos.customer.feature.account.presentation.AccountRoute
 import com.boothpos.customer.feature.account.presentation.accountGraph
 import com.boothpos.customer.feature.auth.presentation.AuthChoiceRoute
@@ -231,8 +250,15 @@ fun AppScaffold(
     } else {
         stringResource(chrome.titleRes)
     }
+    val scheme = MaterialTheme.colorScheme
+    val sky = BoothTheme.sky
+    // Layar berlatar hero (sambutan, detail produk, "Pesanan dibuat") meminta bilah atas ikut
+    // berwarna hero; selain itu bilah atas transparan di atas latar halaman.
+    val heroRequests = remember { HeroBackdropRequests() }
+    val topBarColor = if (heroRequests.active) sky.hero else Color.Transparent
     Scaffold(
         modifier = modifier,
+        containerColor = scheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -241,40 +267,69 @@ fun AppScaffold(
                         title,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        // Tab utama berjudul besar; layar di dalamnya berjudul kecil di sebelah tombol kembali.
+                        style = if (chrome.topLevel != null) {
+                            MaterialTheme.typography.titleLarge
+                        } else {
+                            MaterialTheme.typography.titleMedium
+                        },
                         modifier = Modifier.semantics { heading() },
                     )
                 },
                 navigationIcon = {
                     if (chrome.topLevel == null && canNavigateBack) {
-                        IconButton(onClick = onBackClick) {
-                            Icon(
-                                Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = stringResource(R.string.app_action_back),
-                            )
-                        }
+                        RoundIconButton(
+                            icon = SkyIcons.Back,
+                            contentDescription = stringResource(R.string.app_action_back),
+                            onClick = onBackClick,
+                            modifier = Modifier.padding(start = Spacing.ms, end = Spacing.xs),
+                        )
                     }
                 },
                 actions = {
                     if (chrome.showAccountAction) {
-                        IconButton(onClick = onAccountClick) {
-                            Icon(
-                                Icons.Filled.AccountCircle,
-                                contentDescription = stringResource(R.string.app_action_account),
-                            )
-                        }
+                        AccountAction(onClick = onAccountClick)
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = topBarColor,
+                    scrolledContainerColor = topBarColor,
+                    titleContentColor = scheme.onSurface,
+                ),
             )
         },
         bottomBar = {
             if (chrome.topLevel != null) {
-                NavigationBar {
+                // Navigasi menempel: bilah putih bersudut atas membulat dengan bayangan ke atas.
+                NavigationBar(
+                    containerColor = scheme.surfaceContainerLow,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier
+                        .softShadow(DockShape, sky.shadow, SoftShadow.Dock)
+                        .clip(DockShape),
+                ) {
                     TopLevelDestination.entries.forEach { destination ->
+                        val selected = destination == chrome.topLevel
                         NavigationBarItem(
-                            selected = destination == chrome.topLevel,
+                            selected = selected,
                             onClick = { onTopLevelSelected(destination) },
                             icon = { TopLevelIcon(destination, state.cartItemCount) },
-                            label = { Text(stringResource(destination.labelRes)) },
+                            label = {
+                                // Tab aktif: ikon di dalam kapsul kuning dan label tebal (bukan warna saja).
+                                Text(
+                                    stringResource(destination.labelRes),
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = scheme.onPrimaryContainer,
+                                selectedTextColor = scheme.onSurface,
+                                indicatorColor = scheme.primaryContainer,
+                                unselectedIconColor = scheme.onSurfaceVariant,
+                                unselectedTextColor = scheme.onSurfaceVariant,
+                            ),
                         )
                     }
                 }
@@ -297,13 +352,36 @@ fun AppScaffold(
                     // Konten di balik penutup tidak boleh terbaca atau ditekan lewat pembaca layar.
                     .then(if (storeClosed) Modifier.clearAndSetSemantics { } else Modifier),
             ) {
-                content()
+                CompositionLocalProvider(LocalHeroBackdropRequests provides heroRequests, content = content)
             }
             if (storeClosed) {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Surface(color = scheme.background, modifier = Modifier.fillMaxSize()) {
                     StoreUnavailableState(onRetry = onRetryStore, retrying = state.checkingStore)
                 }
             }
+        }
+    }
+}
+
+/** Aksi Akun di bilah atas: maskot di dalam lingkaran berwarna hero. Area sentuh 48 dp. */
+@Composable
+private fun AccountAction(onClick: () -> Unit) {
+    val description = stringResource(R.string.app_action_account)
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .padding(end = Spacing.ms)
+            .size(Dimens.MinTouchTarget),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(Dimens.RoundButton)
+                .clip(CircleShape)
+                .background(BoothTheme.sky.hero)
+                .semantics { contentDescription = description },
+            contentAlignment = Alignment.Center,
+        ) {
+            Mascot(modifier = Modifier.width(34.dp))
         }
     }
 }
@@ -315,7 +393,11 @@ private fun TopLevelIcon(destination: TopLevelDestination, cartItemCount: Int) {
         val description = pluralStringResource(R.plurals.app_cart_badge_description, cartItemCount, cartItemCount)
         BadgedBox(
             badge = {
-                Badge(modifier = Modifier.semantics { contentDescription = description }) {
+                Badge(
+                    containerColor = BoothTheme.sky.badge,
+                    contentColor = BoothTheme.sky.onBadge,
+                    modifier = Modifier.semantics { contentDescription = description },
+                ) {
                     Text(
                         if (cartItemCount > MAX_BADGE_COUNT) {
                             stringResource(R.string.app_cart_badge_overflow)

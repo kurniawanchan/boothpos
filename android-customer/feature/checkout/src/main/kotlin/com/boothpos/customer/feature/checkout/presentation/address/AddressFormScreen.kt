@@ -6,7 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -14,9 +14,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,13 +40,14 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.boothpos.customer.core.ui.component.ApiErrorState
+import com.boothpos.customer.core.ui.component.AppCard
 import com.boothpos.customer.core.ui.component.AppTextField
 import com.boothpos.customer.core.ui.component.EmptyState
 import com.boothpos.customer.core.ui.component.InlineMessage
 import com.boothpos.customer.core.ui.component.InlineMessageTone
 import com.boothpos.customer.core.ui.component.LoadingState
 import com.boothpos.customer.core.ui.component.PrimaryButton
-import com.boothpos.customer.core.ui.theme.Dimens
+import com.boothpos.customer.core.ui.icon.SkyIcons
 import com.boothpos.customer.core.ui.theme.Spacing
 import com.boothpos.customer.feature.checkout.R
 import com.boothpos.customer.feature.checkout.domain.AddressField
@@ -95,7 +95,7 @@ internal fun AddressFormScreen(
         AddressFormUiState.NotFound -> EmptyState(
             title = stringResource(R.string.checkout_address_not_found_title),
             message = stringResource(R.string.checkout_address_gone),
-            icon = rememberVectorPainter(Icons.Filled.Info),
+            icon = rememberVectorPainter(SkyIcons.Info),
             actionLabel = stringResource(R.string.checkout_address_not_found_action),
             onAction = onClose,
             modifier = modifier,
@@ -124,8 +124,9 @@ private fun AddressForm(
             .fillMaxSize()
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(Spacing.md),
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
+            // Bantalan bawah lebih longgar: ruang bagi pendar tombol utama di ujung gulungan.
+            .padding(start = Spacing.lg, end = Spacing.lg, top = Spacing.sm, bottom = Spacing.xl),
+        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         state.formError?.let { error ->
             InlineMessage(text = addressErrorMessage(error), tone = InlineMessageTone.Error)
@@ -149,6 +150,7 @@ private fun AddressForm(
             )
         }
         DefaultToggle(state = state, onDefaultChange = onDefaultChange)
+        Spacer(Modifier.height(Spacing.sm))
         PrimaryButton(
             text = stringResource(R.string.checkout_address_save),
             onClick = {
@@ -161,33 +163,45 @@ private fun AddressForm(
     }
 }
 
-/** Seluruh baris adalah target sentuhnya; kotak centang sendiri tidak menerima ketukan terpisah. */
+/**
+ * Seluruh kartu adalah target sentuhnya; kotak centang sendiri tidak menerima ketukan terpisah.
+ * Keadaan tercentang dibawa semantik `toggleable` kartunya, bukan warnanya.
+ */
 @Composable
 private fun DefaultToggle(state: AddressFormUiState.Form, onDefaultChange: (Boolean) -> Unit) {
     val enabled = !state.defaultLocked && !state.submitting
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = Dimens.MinTouchTarget)
-            .toggleable(
-                value = state.draft.isDefault,
-                enabled = enabled,
-                role = Role.Checkbox,
-                onValueChange = onDefaultChange,
-            ),
-        verticalAlignment = Alignment.CenterVertically,
+    val scheme = MaterialTheme.colorScheme
+    AppCard(
+        modifier = Modifier.fillMaxWidth(),
+        interaction = Modifier.toggleable(
+            value = state.draft.isDefault,
+            enabled = enabled,
+            role = Role.Checkbox,
+            onValueChange = onDefaultChange,
+        ),
     ) {
-        Checkbox(checked = state.draft.isDefault, onCheckedChange = null, enabled = enabled)
-        Spacer(Modifier.width(Spacing.md))
-        Column {
-            Text(stringResource(R.string.checkout_address_default_toggle), style = MaterialTheme.typography.bodyLarge)
-            Text(
-                text = stringResource(
-                    if (state.defaultLocked) R.string.checkout_address_default_locked else R.string.checkout_address_default_hint,
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = state.draft.isDefault,
+                onCheckedChange = null,
+                enabled = enabled,
+                // Kuning aksi desain, sama dengan tanda pilihan di kartu pilihan checkout.
+                colors = CheckboxDefaults.colors(
+                    checkedColor = scheme.primaryContainer,
+                    checkmarkColor = scheme.onPrimaryContainer,
                 ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            Spacer(Modifier.width(Spacing.ms))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.checkout_address_default_toggle), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = stringResource(
+                        if (state.defaultLocked) R.string.checkout_address_default_locked else R.string.checkout_address_default_hint,
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

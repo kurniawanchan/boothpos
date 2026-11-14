@@ -2,14 +2,13 @@ package com.boothpos.customer.feature.account.presentation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -100,60 +99,84 @@ private fun EditProfileForm(
     val nameLabel = stringResource(R.string.account_field_name)
     val phoneLabel = stringResource(R.string.account_field_phone)
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(Spacing.md),
-        verticalArrangement = Arrangement.spacedBy(Spacing.md),
-    ) {
-        state.formError?.let { error ->
-            InlineMessage(text = apiErrorMessage(error), tone = InlineMessageTone.Error)
-        }
-        AppTextField(
-            value = state.name,
-            onValueChange = onNameChange,
-            label = nameLabel,
-            error = profileFieldErrorText(state.nameError, nameLabel),
-            enabled = !state.submitting,
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.Words,
-                imeAction = ImeAction.Next,
-            ),
-            modifier = Modifier.semantics { contentType = ContentType.PersonFullName },
-        )
-        AppTextField(
-            value = state.phone,
-            onValueChange = onPhoneChange,
-            label = stringResource(R.string.account_field_phone_optional),
-            error = profileFieldErrorText(state.phoneError, phoneLabel),
-            enabled = !state.submitting,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(
-                onDone = {
+    BottomActionColumn(
+        modifier = modifier.imePadding(),
+        bottom = {
+            PrimaryButton(
+                text = stringResource(R.string.account_action_save),
+                onClick = {
                     keyboard?.hide()
                     onSubmit()
                 },
-            ),
-            modifier = Modifier.semantics { contentType = ContentType.PhoneNumber },
-        )
-        // E-mail ditampilkan sebagai teks, bukan kolom nonaktif: tetap terbaca jelas (kontras) dan
-        // tidak memberi kesan dapat disunting.
-        ProfileField(
-            label = stringResource(R.string.account_field_email),
-            value = state.email,
-            helper = stringResource(R.string.account_email_read_only),
-        )
-        PrimaryButton(
-            text = stringResource(R.string.account_action_save),
-            onClick = {
-                keyboard?.hide()
-                onSubmit()
-            },
-            loading = state.submitting,
-            modifier = Modifier.fillMaxWidth(),
-        )
+                loading = state.submitting,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = Spacing.lg, top = Spacing.sm, end = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            state.formError?.let { error ->
+                InlineMessage(text = apiErrorMessage(error), tone = InlineMessageTone.Error)
+            }
+            AppTextField(
+                value = state.name,
+                onValueChange = onNameChange,
+                label = nameLabel,
+                error = profileFieldErrorText(state.nameError, nameLabel),
+                enabled = !state.submitting,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Words,
+                    imeAction = ImeAction.Next,
+                ),
+                modifier = Modifier.semantics { contentType = ContentType.PersonFullName },
+            )
+            AppTextField(
+                value = state.phone,
+                onValueChange = onPhoneChange,
+                label = stringResource(R.string.account_field_phone_optional),
+                error = profileFieldErrorText(state.phoneError, phoneLabel),
+                enabled = !state.submitting,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(
+                    onDone = {
+                        keyboard?.hide()
+                        onSubmit()
+                    },
+                ),
+                modifier = Modifier.semantics { contentType = ContentType.PhoneNumber },
+            )
+            // E-mail ditampilkan sebagai teks, bukan kolom nonaktif: tetap terbaca jelas (kontras) dan
+            // tidak memberi kesan dapat disunting.
+            ReadOnlyField(
+                label = stringResource(R.string.account_field_email),
+                value = state.email,
+                helper = stringResource(R.string.account_email_read_only),
+            )
+        }
+    }
+}
+
+/**
+ * Data yang hanya dibaca di antara kolom isian, disusun seperti isi kolom (label kecil di atas
+ * nilainya) dan sejajar dengan teks di dalam kolom, tetapi tanpa wadah kolom. Label, nilai, dan
+ * keterangannya dibaca pembaca layar sebagai satu kalimat.
+ */
+@Composable
+private fun ReadOnlyField(label: String, value: String, helper: String, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm)
+            .semantics(mergeDescendants = true) {},
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurface)
+        Text(helper, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
     }
 }
 

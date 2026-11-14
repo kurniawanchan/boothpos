@@ -1,6 +1,7 @@
 package com.boothpos.customer.feature.auth.presentation
 
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
@@ -15,6 +16,7 @@ import androidx.compose.ui.semantics.contentType
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.boothpos.customer.core.ui.component.AppTextField
@@ -22,6 +24,7 @@ import com.boothpos.customer.core.ui.component.InlineMessage
 import com.boothpos.customer.core.ui.component.InlineMessageTone
 import com.boothpos.customer.core.ui.component.PasswordTextField
 import com.boothpos.customer.core.ui.component.PrimaryButton
+import com.boothpos.customer.core.ui.theme.Spacing
 import com.boothpos.customer.feature.auth.R
 
 /** Bagian stateful layar masuk: mengumpulkan state + kejadian, lalu menyerahkannya ke layar stateless. */
@@ -55,14 +58,42 @@ internal fun SignInScreen(
     val emailLabel = stringResource(R.string.auth_field_email)
     val passwordLabel = stringResource(R.string.auth_field_password)
 
-    AuthFormColumn(modifier = modifier) {
+    AuthFormColumn(
+        modifier = modifier,
+        actions = {
+            PrimaryButton(
+                text = stringResource(R.string.auth_action_sign_in),
+                onClick = {
+                    keyboard?.hide()
+                    onSubmit()
+                },
+                loading = state.submitting,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            AuthTextLink(
+                text = stringResource(R.string.auth_sign_in_to_register),
+                onClick = onRegister,
+                enabled = !state.submitting,
+            )
+            // Kontrak v1 tidak punya alur atur-ulang kata sandi; teks ini jujur soal itu.
+            Text(
+                text = stringResource(R.string.auth_sign_in_recovery_help),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        },
+    ) {
         if (state.sessionExpired) {
             InlineMessage(text = stringResource(R.string.auth_session_expired))
         }
         Text(
             text = stringResource(R.string.auth_sign_in_intro),
             style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.colorScheme.onSurface,
+            // Desain: 24 dp ke kolom pertama = 16 dp di sini + 8 dp jarak antar-isian kerangka formulir.
+            modifier = Modifier.padding(bottom = Spacing.md),
         )
         state.formMessage?.let { message ->
             InlineMessage(text = formMessageText(message), tone = InlineMessageTone.Error)
@@ -95,26 +126,6 @@ internal fun SignInScreen(
                 },
             ),
             modifier = Modifier.semantics { contentType = ContentType.Password },
-        )
-        PrimaryButton(
-            text = stringResource(R.string.auth_action_sign_in),
-            onClick = {
-                keyboard?.hide()
-                onSubmit()
-            },
-            loading = state.submitting,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        AuthTextLink(
-            text = stringResource(R.string.auth_sign_in_to_register),
-            onClick = onRegister,
-            enabled = !state.submitting,
-        )
-        // Kontrak v1 tidak punya alur atur-ulang kata sandi; teks ini jujur soal itu.
-        Text(
-            text = stringResource(R.string.auth_sign_in_recovery_help),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

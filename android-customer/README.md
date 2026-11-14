@@ -10,8 +10,10 @@ katalog, keranjang, checkout ambil-sendiri atau kurir, dan pelacakan pesanan. In
 Sumber kebenaran: `docs/android-customer-commerce/design.md`, `implementation-prompt.md`, dan
 kontrak kawat (bagian 3, 5–8).
 
-Tidak ada mockup desain untuk aplikasi ini. Tampilannya Material 3 polos dengan satu tema tenang
-yang didefinisikan sekali di `:core:ui` (tanpa gradien, carousel, atau animasi dekoratif).
+Tampilannya mengikuti desain **"Sky Capsule"** (dipilih pemilik produk, 2026-11-14): biru langit,
+tombol utama kuning, aksen koral, kartu membulat, maskot ikan, dan gambar produk di dalam bingkai
+"kapsul gacha" dua warna. Seluruh token desain didefinisikan sekali di `:core:ui`; lihat bagian
+"Desain Sky Capsule" di bawah. Tetap tanpa carousel dan tanpa animasi dekoratif.
 
 ## Toolchain (dibuktikan dengan build di mesin ini, 2026-11-11)
 
@@ -21,7 +23,7 @@ yang didefinisikan sekali di `:core:ui` (tanpa gradien, carousel, atau animasi d
 | Android Gradle Plugin | 9.5.0 | Kotlin bawaan AGP: **jangan** terapkan `org.jetbrains.kotlin.android` |
 | Kotlin / KSP | 2.4.21 / 2.3.12 | KSP 2.3.13 sengaja dihindari (regresi KSP paralel) |
 | Hilt | 2.60.1 | `hiltViewModel()` dari `androidx.hilt:hilt-lifecycle-viewmodel-compose` 1.4.0 |
-| Compose BOM | 2026.09.00 | Material 3 1.4.0, hanya `material-icons-core` |
+| Compose BOM | 2026.09.00 | Material 3 1.4.0, Compose UI 1.12.1, hanya `material-icons-core`; ikon garis desain digambar di `SkyIcons` |
 | Room | 2.8.5 | KSP, skema diekspor ke `core/data/schemas/` |
 | Robolectric | 4.17 | satu level SDK (37) untuk semua modul: `gradle/test-resources/robolectric.properties` |
 | Espresso (hanya tes) | 3.7.0 | dipaksa lewat bundle `compose-test`; lihat "Jebakan tes" |
@@ -152,6 +154,93 @@ feature/{auth,catalog,cart,checkout,orders,account}/   data/ domain/ presentatio
 Keenam modul fitur sudah berisi layar sebenarnya (lihat bagian berikut); tidak ada lagi layar awal
 fondasi.
 
+## Desain "Sky Capsule" (2026-11-14)
+
+Perubahan TAMPILAN saja: tidak ada perubahan API, navigasi, teks (`strings.xml`), ViewModel, atau
+aturan bisnis. Mockup sumbernya (tiga gambar: alur utama, keranjang + checkout, akun + pesanan)
+tidak disimpan di repositori; token di bawah ini adalah salinan resminya.
+
+### Token dan tempatnya (`core/ui/.../theme/`)
+
+| Token desain | Nilai (terang) | Di kode |
+|---|---|---|
+| Latar halaman / kartu | `#F4F9FF` / `#FFFFFF` | `colorScheme.background` / `AppCard` (`surfaceContainerLow`) |
+| Tinta teks | `rgb(20,40,74)` | `onSurface`; teks sekunder `onSurfaceVariant` |
+| Aksi utama | `#FFD84D` isi, `#3B2A00` teks | `primaryContainer` / `onPrimaryContainer` (`PrimaryButton`) |
+| Terpilih (lembut) | `#FFF3C4` + garis kuning | `secondaryContainer` (`AppCard(selected = true)`, `SelectionMark`) |
+| Tautan | `#1F6FD0` di desain, `#1A66C2` di aplikasi | `primary` (tombol teks Material) |
+| Hero / status | `#DCEEFF` | `BoothTheme.sky.hero`, `IconTile`, `HeroBackdrop()` |
+| Progres | `#4DA3FF` | `BoothTheme.sky.progress`, `SegmentedProgress` |
+| Catatan koral | `#FFE3DD` / `#7A2A1A` | `tertiaryContainer` / `onTertiaryContainer` |
+| Tag positif | `#D6F5E8` / `#0F5B45` | `BoothTheme.statusColors`, `StatusBadge(tone = Success)` |
+| Lencana keranjang | `#E8472F` / putih | `BoothTheme.sky.badge` |
+| Ubin produk/kategori | `#DCEEFF #FFE3DD #FFF3C4 #D6F5E8 #E7E3FF` | `BoothTheme.sky.tint(n)` |
+| Belahan bawah kapsul | `#FF8E7C #7FDDB8 #FFD84D #8FC8FF` | `BoothTheme.sky.capsuleLower(n)`, `ProductImage`, `ProductCapsule` |
+| Bayangan | biru `rgb(46,110,190)` 12 % | `Modifier.softShadow(...)`; tidak pernah abu/hitam |
+| Bentuk | kartu 28, kolom isian/ubin 16, catatan 14, tombol/chip membulat penuh | `MaterialTheme.shapes`, `PillShape`, `SheetShape`, `DockShape` |
+| Tipografi | 28 / 20 / 16 / 12 sp, tebal 400 / 600, Fredoka | `Type.kt` (semua peran Material dipetakan ke empat ukuran itu) |
+
+Keputusan yang tidak terlihat dari tabel (jangan "dirapikan"):
+
+- **Kuning BUKAN `colorScheme.primary`.** `primary` dipakai Material untuk tombol teks, tautan, dan
+  fokus kolom isian, dan `ThemeContrastTest` mensyaratkan `primary` di atas `surface` ≥ 4,5 : 1;
+  kuning di atas putih hanya ±1,4 : 1. Kuning ada di `primaryContainer`, `primary` = biru tautan.
+- **Teks sekunder lebih gelap daripada desain.** Desain memakai tinta 60 % (±4,0 : 1 di atas latar,
+  gagal AA); `onSurfaceVariant` memakai padanan tinta ±70 % (`#5B6980`, 5,3 : 1 di atas latar,
+  4,7 : 1 di atas warna hero). Warnanya yang disesuaikan, bukan tesnya.
+- **Biru tautan lebih gelap daripada desain** (`#1A66C2`, bukan `#1F6FD0`): tautan juga tampil di
+  atas warna hero (layar sambutan), dan di sana `#1F6FD0` hanya ±4,2 : 1. `ThemeContrastTest`
+  kini juga menguji pasangan token "Sky Capsule" yang membawa teks (hero, ubin, tombol sekunder).
+- **Lencana keranjang** (putih di atas `#E8472F`) ±3,9 : 1: token desain apa adanya. Angkanya juga
+  disampaikan lewat deskripsi konten ("3 barang di keranjang"), jadi bukan satu-satunya pembawa makna.
+- **Skema gelap belum didesain.** Mockup hanya terang; `DarkColors` adalah warna gelap LAMA, dan
+  `DarkSkyColors` hanya merujuk warna yang sudah ada di sana (tidak ada warna baru yang dikarang).
+  Bentuk, tipografi, dan komponen tetap sama di kedua skema. Perlu keputusan pemilik produk.
+- **Bayangan digambar sendiri** (`Modifier.dropShadow` lewat `softShadow`), bukan `Modifier.shadow`:
+  bayangan elevasi berwarna baru ada di API 28, sedangkan minSdk 26, dan di sana ia jatuh ke abu-abu.
+  `softShadow` harus dipasang SEBELUM clip/latar; karena itu modifier klik sebuah kartu diteruskan
+  lewat parameter `interaction` milik `AppCard`, bukan lewat `modifier`.
+- **Latar hero sampai ke bilah atas:** layar yang seluruh latarnya berwarna hero (sambutan, isi
+  detail produk, "Pesanan dibuat") memanggil `HeroBackdrop()`; bingkai aplikasi (`AppScaffold`)
+  lalu mewarnai bilah atasnya sama. Layar tetap mewarnai dirinya sendiri, jadi tetap benar di luar
+  bingkai (tes, pratinjau).
+- **Warna ubin/kapsul sebuah produk** dipilih dari `paletteSeed(namaProduk)`: nama adalah
+  satu-satunya data yang ada di katalog, keranjang, checkout, DAN pesanan, sehingga produk yang sama
+  berwarna sama di semua layar.
+- **Ikon dan ilustrasi** (`SkyIcons`, `Mascot`, `Confetti`, `CapsuleFrame`) digambar dari data path
+  mockup dengan `ImageVector`/`Canvas`. `material-icons-extended` tetap tidak dipakai.
+
+### Fredoka (lisensi)
+
+Dua berkas statis di `core/ui/src/main/res/font/` (`fredoka_regular.ttf` 400, `fredoka_semibold.ttf`
+600; 92 KB berdua), diambil dari repositori hulu yang dirujuk Google Fonts
+(`hafontia-zz/Fredoka-One`, commit `35c584ff`, `fonts/ttf/`). Lisensinya **SIL Open Font License
+1.1** tanpa Reserved Font Name: boleh dibundel dan didistribusikan bersama perangkat lunak asalkan
+pemberitahuan hak cipta dan lisensinya ikut serta. Keduanya ada di tabel `name` berkas font, dan
+teks lisensi lengkap ikut di APK (`core/ui/src/main/assets/licenses/Fredoka-OFL.txt`). Font tidak
+boleh dijual tersendiri dan versi yang DIUBAH harus tetap berlisensi OFL. Belum ada layar
+"Lisensi" di aplikasi (butuh teks baru). Berkas statis dipilih, bukan berkas variabel: instans
+bawaan berkas variabelnya Light 300.
+
+### Yang sengaja BERBEDA dari mockup
+
+| Mockup | Di aplikasi | Alasan |
+|---|---|---|
+| "Halo, Hana", "Semua produk · 31 produk", "3 barang" di bawah judul | tidak ada | butuh teks baru; perubahan ini tidak menyentuh `strings.xml` |
+| Detail produk: tombol kembali dan keranjang melayang di atas hero | bilah atas bingkai (kembali + judul), tanpa tombol keranjang | navigasi tidak berubah; hero tetap menyambung ke bilah atas lewat `HeroBackdrop()` |
+| Varian sebagai chip | kartu pilihan per varian (semantik radio) | harga dan ketersediaan TIAP varian harus tetap tampil; chip tidak memuatnya |
+| Panel total keranjang ikut menggulir | panel tetap disematkan di bawah | "Lanjut ke checkout" harus selalu terlihat (diuji pada huruf 200 %) |
+| Grid katalog dua kolom | kolom adaptif: 2 di ponsel ≥ 360 dp, 1 di ponsel sempit atau huruf besar | nama dan harga harus terbaca pada huruf 200 % di 320 dp |
+| Tombol urutkan dan muat ulang tidak ada | tetap ada, bulat putih di samping kolom cari | fungsi yang sudah ada tidak dihapus |
+| Kartu produk tanpa ketersediaan; tag tanpa ikon | "Tersedia"/"Stok habis" dan ikon status tetap ada | status tidak pernah disampaikan dengan warna saja |
+| Seni produk digambar di belahan atas kapsul | foto produk tampil sebagai jendela bulat di tengah kapsul | produk sungguhan berupa foto, bukan ikon |
+| Lingkaran kategori berisi gambar khusus | gambar kategori dari server bila ada, selain itu huruf awal namanya | API hanya memberi nama + `image_url` opsional |
+| Checkout langkah 2 dan 3 punya judul besar sendiri | baris "Langkah n dari 3 · …" tampil sebagai judulnya | teks judul terpisah hanya ada untuk langkah 1 |
+| "Pesanan dibuat": kartu berisi label, cara menerima, subtotal | kartu berisi nomor pesanan saja | state `Placed` hanya membawa nomor pesanan |
+| Detail pesanan: daftar lima tahap termasuk yang belum terjadi | riwayat dari server (terbaru dulu) digambar sebagai daftar langkah; batang lima segmen di kartu status | tahap yang belum terjadi butuh teks baru dan mengubah urutan yang diuji |
+| "Dibatalkan" berlencana abu-abu | nada bahaya (merah muda), isi kartunya memudar | abu-abu adalah nada status yang belum dikenal (`OrderStatusUiTest`) |
+| Aksi di bawah layar sambutan, masuk, daftar, akun selalu tersemat | di bawah bila isi muat, ikut menggulir bila tidak | harus tetap terjangkau pada huruf 200 % di 320 dp |
+
 ## Auth dan akun (kontrak §5)
 
 | Layar | Rute | Isi |
@@ -209,8 +298,8 @@ Tidak memerlukan sesi: ketiga endpoint-nya publik dan tidak pernah membawa token
 
 | Layar | Rute | Isi |
 |---|---|---|
-| Daftar produk | `ShopRoute` | Kolom cari (ditunda 400 ms; tombol "Cari" papan ketik dan mengosongkan kolom berlaku seketika), chip kategori dari `/storefront/categories`, menu urutan (`newest`, `name`, `price_asc`, `price_desc` saja), tarik-untuk-segarkan + tombol "Muat ulang", kartu produk (gambar, nama, penjual, harga, ketersediaan) yang seluruhnya satu aksi "buka detail". Harga `price_min`; "Mulai dari …" bila `price_min != price_max`. |
-| Detail produk | `ProductDetailRoute(slug)` | Gambar, nama, penjual, kategori, harga varian terpilih, daftar radio varian (harga + ketersediaan per varian), pengatur jumlah `1..max_qty`, deskripsi, dan satu aksi utama "Tambah ke keranjang" yang selalu terlihat. Konfirmasi berupa snackbar dengan aksi "Lihat keranjang". |
+| Daftar produk | `ShopRoute` | Kolom cari (ditunda 400 ms; tombol "Cari" papan ketik dan mengosongkan kolom berlaku seketika), lingkaran kategori (gambar kategori atau huruf awalnya) dari `/storefront/categories`, menu urutan (`newest`, `name`, `price_asc`, `price_desc` saja), tarik-untuk-segarkan + tombol "Muat ulang", kartu produk (gambar, nama, penjual, harga, ketersediaan) yang seluruhnya satu aksi "buka detail". Harga `price_min`; "Mulai dari …" bila `price_min != price_max`. |
+| Detail produk | `ProductDetailRoute(slug)` | Gambar, nama, penjual, kategori, harga varian terpilih, kartu pilihan varian dengan semantik radio (harga + ketersediaan per varian), pengatur jumlah `1..max_qty`, deskripsi, dan satu aksi utama "Tambah ke keranjang" yang selalu terlihat. Konfirmasi berupa snackbar dengan aksi "Lihat keranjang". |
 
 - **Halaman demi halaman:** 20 produk per permintaan (`per_page=20`); halaman berikutnya diminta
   ketika kartu di dekat akhir daftar (4 terakhir) mulai disusun. Katalog tidak pernah dimuat
@@ -306,7 +395,7 @@ Yang dijaga (dan ada tesnya):
 
 `:feature:orders` hanya MEMBACA: pelanggan tidak punya aksi yang mengubah status pesanan. Tidak ada
 yang disimpan di perangkat (pesanan memuat kontak dan alamat, dan statusnya hanya bermakna bila
-terbaru). Tidak ada mockup desain: Material 3 polos dengan tema `:core:ui`.
+terbaru). Tampilannya mengikuti desain "Sky Capsule" (lihat bagian desain di atas).
 
 - **Rute:** `OrdersRoute` (tab Pesanan) dan `OrderDetailRoute(orderNumber)`; graf
   `ordersGraph(navController, onSignIn)`. Detail tidak digerbangi toko (kontrak §2: pesanan yang
@@ -404,7 +493,8 @@ selain `false` (diperiksa dengan grep pada seluruh sumber).
   aksinya terdorong keluar layar TANPA jalan untuk mencapainya. Sekarang kolom itu menggulir bila
   isinya tidak muat (tetap di tengah bila muat, dan tanpa gulir bersarang di dalam induk yang sudah
   menggulir). Tes regresi di `SharedComponentsTest` (320 × 320 dp, huruf 200 %).
-- Target sentuh: tombol utama/sekunder `heightIn(min = 48.dp)`, tombol ikon M3 punya area sentuh
+- Target sentuh: tombol utama `heightIn(min = 56.dp)`, tombol sekunder `heightIn(min = 48.dp)`,
+  tombol bulat digambar 44 dp dengan area sentuh 48 dp, tombol ikon M3 punya area sentuh
   48 dp, baris pilihan dan kartu seluruhnya dapat diketuk; diuji dengan `assertHeightIsAtLeast` /
   `assertTouchHeightIsEqualTo`.
 - Setiap tombol ikon punya `contentDescription`; gambar produk di daftar/keranjang dekoratif (nama di
@@ -611,6 +701,12 @@ hal-hal berikut sudah diperiksa; semuanya butuh perangkat/emulator atau server s
 - **APK rilis saat dijalankan.** APK rilis dibangun (R8 + `shrinkResources`), tetapi tidak
   ditandatangani (belum ada keystore/konfigurasi signing) dan belum pernah dipasang, jadi perilaku
   Retrofit + kotlinx.serialization setelah R8 belum terbukti.
+- **Tampilan "Sky Capsule" di perangkat atau emulator.** Semua layar hanya dirender di JVM
+  (Robolectric, grafik native, `robolectric.pixelCopyRenderMode=hardware`) dan dibandingkan dengan
+  tiga gambar mockup. Yang TIDAK dilihat di perangkat: bayangan `dropShadow` di GPU sungguhan dan
+  biayanya pada daftar panjang di ponsel lemah, warna bilah status/navigasi sistem (edge-to-edge),
+  foto produk sungguhan dari server di dalam kapsul (dirender dengan gambar buatan), tema gelap,
+  Fredoka untuk huruf di luar Latin (jatuh ke font sistem), riak sentuhan, dan papan ketik.
 - Kontras tema diuji dengan rumus WCAG di tes unit, bukan dengan alat aksesibilitas di perangkat.
 - Tidak ada CI di repositori ini; gerbang kualitas adalah perintah lokal di atas.
 
@@ -822,3 +918,30 @@ gabungan diperiksa langsung: `INTERNET`, `ACCESS_NETWORK_STATE`, dan izin bertan
 Tidak diverifikasi: perilaku AndroidKeyStore sungguhan (lihat "Yang BELUM diverifikasi"), APK rilis
 saat dijalankan, dan jawaban nyata backend untuk 413/423 `installation_locked` (belum ada rekaman;
 bentuknya diambil dari uraian tugas, diuji dengan MockWebServer).
+
+## Hasil verifikasi (desain "Sky Capsule")
+
+Dijalankan 2026-11-14 (macOS, JDK 21, `--no-daemon --max-workers=2`). Perubahan tampilan saja; lihat
+bagian "Desain Sky Capsule" untuk token, keputusan, dan yang sengaja berbeda dari mockup.
+
+| Perintah | Hasil |
+|---|---|
+| `./gradlew testDebugUnitTest :app:lintDebug :app:assembleDebug` | BUILD SUCCESSFUL — 699 tes, 0 gagal, 0 dilewati (jumlah per modul sama dengan slice sebelumnya: tidak ada tes yang dihapus atau dilewati); lint 0 galat, 2 peringatan `NewerVersionAvailable` (kotlinx-serialization-json 1.13.0, Robolectric 4.18; bukan dari perubahan ini); `app-debug.apk` ±16,1 MB berisi `res/font/fredoka_*.ttf` dan `assets/licenses/Fredoka-OFL.txt` |
+| `./gradlew :app:assembleRelease` | BUILD SUCCESSFUL — R8 + `shrinkResources`, `app-release-unsigned.apk` ±2,4 MB (sebelumnya ±2,3 MB); kedua berkas Fredoka dan `assets/licenses/Fredoka-OFL.txt` ada di dalamnya |
+
+Tes yang diubah: hanya `ThemeContrastTest`, dan hanya DITAMBAH (pasangan token "Sky Capsule" yang
+membawa teks: hero, ubin, tombol sekunder, tautan di atas hero); tidak ada pernyataan lama yang
+dilonggarkan. Tes layar lain lulus tanpa diubah, termasuk `*LargeFontLayoutTest` (huruf 200 % pada
+320 dp).
+
+Perbandingan dengan mockup: 30 tangkapan layar dirender lewat tes Robolectric sementara (tidak
+di-commit) pada 375 dp dan dilihat berdampingan dengan tiga gambar mockup: bingkai aplikasi
+(Belanja, Keranjang, detail, bilah atas berwarna hero), Belanja (terang, gelap, kosong), detail
+produk, Keranjang (isi, bermasalah, kosong), Checkout langkah 1-3 dan "Pesanan dibuat", daftar dan
+detail Pesanan (dikirim, dikemas, dibatalkan, belum masuk), Selamat datang, Masuk, Daftar, Akun
+(profil, gelap, belum masuk). Yang TIDAK dirender: daftar dan formulir alamat, Ubah profil, dialog
+(harga berubah, keluar, hapus alamat, serah terima pelacakan), snackbar, keadaan memuat/galat/offline
+tiap layar (dijaga tes semantik yang sudah ada, bukan dilihat), dan huruf 200 % (dijaga tes tata
+letak, bukan dilihat).
+
+Pemeriksaan manual yang TIDAK dilakukan tercantum di "Yang BELUM diverifikasi".
