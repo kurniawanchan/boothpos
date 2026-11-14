@@ -6,25 +6,30 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -33,23 +38,28 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -59,13 +69,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.boothpos.customer.core.data.domain.model.FulfilmentMethod
 import com.boothpos.customer.core.ui.component.ApiErrorState
+import com.boothpos.customer.core.ui.component.AppCard
 import com.boothpos.customer.core.ui.component.EmptyState
 import com.boothpos.customer.core.ui.component.LoadingState
+import com.boothpos.customer.core.ui.component.Mascot
 import com.boothpos.customer.core.ui.component.PrimaryButton
+import com.boothpos.customer.core.ui.component.ProductImage
 import com.boothpos.customer.core.ui.component.SecondaryButton
-import com.boothpos.customer.core.ui.component.statusToneColors
+import com.boothpos.customer.core.ui.component.SectionLabel
+import com.boothpos.customer.core.ui.component.SegmentedProgress
+import com.boothpos.customer.core.ui.component.StatusBadge
+import com.boothpos.customer.core.ui.component.StatusTone
+import com.boothpos.customer.core.ui.component.paletteSeed
 import com.boothpos.customer.core.ui.format.RupiahFormatter
+import com.boothpos.customer.core.ui.icon.SkyIcons
+import com.boothpos.customer.core.ui.theme.BoothTheme
 import com.boothpos.customer.core.ui.theme.Dimens
+import com.boothpos.customer.core.ui.theme.PillShape
 import com.boothpos.customer.core.ui.theme.Spacing
 import com.boothpos.customer.feature.orders.R
 import com.boothpos.customer.feature.orders.domain.OrderAddress
@@ -149,13 +169,14 @@ internal fun openInBrowser(context: Context, url: String): Boolean {
 }
 
 /**
- * Detail pesanan. Urutan isi: status sekarang (besar, dengan penjelasan), lalu nomor pesanan,
- * barang, petunjuk toko, alamat (kurir), kontak, biaya, pelacakan, dan riwayat (terbaru dulu).
+ * Detail pesanan, desain "Sky Capsule". Urutan isi: kartu status sekarang (berwarna hero, dengan
+ * penjelasan dan batang progres), lalu satu kartu putih per bagian: nomor pesanan, barang,
+ * petunjuk toko, alamat (kurir), kontak, catatan, biaya, pelacakan, dan riwayat (terbaru dulu).
  * Alasan pembatalan ditaruh tepat di bawah status, karena itulah pertanyaan pertama pelanggan
  * saat melihat "Dibatalkan".
  *
  * Tata letak: satu kolom untuk semua lebar; di layar lebar bingkai aplikasi memusatkan konten
- * dengan lebar maksimum. Tidak ada mockup desain untuk aplikasi ini (ASUMSI: Material 3 polos).
+ * dengan lebar maksimum. Judul layar dan tombol kembali digambar bingkai aplikasi, bukan di sini.
  */
 @Composable
 internal fun OrderDetailScreen(
@@ -237,142 +258,206 @@ private fun OrderContent(
     onTrackParcel: () -> Unit,
 ) {
     val order = state.order
+    // Jarak tepi dipasang per kartu, bukan pada kolom gulirnya: bayangan kartu melebar ke samping
+    // dan tidak boleh terpotong tepi kolom.
+    val card = Modifier.padding(horizontal = Spacing.lg)
     PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = Spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+                .padding(top = Spacing.sm, bottom = Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.ms),
         ) {
             state.refreshError?.let { reason -> OrdersStaleNotice(reason = reason, onRetry = onRefresh) }
-            StatusHeader(order = order, dateFormatter = dateFormatter)
-            Column(
-                modifier = Modifier.padding(horizontal = Spacing.md),
-                verticalArrangement = Arrangement.spacedBy(Spacing.md),
-            ) {
-                SummarySection(order = order, dateFormatter = dateFormatter)
-                HorizontalDivider()
-                ItemsSection(items = order.items)
-                order.instructions?.let { instructions ->
-                    HorizontalDivider()
-                    TextSection(title = stringResource(instructionsTitle(order.summary.fulfilmentMethod)), body = instructions)
-                }
-                order.shippingAddress?.let { address ->
-                    HorizontalDivider()
-                    AddressSection(address = address)
-                }
-                HorizontalDivider()
-                ContactSection(contact = order.contact)
-                order.notes?.let { notes ->
-                    HorizontalDivider()
-                    TextSection(title = stringResource(R.string.orders_detail_notes_title), body = notes)
-                }
-                HorizontalDivider()
-                TotalsSection(order = order)
-                HorizontalDivider()
-                TrackingSection(
-                    state = state,
-                    dateFormatter = dateFormatter,
-                    onRefresh = onRefresh,
-                    onCopyTrackingNumber = onCopyTrackingNumber,
-                    onTrackParcel = onTrackParcel,
+            StatusHeader(order = order, dateFormatter = dateFormatter, modifier = card)
+            SummarySection(order = order, dateFormatter = dateFormatter, modifier = card)
+            ItemsSection(items = order.items, modifier = card)
+            order.instructions?.let { instructions ->
+                TextSection(
+                    title = stringResource(instructionsTitle(order.summary.fulfilmentMethod)),
+                    body = instructions,
+                    modifier = card,
                 )
-                HorizontalDivider()
-                TimelineSection(events = order.timeline, dateFormatter = dateFormatter)
             }
+            order.shippingAddress?.let { address -> AddressSection(address = address, modifier = card) }
+            ContactSection(contact = order.contact, modifier = card)
+            order.notes?.let { notes ->
+                TextSection(title = stringResource(R.string.orders_detail_notes_title), body = notes, modifier = card)
+            }
+            TotalsSection(order = order, modifier = card)
+            TrackingSection(
+                state = state,
+                dateFormatter = dateFormatter,
+                onRefresh = onRefresh,
+                onCopyTrackingNumber = onCopyTrackingNumber,
+                onTrackParcel = onTrackParcel,
+                modifier = card,
+            )
+            TimelineSection(events = order.timeline, dateFormatter = dateFormatter, modifier = card)
         }
     }
 }
 
-/** Status sekarang, paling atas dan paling besar: ikon + nama + waktu + penjelasan sehari-hari. */
+/** Huruf sistem besar: bagian hiasan dan tata letak berdampingan mengalah supaya teks tidak terjepit. */
 @Composable
-private fun StatusHeader(order: OrderDetail, dateFormatter: OrderDateFormatter) {
-    val visual = order.summary.status.visual()
-    val (container, content) = statusToneColors(visual.tone)
+private fun isLargeFont(): Boolean = LocalDensity.current.fontScale > LARGE_FONT_SCALE
+
+/**
+ * Status sekarang, paling atas: kartu berwarna hero berisi nomor pesanan dan cara menerimanya,
+ * ikon + nama status, waktu, penjelasan sehari-hari, dan batang progres lima tahap. Maskot di
+ * kanan hanya hiasan.
+ */
+@Composable
+private fun StatusHeader(order: OrderDetail, dateFormatter: OrderDateFormatter, modifier: Modifier = Modifier) {
+    val summary = order.summary
+    val visual = summary.status.visual()
+    val sky = BoothTheme.sky
+    val typography = MaterialTheme.typography
     val label = stringResource(visual.label)
     val description = stringResource(R.string.orders_detail_status_description, label)
+    val method = summary.fulfilmentMethod.labelRes()?.let { stringResource(it) }
+    val stages = summary.status.reachedStages()
+    // Pada huruf besar maskot disembunyikan: ia hanya hiasan, dan lebarnya lebih berguna bagi teks.
+    val showMascot = !isLargeFont()
     Surface(
-        color = container,
-        contentColor = content,
-        modifier = Modifier
+        color = sky.hero,
+        contentColor = sky.onHero,
+        shape = MaterialTheme.shapes.large,
+        modifier = modifier
             .fillMaxWidth()
             .testTag(OrdersTestTags.DETAIL_STATUS),
     ) {
-        Column(modifier = Modifier.padding(Spacing.md), verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Dekoratif bagi pembaca layar: nama status di sebelahnya sudah dibacakan.
-                Icon(visual.icon.asImageVector(), contentDescription = null, modifier = Modifier.size(32.dp))
-                Spacer(Modifier.width(Spacing.md))
-                Column {
+        Row(
+            modifier = Modifier.padding(Spacing.md),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                // Satu teks, bukan dua: nama metode yang berdiri sendiri sudah ada di kartu "Pesanan".
+                Text(
+                    text = listOfNotNull(summary.orderNumber, method).joinToString(HEADER_SEPARATOR),
+                    style = typography.titleSmall,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Dekoratif bagi pembaca layar: nama status di sebelahnya sudah dibacakan.
+                    Icon(visual.icon.asImageVector(), contentDescription = null, modifier = Modifier.size(StatusIconSize))
+                    Spacer(Modifier.width(Spacing.sm))
                     Text(
                         text = label,
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = typography.titleLarge,
                         modifier = Modifier.semantics {
                             heading()
                             contentDescription = description
                         },
                     )
-                    order.summary.updatedAt?.let { updatedAt ->
+                }
+                summary.updatedAt?.let { updatedAt ->
+                    Text(
+                        text = stringResource(R.string.orders_detail_status_updated, dateFormatter.format(updatedAt)),
+                        style = typography.bodySmall,
+                    )
+                }
+                Text(text = stringResource(visual.explanation), style = typography.bodySmall)
+                order.cancelReason?.let { reason ->
+                    OrderNote {
                         Text(
-                            text = stringResource(R.string.orders_detail_status_updated, dateFormatter.format(updatedAt)),
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = stringResource(R.string.orders_detail_cancel_reason_title),
+                            style = typography.labelMedium,
                         )
+                        Text(text = reason, style = typography.bodyMedium)
                     }
                 }
-            }
-            Text(text = stringResource(visual.explanation), style = MaterialTheme.typography.bodyLarge)
-            order.cancelReason?.let { reason ->
-                Column {
-                    Text(
-                        text = stringResource(R.string.orders_detail_cancel_reason_title),
-                        style = MaterialTheme.typography.labelLarge,
+                // Pesanan batal dan status yang belum dikenal tidak punya posisi di batang progres.
+                if (stages != null) {
+                    SegmentedProgress(
+                        total = ORDER_STAGE_COUNT,
+                        filled = stages,
+                        modifier = Modifier.padding(top = Spacing.sm),
                     )
-                    Text(text = reason, style = MaterialTheme.typography.bodyLarge)
                 }
             }
+            if (showMascot) Mascot(modifier = Modifier.width(MascotWidth))
         }
     }
 }
 
+/** Catatan koral desain (alasan pembatalan): latar lembut bersudut 14 dp, teks koral tua. */
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier.semantics { heading() },
-    )
+private fun OrderNote(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    CompositionLocalProvider(LocalContentColor provides scheme.onTertiaryContainer) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.small)
+                .background(scheme.tertiaryContainer)
+                .padding(horizontal = Spacing.ms, vertical = Spacing.sm),
+            content = content,
+        )
+    }
 }
 
-/** Baris "label: nilai". Digabung menjadi satu node supaya pembaca layar membacanya sebagai satu kalimat. */
+/** Satu bagian detail: kartu putih dengan label bagian kecil di atas isinya. */
 @Composable
-private fun LabeledRow(label: String, value: String, modifier: Modifier = Modifier, emphasised: Boolean = false) {
-    Row(
+private fun SectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    spacing: Dp = Spacing.sm,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    AppCard(modifier = modifier.fillMaxWidth()) {
+        SectionLabel(title)
+        Spacer(Modifier.height(Spacing.sm))
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            content = content,
+        )
+    }
+}
+
+/**
+ * Baris "label: nilai"; nilainya ([content]) bebas, teks atau pil. Digabung menjadi satu node
+ * supaya pembaca layar membacanya sebagai satu kalimat. Nilai turun ke bawah label bila tidak muat.
+ */
+@Composable
+private fun DetailRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    emphasised: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    EndsOrStack(
+        start = {
+            Text(
+                text = label,
+                style = if (emphasised) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
+                color = if (emphasised) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        end = content,
         modifier = modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-    ) {
-        Text(
-            text = label,
-            style = if (emphasised) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
-            color = if (emphasised) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
+        gap = Spacing.md,
+    )
+}
+
+/** Baris "label: nilai" teks. Nilai setebal angka uang di desain; total memakai ukuran judul. */
+@Composable
+private fun LabeledRow(label: String, value: String, modifier: Modifier = Modifier, emphasised: Boolean = false) {
+    DetailRow(label = label, modifier = modifier, emphasised = emphasised) {
         Text(
             text = value,
-            style = if (emphasised) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
-            fontWeight = if (emphasised) FontWeight.SemiBold else null,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f),
+            style = if (emphasised) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
         )
     }
 }
 
 @Composable
-private fun SummarySection(order: OrderDetail, dateFormatter: OrderDateFormatter) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        SectionTitle(stringResource(R.string.orders_detail_summary_title))
+private fun SummarySection(order: OrderDetail, dateFormatter: OrderDateFormatter, modifier: Modifier = Modifier) {
+    SectionCard(title = stringResource(R.string.orders_detail_summary_title), modifier = modifier) {
         LabeledRow(
             label = stringResource(R.string.orders_detail_number_label),
             value = order.summary.orderNumber,
@@ -388,29 +473,46 @@ private fun SummarySection(order: OrderDetail, dateFormatter: OrderDateFormatter
 }
 
 @Composable
-private fun ItemsSection(items: List<OrderItem>) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        SectionTitle(stringResource(R.string.orders_detail_items_title))
+private fun ItemsSection(items: List<OrderItem>, modifier: Modifier = Modifier) {
+    // Pada huruf besar jumlah uang pindah ke bawah nama: di samping, ia menyisakan beberapa dp
+    // saja untuk nama barang.
+    val amountBelow = isLargeFont()
+    SectionCard(
+        title = stringResource(R.string.orders_detail_items_title),
+        modifier = modifier,
+        spacing = Spacing.ms,
+    ) {
         items.forEach { item ->
+            val amount = RupiahFormatter.format(item.lineTotal)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics(mergeDescendants = true) {},
-                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.ms),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                // Pesanan tidak membawa URL foto: ubin dan kapsulnya diwarnai dari nama barang,
+                // sama dengan warna barang itu di katalog dan keranjang. Dekoratif.
+                ProductImage(
+                    imageUrl = null,
+                    contentDescription = null,
+                    size = ItemThumbSize,
+                    paletteSeed = paletteSeed(item.name),
+                )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = item.name, style = MaterialTheme.typography.bodyLarge)
+                    Text(text = item.name, style = MaterialTheme.typography.titleMedium)
                     Text(
                         text = stringResource(
                             R.string.orders_detail_item_quantity,
                             item.quantity.toString(),
                             RupiahFormatter.format(item.unitPrice),
                         ),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (amountBelow) Text(text = amount, style = MaterialTheme.typography.titleMedium)
                 }
-                Text(text = RupiahFormatter.format(item.lineTotal), style = MaterialTheme.typography.bodyLarge)
+                if (!amountBelow) Text(text = amount, style = MaterialTheme.typography.titleMedium)
             }
         }
     }
@@ -418,10 +520,9 @@ private fun ItemsSection(items: List<OrderItem>) {
 
 /** Judul + teks polos (petunjuk dari toko, catatan pelanggan). Teks server tidak pernah ditafsirkan sebagai markup. */
 @Composable
-private fun TextSection(title: String, body: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        SectionTitle(title)
-        Text(text = body, style = MaterialTheme.typography.bodyLarge)
+private fun TextSection(title: String, body: String, modifier: Modifier = Modifier) {
+    SectionCard(title = title, modifier = modifier) {
+        Text(text = body, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -433,18 +534,21 @@ private fun instructionsTitle(method: FulfilmentMethod?): Int = when (method) {
 }
 
 @Composable
-private fun AddressSection(address: OrderAddress) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        SectionTitle(stringResource(R.string.orders_detail_address_title))
-        address.recipientName?.let { Text(text = it, style = MaterialTheme.typography.bodyLarge) }
-        address.phone?.let { Text(text = it, style = MaterialTheme.typography.bodyLarge) }
-        address.addressLine?.let { Text(text = it, style = MaterialTheme.typography.bodyLarge) }
+private fun AddressSection(address: OrderAddress, modifier: Modifier = Modifier) {
+    SectionCard(
+        title = stringResource(R.string.orders_detail_address_title),
+        modifier = modifier,
+        spacing = Spacing.xs,
+    ) {
+        address.recipientName?.let { Text(text = it, style = MaterialTheme.typography.titleMedium) }
+        address.phone?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium) }
+        address.addressLine?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium) }
         val area = listOfNotNull(address.city, address.province, address.postalCode).joinToString(", ")
-        if (area.isNotEmpty()) Text(text = area, style = MaterialTheme.typography.bodyLarge)
+        if (area.isNotEmpty()) Text(text = area, style = MaterialTheme.typography.bodyMedium)
         address.notes?.let { notes ->
             Text(
                 text = stringResource(R.string.orders_detail_address_notes, notes),
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -452,48 +556,63 @@ private fun AddressSection(address: OrderAddress) {
 }
 
 @Composable
-private fun ContactSection(contact: OrderContact) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        SectionTitle(stringResource(R.string.orders_detail_contact_title))
-        if (contact.name.isNotEmpty()) Text(text = contact.name, style = MaterialTheme.typography.bodyLarge)
-        contact.phone?.let { Text(text = it, style = MaterialTheme.typography.bodyLarge) }
-        contact.email?.let { Text(text = it, style = MaterialTheme.typography.bodyLarge) }
+private fun ContactSection(contact: OrderContact, modifier: Modifier = Modifier) {
+    SectionCard(
+        title = stringResource(R.string.orders_detail_contact_title),
+        modifier = modifier,
+        spacing = Spacing.xs,
+    ) {
+        if (contact.name.isNotEmpty()) Text(text = contact.name, style = MaterialTheme.typography.titleMedium)
+        contact.phone?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium) }
+        contact.email?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
 /** Angka-angka di sini semuanya dari server; aplikasi tidak menghitung ulang apa pun. */
 @Composable
-private fun TotalsSection(order: OrderDetail) {
+private fun TotalsSection(order: OrderDetail, modifier: Modifier = Modifier) {
+    val scheme = MaterialTheme.colorScheme
+    val typography = MaterialTheme.typography
     val courier = order.summary.fulfilmentMethod == FulfilmentMethod.Courier
     // Pesanan ambil-di-toko tidak punya ongkos kirim: barisnya tidak ditampilkan.
     val showShipping = courier || order.shippingCostPending || order.shippingCost.compareTo(BigDecimal.ZERO) != 0
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-        SectionTitle(stringResource(R.string.orders_detail_totals_title))
+    SectionCard(title = stringResource(R.string.orders_detail_totals_title), modifier = modifier) {
         LabeledRow(label = stringResource(R.string.orders_detail_subtotal), value = RupiahFormatter.format(order.subtotal))
         if (showShipping) {
-            LabeledRow(
+            DetailRow(
                 label = stringResource(R.string.orders_detail_shipping_cost),
-                value = if (order.shippingCostPending) {
-                    stringResource(R.string.orders_detail_shipping_pending)
-                } else {
-                    RupiahFormatter.format(order.shippingCost)
-                },
                 modifier = Modifier.testTag(OrdersTestTags.DETAIL_SHIPPING_COST),
+            ) {
+                if (order.shippingCostPending) {
+                    // Belum ada angkanya: pil koral, bukan "Rp0" yang terbaca seperti gratis.
+                    Text(
+                        text = stringResource(R.string.orders_detail_shipping_pending),
+                        style = typography.labelMedium,
+                        color = scheme.onTertiaryContainer,
+                        modifier = Modifier
+                            .background(scheme.tertiaryContainer, PillShape)
+                            .padding(horizontal = Spacing.ms, vertical = Spacing.xs),
+                    )
+                } else {
+                    Text(text = RupiahFormatter.format(order.shippingCost), style = typography.titleMedium)
+                }
+            }
+        }
+        // Di ATAS total: kalimatnya sendiri menyebut "total di bawah".
+        if (order.shippingCostPending) {
+            Text(
+                text = stringResource(R.string.orders_detail_shipping_pending_note),
+                style = typography.bodySmall,
+                color = scheme.onSurfaceVariant,
             )
         }
+        HorizontalDivider(modifier = Modifier.padding(vertical = Spacing.xs))
         LabeledRow(
             label = stringResource(R.string.orders_detail_total),
             value = RupiahFormatter.format(order.summary.total),
             emphasised = true,
             modifier = Modifier.testTag(OrdersTestTags.DETAIL_TOTAL),
         )
-        if (order.shippingCostPending) {
-            Text(
-                text = stringResource(R.string.orders_detail_shipping_pending_note),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
 }
 
@@ -508,13 +627,14 @@ private fun TrackingSection(
     onRefresh: () -> Unit,
     onCopyTrackingNumber: (String) -> Unit,
     onTrackParcel: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val shipment = state.order.shipment
-    Column(
-        modifier = Modifier.testTag(OrdersTestTags.TRACKING_SECTION),
-        verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+    SectionCard(
+        title = stringResource(R.string.orders_tracking_title),
+        modifier = modifier.testTag(OrdersTestTags.TRACKING_SECTION),
+        spacing = Spacing.ms,
     ) {
-        SectionTitle(stringResource(R.string.orders_tracking_title))
         if (state.updatedByStore) UpdatedByStoreNotice()
         when {
             shipment != null -> ShipmentBlock(
@@ -524,7 +644,7 @@ private fun TrackingSection(
             )
             state.order.summary.fulfilmentMethod == FulfilmentMethod.Courier -> Text(
                 text = stringResource(R.string.orders_tracking_no_shipment_courier),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -540,6 +660,7 @@ private fun TrackingSection(
             onClick = onRefresh,
             // Selama penyegaran berjalan tombol mati: ketukan ganda tidak mengirim dua kali.
             enabled = !state.refreshing,
+            icon = SkyIcons.Refresh,
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -549,25 +670,14 @@ private fun TrackingSection(
 @Composable
 private fun UpdatedByStoreNotice() {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.semantics(mergeDescendants = true) {},
-        ) {
-            Icon(
-                Icons.Filled.Info,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(Spacing.sm))
-            Text(
-                text = stringResource(R.string.orders_tracking_updated_by_store),
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
+        StatusBadge(
+            text = stringResource(R.string.orders_tracking_updated_by_store),
+            icon = SkyIcons.Info,
+            tone = StatusTone.Info,
+        )
         Text(
             text = stringResource(R.string.orders_tracking_updated_by_store_note),
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -593,7 +703,7 @@ private fun ShipmentBlock(
                 ) {
                     Text(
                         text = stringResource(R.string.orders_tracking_number_label),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(text = trackingNumber, style = MaterialTheme.typography.titleMedium)
@@ -622,45 +732,157 @@ private fun ShipmentBlock(
     }
 }
 
+/**
+ * Riwayat sebagai daftar langkah tegak: titik di kiri, garis tipis antartitik, kalimat peristiwa
+ * dan waktunya. Urutannya tetap dari server (terbaru dulu), dan hanya peristiwa yang SUDAH
+ * terjadi yang digambar; langkah yang akan datang tidak dikarang.
+ */
 @Composable
-private fun TimelineSection(events: List<OrderEvent>, dateFormatter: OrderDateFormatter) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.md)) {
-        SectionTitle(stringResource(R.string.orders_timeline_title))
+private fun TimelineSection(events: List<OrderEvent>, dateFormatter: OrderDateFormatter, modifier: Modifier = Modifier) {
+    AppCard(modifier = modifier.fillMaxWidth()) {
+        SectionLabel(stringResource(R.string.orders_timeline_title))
+        Spacer(Modifier.height(Spacing.ms))
         if (events.isEmpty()) {
             Text(
                 text = stringResource(R.string.orders_timeline_empty),
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        } else {
+            val largeFont = isLargeFont()
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                // Waktu di kanan kalimat (seperti desain) hanya di kartu yang lebar. Waktu di sini
+                // berupa tanggal lengkap, jauh lebih panjang daripada jam di mockup; di ponsel ia
+                // akan menjepit kalimatnya menjadi tiga baris, jadi di sana ia turun ke bawah kalimat.
+                // Diputuskan sekali untuk seluruh kartu supaya semua barisnya seragam.
+                val timeBeside = !largeFont && maxWidth >= TimelineTimeBesideFrom
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    events.forEachIndexed { index, event ->
+                        TimelineRow(
+                            event = event,
+                            current = index == 0,
+                            last = index == events.lastIndex,
+                            timeBeside = timeBeside,
+                            dateFormatter = dateFormatter,
+                        )
+                    }
+                }
+            }
         }
-        events.forEach { event -> TimelineRow(event = event, dateFormatter = dateFormatter) }
     }
 }
 
-/** Satu peristiwa: ikon (bentuknya berbeda per status) + kalimat polos + catatan toko + waktu. */
+/**
+ * Satu peristiwa: titik + kalimat polos + catatan toko + waktu. [current] = peristiwa terbaru
+ * (keadaan sekarang): titiknya bercincin dan memuat ikon peristiwanya, kalimatnya tebal.
+ * Peristiwa yang lebih lama memakai titik kuning bercentang. Maknanya selalu dibawa kalimatnya.
+ */
 @Composable
-private fun TimelineRow(event: OrderEvent, dateFormatter: OrderDateFormatter) {
+private fun TimelineRow(
+    event: OrderEvent,
+    current: Boolean,
+    last: Boolean,
+    timeBeside: Boolean,
+    dateFormatter: OrderDateFormatter,
+) {
+    val typography = MaterialTheme.typography
+    val connectorColor = BoothTheme.sky.progress
+    val time = event.occurredAt?.let(dateFormatter::format) ?: stringResource(R.string.orders_time_unknown)
+    // Garis penghubung digambar di belakang baris, dari bawah titik sampai tepi bawah baris (tempat
+    // titik berikutnya mulai): tingginya mengikuti tinggi teks tanpa pengukuran intrinsik.
+    val connector = if (last) {
+        Modifier
+    } else {
+        Modifier.drawBehind {
+            val dot = TimelineDotSize.toPx()
+            val x = if (layoutDirection == LayoutDirection.Ltr) dot / 2 else size.width - dot / 2
+            drawLine(
+                color = connectorColor,
+                start = Offset(x, dot),
+                end = Offset(x, size.height),
+                strokeWidth = TimelineConnectorWidth.toPx(),
+            )
+        }
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(OrdersTestTags.TIMELINE_EVENT)
-            .semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+            .semantics(mergeDescendants = true) {}
+            .then(connector)
+            .padding(bottom = if (last) 0.dp else Spacing.ms),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.ms),
     ) {
-        Icon(
-            event.icon().asImageVector(),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(24.dp),
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = stringResource(event.labelRes()), style = MaterialTheme.typography.bodyLarge)
-            event.note?.let { note -> Text(text = note, style = MaterialTheme.typography.bodyMedium) }
+        TimelineDot(event = event, current = current)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                // Baris pertama kalimat (24 sp) sejajar tengah dengan titik 32 dp.
+                .padding(top = Spacing.xs),
+        ) {
             Text(
-                text = event.occurredAt?.let(dateFormatter::format) ?: stringResource(R.string.orders_time_unknown),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = stringResource(event.labelRes()),
+                style = if (current) typography.titleMedium else typography.bodyLarge,
             )
+            event.note?.let { note ->
+                Text(text = note, style = typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (!timeBeside) TimelineTime(text = time, current = current)
         }
+        if (timeBeside) TimelineTime(text = time, current = current, modifier = Modifier.padding(top = Spacing.sm))
     }
 }
+
+@Composable
+private fun TimelineTime(text: String, current: Boolean, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = if (current) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodySmall,
+        color = if (current) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier,
+    )
+}
+
+/** Titik riwayat. Ikonnya dekoratif: kalimat di sebelahnya yang dibacakan. */
+@Composable
+private fun TimelineDot(event: OrderEvent, current: Boolean) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .size(TimelineDotSize)
+            .clip(CircleShape)
+            .background(if (current) scheme.secondaryContainer else scheme.primaryContainer)
+            .then(
+                if (current) {
+                    Modifier.border(TimelineRingWidth, BoothTheme.sky.progress, CircleShape)
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = if (current) event.icon().asImageVector() else SkyIcons.Check,
+            contentDescription = null,
+            tint = if (current) scheme.onSecondaryContainer else scheme.onPrimaryContainer,
+            modifier = Modifier.size(TimelineIconSize),
+        )
+    }
+}
+
+/** Di atas skala huruf ini tata letak beralih ke bentuk yang lebih lapang (lihat [isLargeFont]). */
+private const val LARGE_FONT_SCALE = 1.3f
+
+/** Pemisah nomor pesanan dan cara menerimanya di kartu status; tanda baca saja, bukan kata. */
+private const val HEADER_SEPARATOR = " · "
+
+private val MascotWidth = 72.dp
+private val StatusIconSize = 24.dp
+private val ItemThumbSize = 48.dp
+private val TimelineDotSize = 32.dp
+private val TimelineIconSize = 20.dp
+private val TimelineRingWidth = 2.dp
+private val TimelineConnectorWidth = 2.dp
+
+/** Lebar isi kartu riwayat mulai dari mana waktu muat di kanan kalimat tanpa menjepitnya. */
+private val TimelineTimeBesideFrom = 420.dp

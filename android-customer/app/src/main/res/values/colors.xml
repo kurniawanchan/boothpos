@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Hanya untuk latar jendela sebelum Compose menggambar; palet sebenarnya ada di :core:ui. -->
-    <color name="app_window_background">#FAFBFC</color>
+    <color name="app_window_background">#F4F9FF</color>
     <color name="app_icon_background">#1B4F7A</color>
 </resources>

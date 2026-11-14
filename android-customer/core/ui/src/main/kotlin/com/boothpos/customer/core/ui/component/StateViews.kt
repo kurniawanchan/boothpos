@@ -1,6 +1,8 @@
 package com.boothpos.customer.core.ui.component
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,9 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -29,6 +29,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.painterResource
@@ -39,6 +40,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.boothpos.customer.core.ui.R
+import com.boothpos.customer.core.ui.icon.SkyIcons
+import com.boothpos.customer.core.ui.theme.BoothTheme
 import com.boothpos.customer.core.ui.theme.Dimens
 import com.boothpos.customer.core.ui.theme.Spacing
 
@@ -60,7 +63,7 @@ fun LoadingState(
     ) {
         CircularProgressIndicator()
         Spacer(Modifier.height(Spacing.md))
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -92,7 +95,7 @@ fun ErrorState(
     onRetry: (() -> Unit)?,
     modifier: Modifier = Modifier,
     title: String = stringResource(R.string.core_ui_error_title),
-    icon: Painter = rememberVectorPainter(Icons.Filled.Warning),
+    icon: Painter = rememberVectorPainter(SkyIcons.Alert),
     retrying: Boolean = false,
 ) {
     MessageState(
@@ -118,7 +121,7 @@ fun StoreUnavailableState(
     retrying: Boolean = false,
 ) {
     MessageState(
-        icon = rememberVectorPainter(Icons.Filled.Info),
+        icon = rememberVectorPainter(SkyIcons.Info),
         title = stringResource(R.string.core_ui_store_unavailable_title),
         message = stringResource(R.string.core_ui_store_unavailable_message),
         modifier = modifier,
@@ -142,12 +145,15 @@ fun OfflineBanner(
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.md),
     ) {
         Row(
             modifier = Modifier.padding(
-                start = Spacing.md,
-                end = if (hasAction) Spacing.xs else Spacing.md,
+                start = Spacing.ms,
+                end = if (hasAction) Spacing.xs else Spacing.ms,
                 top = Spacing.sm,
                 bottom = Spacing.sm,
             ),
@@ -161,7 +167,7 @@ fun OfflineBanner(
             ) {
                 Icon(painterResource(R.drawable.core_ui_ic_cloud_off), contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(Spacing.sm))
-                Text(message, style = MaterialTheme.typography.bodyMedium)
+                Text(message, style = MaterialTheme.typography.bodySmall)
             }
             if (actionLabel != null && onAction != null) {
                 TextButton(
@@ -211,15 +217,23 @@ private fun MessageState(
             ) {
                 if (icon != null) {
                     // Dekoratif: judul di bawahnya sudah menyampaikan maknanya.
-                    Icon(
-                        painter = icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(40.dp),
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .background(BoothTheme.sky.hero),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painter = icon,
+                            contentDescription = null,
+                            tint = BoothTheme.sky.onHero,
+                            modifier = Modifier.size(32.dp),
+                        )
+                    }
                     Spacer(Modifier.height(Spacing.md))
                 }
-                Text(title, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
                 if (message != null) {
                     Spacer(Modifier.height(Spacing.sm))
                     Text(

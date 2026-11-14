@@ -1,14 +1,11 @@
 package com.boothpos.customer.navigation
 
 import androidx.annotation.StringRes
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import com.boothpos.customer.R
+import com.boothpos.customer.core.ui.icon.SkyIcons
 import com.boothpos.customer.feature.account.presentation.AccountRoute
 import com.boothpos.customer.feature.account.presentation.EditProfileRoute
 import com.boothpos.customer.feature.auth.presentation.AuthChoiceRoute
@@ -29,9 +26,9 @@ enum class TopLevelDestination(
     @StringRes val labelRes: Int,
     val icon: ImageVector,
 ) {
-    Shop(ShopRoute, R.string.app_nav_shop, Icons.Filled.Home),
-    Cart(CartRoute, R.string.app_nav_cart, Icons.Filled.ShoppingCart),
-    Orders(OrdersRoute, R.string.app_nav_orders, Icons.AutoMirrored.Filled.List),
+    Shop(ShopRoute, R.string.app_nav_shop, SkyIcons.Store),
+    Cart(CartRoute, R.string.app_nav_cart, SkyIcons.Cart),
+    Orders(OrdersRoute, R.string.app_nav_orders, SkyIcons.Receipt),
 }
 
 /**

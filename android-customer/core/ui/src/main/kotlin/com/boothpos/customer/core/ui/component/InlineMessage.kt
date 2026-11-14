@@ -8,9 +8,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -25,6 +22,7 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.boothpos.customer.core.ui.icon.SkyIcons
 import com.boothpos.customer.core.ui.theme.Dimens
 import com.boothpos.customer.core.ui.theme.Spacing
 
@@ -47,17 +45,17 @@ fun InlineMessage(
     Surface(
         color = if (error) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surfaceVariant,
         contentColor = if (error) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.small,
         modifier = modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)) {
+        Column(modifier = Modifier.padding(horizontal = Spacing.ms, vertical = Spacing.sm)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
             ) {
                 // Dekoratif: teks di sebelahnya sudah menyampaikan maknanya.
                 Icon(
-                    imageVector = if (error) Icons.Filled.Warning else Icons.Filled.Info,
+                    imageVector = if (error) SkyIcons.Alert else SkyIcons.Info,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
                 )
