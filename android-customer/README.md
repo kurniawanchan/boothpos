@@ -195,7 +195,9 @@ Keputusan yang tidak terlihat dari tabel (jangan "dirapikan"):
   disampaikan lewat deskripsi konten ("3 barang di keranjang"), jadi bukan satu-satunya pembawa makna.
 - **Skema gelap belum didesain.** Mockup hanya terang; `DarkColors` adalah warna gelap LAMA, dan
   `DarkSkyColors` hanya merujuk warna yang sudah ada di sana (tidak ada warna baru yang dikarang).
-  Bentuk, tipografi, dan komponen tetap sama di kedua skema. Perlu keputusan pemilik produk.
+  Bentuk, tipografi, dan komponen tetap sama di kedua skema. **Diputuskan 2026-11-14: warna gelap
+  lama dipertahankan untuk saat ini.** Palet gelap Sky Capsule baru dibuat hanya bila diminta, dan
+  saat itu `ThemeContrastTest` harus tetap hijau untuk skema gelap juga.
 - **Bayangan digambar sendiri** (`Modifier.dropShadow` lewat `softShadow`), bukan `Modifier.shadow`:
   bayangan elevasi berwarna baru ada di API 28, sedangkan minSdk 26, dan di sana ia jatuh ke abu-abu.
   `softShadow` harus dipasang SEBELUM clip/latar; karena itu modifier klik sebuah kartu diteruskan
