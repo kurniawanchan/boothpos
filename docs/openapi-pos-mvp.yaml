@@ -3201,6 +3201,78 @@ paths:
                   data: { type: array, items: { $ref: '#/components/schemas/Preorder' } }
         '422': { $ref: '#/components/responses/ValidationError' }
 
+  /preorders/shipping-labels:
+    post:
+      tags: [Preorder]
+      summary: Data label kurir A4 untuk satu atau banyak pre-order (069-courier-shipping-label-a4)
+      description: |
+        Baca-saja. Dipakai unduhan label kurir TUNGGAL (drawer detail, satu id)
+        dan MASSAL (pilihan daftar); PDF dirender di klien, 4 label per halaman A4.
+        Isinya data pengiriman yang TERSIMPAN. Pre-order mendapat label bila
+        terlihat oleh pengguna (mode DEMO/LIVE + cakupan seller), Mail Order
+        (`fulfillment = courier`) dan punya shipment; selain itu dilaporkan di
+        `skipped` dengan alasan. `not_found` (tidak ada, mode lain, seller lain)
+        sengaja tampak sama dan tanpa nomor. Status pre-order bukan saringan.
+        `data` diurutkan menurut `preorder_number`; jumlah `data` + `skipped`
+        = jumlah id yang diminta. Butuh aksi `preorders.export`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [preorder_ids]
+              properties:
+                preorder_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  description: "Unik; batas = `config('preorders.bulk_max')` (default 200). Tanpa aturan `exists` (id tak terlihat -> `skipped` dengan alasan `not_found`)."
+                  items: { type: integer }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, skipped, store_identity]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [preorder_id, preorder_number, courier_name, tracking_number, recipient_name, recipient_phone, address_line]
+                      properties:
+                        preorder_id: { type: integer }
+                        preorder_number: { type: string }
+                        courier_name: { type: string, nullable: true }
+                        tracking_number: { type: string, nullable: true }
+                        recipient_name: { type: string }
+                        recipient_phone: { type: string }
+                        address_line: { type: string }
+                  skipped:
+                    type: array
+                    items:
+                      type: object
+                      required: [preorder_id, preorder_number, reason]
+                      properties:
+                        preorder_id: { type: integer }
+                        preorder_number: { type: string, nullable: true, description: 'null untuk not_found' }
+                        reason: { type: string, enum: [not_found, not_mail_order, no_shipment] }
+                  store_identity:
+                    type: object
+                    description: Dibangun sekali per permintaan; hanya isian pengirim yang dicetak.
+                    properties:
+                      name: { type: string }
+                      address: { type: string, nullable: true }
+                      contact_phone: { type: string, nullable: true }
+                      contact_person: { type: string, nullable: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '423': { description: Instalasi belum diaktivasi (gerbang lisensi global) }
+
   /preorders/bulk-email:
     post:
       tags: [Preorder]

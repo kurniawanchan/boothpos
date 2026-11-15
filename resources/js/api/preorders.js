@@ -84,6 +84,12 @@ export function bulkPreorderInvoices(preorderIds, document = 'invoice') {
   return client.post('/preorders/bulk-invoices', { preorder_ids: preorderIds, document }).then((r) => r.data);
 }
 
+// 069-courier-shipping-label-a4 — data label kurir dari shipment TERSIMPAN (tunggal & massal).
+// Mengembalikan { data, skipped, store_identity }.
+export function preorderShippingLabels(preorderIds) {
+  return client.post('/preorders/shipping-labels', { preorder_ids: preorderIds }).then((r) => r.data);
+}
+
 export function bulkEmailPreorderInvoices(preorderIds, document = 'invoice') {
   return client.post('/preorders/bulk-email', { preorder_ids: preorderIds, document }).then((r) => r.data);
 }

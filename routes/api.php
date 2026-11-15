@@ -315,6 +315,8 @@ Route::prefix('v1')->group(function () {
         // WAJIB didaftarkan SEBELUM apiResource('preorders', ...)'s 'show',
         // alasan sama seperti 'export'/'import'/'summary' di atas.
         Route::post('/preorders/bulk-invoices', [PreorderController::class, 'bulkInvoices'])->middleware('ability:preorders,export');
+        // 069 — label kurir A4 (tunggal & massal), baca-saja; hak sama dengan surat jalan massal.
+        Route::post('/preorders/shipping-labels', [PreorderController::class, 'shippingLabels'])->middleware('ability:preorders,export');
         Route::post('/preorders/bulk-email', [PreorderController::class, 'bulkEmailInvoices'])->middleware('ability:preorders,notify');
 
         // 027-preorder-duplicate-split — rute statis, WAJIB sebelum

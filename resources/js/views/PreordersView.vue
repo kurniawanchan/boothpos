@@ -19,6 +19,7 @@ import {
   resendPreorderNotification,
   getPreorderSummary,
   bulkPreorderInvoices,
+  preorderShippingLabels,
   bulkEmailPreorderInvoices,
   duplicatePreorders,
   deletePreorderPayment,
@@ -978,6 +979,103 @@ async function doBulkShippingSlips() {
   }
 }
 
+// --- Label kurir A4 (069-courier-shipping-label-a4) ------------------------
+// Dokumen BARU di samping surat jalan. Unduhan tunggal dan massal memakai SATU
+// endpoint dan SATU perender: datanya selalu shipment TERSIMPAN dari server,
+// karena drawer mengedit `shipment` di tempat (research D1).
+const courierLabelDownloading = ref(false);
+const bulkCourierDownloading = ref(false);
+
+/**
+ * Ambil data label, render PDF, unduh. Mengembalikan `{ data, skipped }`;
+ * bila `data` kosong tidak ada yang dirender/diunduh (pemanggil yang memberi
+ * pesan). Galat dilempar sebagai pesan yang sudah diterjemahkan.
+ */
+async function downloadCourierLabels(ids, fileName) {
+  const { data = [], skipped = [], store_identity: store } = await preorderShippingLabels(ids);
+  if (!data.length) return { data, skipped };
+
+  const { renderCourierLabels } = await import('../utils/courierLabelSheet');
+  let blob;
+  try {
+    blob = await renderCourierLabels(data, store);
+  } catch (err) {
+    if (err?.name === 'LabelTooTallError') {
+      throw new Error(t('preorders.courier_label_too_tall', { number: data[err.index]?.preorder_number ?? '' }));
+    }
+    throw err;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+
+  return { data, skipped };
+}
+
+const COURIER_LABEL_FIELDS = ['courier_name', 'tracking_number', 'recipient_name', 'recipient_phone', 'address_line'];
+
+// US1 — label dari drawer detail. Isian kurir di drawer terikat langsung ke
+// `shipment`, jadi bisa berisi suntingan yang belum disimpan: label tetap
+// memakai versi server, dan pengguna diberi tahu bila keduanya berbeda (D9).
+async function downloadCourierLabel() {
+  if (!detail.value || !shipment.value) return;
+  courierLabelDownloading.value = true;
+  try {
+    const number = detail.value.preorder_number;
+    const { data } = await downloadCourierLabels([detail.value.id], `label-kurir-${number}.pdf`);
+    if (!data.length) {
+      toast.error(t('preorders.courier_label_not_available'));
+      return;
+    }
+    const norm = (v) => (v == null ? '' : String(v));
+    const dirty = COURIER_LABEL_FIELDS.some((f) => norm(shipment.value[f]) !== norm(data[0][f]));
+    if (dirty) toast.push(t('preorders.courier_label_unsaved_ignored'));
+    toast.success(t('preorders.courier_label_downloaded'));
+  } catch (err) {
+    toast.error(err?.message || t('preorders.courier_label_failed'));
+  } finally {
+    courierLabelDownloading.value = false;
+  }
+}
+
+// US2 — label massal dari pilihan daftar: 4 per halaman, urut nomor pre-order;
+// yang dilewati dilaporkan (nomor untuk Ambil Sendiri / tanpa pengiriman, hanya
+// jumlah untuk yang tak dapat diakses — nomornya memang tidak dikirim server).
+async function doBulkCourierLabels() {
+  const ids = [...selectedIds.value];
+  if (!ids.length) return;
+  bulkCourierDownloading.value = true;
+  try {
+    const { data, skipped } = await downloadCourierLabels(ids, 'label-kurir.pdf');
+    if (!data.length) {
+      toast.error(t('preorders.courier_labels_none_eligible'));
+      return;
+    }
+    toast.success(t('preorders.courier_labels_downloaded', { count: data.length }));
+
+    const numbered = skipped.filter((s) => s.preorder_number);
+    const hidden = skipped.length - numbered.length;
+    if (numbered.length) {
+      const shown = numbered.slice(0, 20).map((s) => s.preorder_number).join(', ');
+      toast.warning(t('preorders.courier_labels_skipped', {
+        count: numbered.length,
+        numbers: numbered.length > 20 ? `${shown}, …` : shown,
+      }));
+    }
+    if (hidden) toast.warning(t('preorders.courier_labels_skipped_hidden', { count: hidden }));
+  } catch (err) {
+    toast.error(err?.message || t('preorders.courier_label_failed'));
+  } finally {
+    bulkCourierDownloading.value = false;
+  }
+}
+
 // --- Export/import (US3) --------------------------------------------------
 const exporting = ref(false);
 const importFileInput = ref(null);
@@ -1575,6 +1673,11 @@ async function saveShipmentChanges() {
       <BaseButton v-if="auth.canDo('preorders', 'export')" variant="secondary" size="sm" data-testid="bulk-btn-shipping-slips" :loading="bulkDownloading" @click="doBulkShippingSlips">
         <i class="ph-duotone ph-truck text-[15px]" aria-hidden="true"></i>
         {{ t('preorders.bulk_download_shipping_slip') }}
+      </BaseButton>
+      <!-- 069 — label kurir A4, 4 per halaman, dari shipment tersimpan. -->
+      <BaseButton v-if="auth.canDo('preorders', 'export')" variant="secondary" size="sm" data-testid="bulk-btn-courier-labels" :loading="bulkCourierDownloading" @click="doBulkCourierLabels">
+        <i class="ph-duotone ph-tag text-[15px]" aria-hidden="true"></i>
+        {{ t('preorders.bulk_download_courier_labels') }}
       </BaseButton>
       <BaseButton v-if="auth.canDo('preorders', 'notify')" variant="secondary" size="sm" :loading="bulkEmailing" @click="doBulkEmail">
         <i class="ph-duotone ph-envelope-simple text-[15px]" aria-hidden="true"></i>
@@ -2174,6 +2277,8 @@ async function saveShipmentChanges() {
               <BaseButton v-if="(shipment.status === 'shipped') && auth.canDo('preorders', 'edit')" size="sm" @click="markDelivered">{{ t('preorders.mark_delivered') }}</BaseButton>
               <BaseButton v-if="auth.canDo('preorders', 'edit')" variant="secondary" size="sm" :loading="savingShipment" @click="saveShipmentChanges"><i class="ph-duotone ph-check text-[14px]" aria-hidden="true"></i>{{ t('preorders.save_shipment_changes') }}</BaseButton>
               <BaseButton variant="secondary" size="sm" @click="downloadShippingSlip"><i class="ph-duotone ph-file-pdf text-[14px]" aria-hidden="true"></i>{{ t('preorders.download_shipping_slip') }}</BaseButton>
+              <!-- 069 — label kurir A4 dari shipment TERSIMPAN (dokumen baru; surat jalan di atas tetap). -->
+              <BaseButton v-if="auth.canDo('preorders', 'export')" variant="secondary" size="sm" data-testid="btn-courier-label" :loading="courierLabelDownloading" @click="downloadCourierLabel"><i class="ph-duotone ph-tag text-[14px]" aria-hidden="true"></i>{{ t('preorders.download_courier_label') }}</BaseButton>
             </div>
           </div>
         </div>
