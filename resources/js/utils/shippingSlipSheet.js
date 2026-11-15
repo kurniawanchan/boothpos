@@ -22,6 +22,7 @@
  */
 import { escapeHtml } from './invoiceDocument';
 import { captureElementCanvas } from './pdfCapture';
+import { renderA4Pages } from './a4PdfPages';
 
 /** A4 pada 96 dpi (CSS px). */
 export const PAGE_W = 794;
@@ -31,9 +32,6 @@ export const COLS = 3;
 export const COL_WIDTHS = [265, 264, 264];
 /** Lebar isi (di dalam garis) tiap kolom: 265-2 (kiri+kanan) dan 264-1 (kanan) sama-sama 263. */
 export const CONTENT_WIDTH = 263;
-/** Ukuran A4 dalam pt untuk jsPDF. */
-const PDF_W_PT = 595.28;
-const PDF_H_PT = 841.89;
 const BORDER = '1px solid #000';
 
 export class SlipTooTallError extends Error {
@@ -177,10 +175,8 @@ export function measureSlipHeights(cellHtmls) {
 }
 
 /**
- * Membuat SATU PDF A4: ukur -> susun -> rasterisasi tiap halaman -> jsPDF.
+ * Membuat SATU PDF A4: ukur -> susun -> rasterisasi tiap halaman (utils/a4PdfPages).
  * `measure`/`capture` bisa disuntikkan (jsdom tak punya layout maupun canvas).
- * Halaman diproses berurutan dan node + canvas dilepas sebelum halaman berikut
- * agar memori terbatas (<= 200 surat jalan = puluhan halaman).
  *
  * @returns {Promise<Blob>}
  */
@@ -188,25 +184,6 @@ export async function renderShippingSlipSheet(invoices, { measure = measureSlipH
   const cellHtmls = invoices.map(buildShippingSlipCellHtml);
   const { pages } = layoutSlipRows(await measure(cellHtmls));
 
-  const { jsPDF } = await import('jspdf');
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
-
-  for (let p = 0; p < pages.length; p += 1) {
-    const host = document.createElement('div');
-    host.style.cssText = 'position:fixed;left:-9999px;top:0;margin:0;padding:0;';
-    host.innerHTML = buildSheetPageHtml(pages[p], cellHtmls);
-    document.body.appendChild(host);
-
-    let canvas;
-    try {
-      canvas = await capture(host.firstElementChild);
-      if (p > 0) pdf.addPage();
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, PDF_W_PT, PDF_H_PT);
-    } finally {
-      host.remove();
-      if (canvas) { canvas.width = 0; canvas.height = 0; } // lepas bitmap sebelum halaman berikut
-    }
-  }
-
-  return pdf.output('blob');
+  // 069 (research D7): loop halaman -> jsPDF kini dipakai bersama label kurir.
+  return renderA4Pages(pages.map((page) => buildSheetPageHtml(page, cellHtmls)), { capture });
 }

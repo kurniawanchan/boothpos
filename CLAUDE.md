@@ -597,6 +597,18 @@ No migration, no new route. Two additions on Pre-orders; rules a future change m
 - Test trap: `PreordersView.test.js` has load-sensitive tests (a different one failed in each of two full runs, all green alone and in a quiet re-run) — judge a failure by re-running the file before blaming a change.
 - **Not verified in a real browser:** the html2canvas → PDF path with a long note, print at 100 %, and the statistic in the running SPA (only a headless-Chrome render of the slip markup and component tests exist).
 
+## Courier labels on A4 (feature 069, 2026-11-15)
+
+No migration. A NEW document beside the 067 shipping-slip sheet (which, like the drawer's single slip, is unchanged): a courier label (courier, tracking number, recipient name/phone/address, sender, pre-order number) from the SAVED shipment record, 4 per A4 page. Rules a future change must not break:
+
+- **One endpoint feeds single AND bulk: `POST /preorders/shipping-labels`** (`ability:preorders,export`, cap `preorders.bulk_max`, read-only). The drawer's courier fields are `v-model`-bound to the `shipment` ref IN PLACE, so the client never knows the saved values — the old single slip prints unsaved edits; the label does not. The drawer compares its ref with the returned label and shows `courier_label_unsaved_ignored` when they differ.
+- **Eligibility lives in `App\Support\PreorderShippingLabels`**: scoped `Preorder` model (DEMO/LIVE + seller scope) → `not_found` (number null — missing, other mode and other seller look the same), `fulfillment != courier` (incl. a pickup that kept an old shipment row) → `not_mail_order`, no shipment → `no_shipment`. Status is not a filter. `labels + skipped = ids requested`. Labels are ordered by `preorder_number` (spec amendment: a selection spans pages the browser cannot order). NO `exists:` rule in `PreorderShippingLabelsRequest` — it bypasses scopes. `store_identity` (name/address/contact phone/person only) is built ONCE per request; a query-count test guards the eager-loaded `shipment` (mutation-checked).
+- **Only `tracking_number` is nullable**; `recipient_phone`/`address_line` are NOT NULL in the schema (the contract first said otherwise).
+- **Renderer `utils/courierLabelSheet.js`**: fixed integer 2×2 grid (columns 397+396, rows 562+561 px; cell content 395×560 ≈ A6; first column/row also own left/top border, as 067). Content height is measured and a label taller than its cell throws `LabelTooTallError` (toast names the pre-order) — never clipped. All values through `escapeHtml`. Captions are fixed English like the 067 slip. The empty tracking box stays blank.
+- **`utils/a4PdfPages.js::renderA4Pages()`** is the page → jsPDF loop extracted from 067 and shared by both documents; `renderShippingSlipSheet` delegates to it.
+- UI tests live in `qa-tests/component/PreordersCourierLabels.test.js` (both buttons hidden without `preorders.export`).
+- **Verified:** backend 11 tests + real dev data via tinker (40 pre-orders → 18 labels/20 pickup/2 no shipment); headless-Chrome render of the page markup (worst real-length address uses 393 of 560 px). **NOT verified:** click-through in the running SPA, the html2canvas → PDF output, 200-label timing, printed cut lines (quickstart T026/T027).
+
 ## Conventions
 
 - **Code comments, docs, commit messages, and UI copy are in Indonesian.** Comments explain *why*, often citing the PRD clause or the bug that motivated the code; several carry a `BUG YANG DITEMUKAN & DIPERBAIKI` header. Match this style.
@@ -604,7 +616,19 @@ No migration, no new route. Two additions on Pre-orders; rules a future change m
 - Remote `origin` is GitHub (`kurniawanchan/boothpos`). Feature branches are pushed and merged into `develop` through PRs (`gh pr create --base develop`). Push or open a PR only when asked.
 
 <!-- SPECKIT START -->
-Active feature plan: `specs/068-slip-notes-shipping-fee-stat/plan.md`
+Active feature plan: `specs/069-courier-shipping-label-a4/plan.md`
+(branch `085-courier-shipping-label-a4`, from `develop`; spec dir number ≠ branch number) — NO migration, one read-only route.
+Pre-orders get a COURIER LABEL (courier, tracking number, recipient name/phone/address, sender, pre-order number) built
+from the SAVED shipment record, as an A4 PDF with 4 labels per page (2×2 ≈ A6, integer grid 397+396 × 562+561 px, shared
+cut lines): single from the detail drawer's "Courier shipping" section, bulk from the list selection. NEW document — the
+existing single slip and the 067 bulk slip sheet are unchanged. ONE endpoint `POST /preorders/shipping-labels`
+(`ability:preorders,export`, cap `preorders.bulk_max`) feeds both, because the drawer's `shipment` ref is edited IN PLACE
+(the old slip prints unsaved edits); eligibility = scoped model + `fulfillment=courier` + shipment, others in `skipped[]`
+(`not_found|not_mail_order|no_shipment`), labels ordered by pre-order number, `store_identity` once. Renderer
+`utils/courierLabelSheet.js` measures and refuses (`LabelTooTallError`) instead of clipping; the A4 page loop is
+extracted from 067 into `utils/a4PdfPages.js` and shared. See research.md D1–D11.
+
+Previous feature: `specs/068-slip-notes-shipping-fee-stat/plan.md`
 (branch `085-slip-notes-shipping-fee-stat`, from `develop`; spec dir number ≠ branch number) — NO migration, no new route.
 Two small additions on Pre-orders. (1) Bulk shipping slip (067 grid) prints the pre-order's own `notes` directly under the
 "Shipping Info" title when non-blank (frontend only: `buildShippingSlipCellHtml`, text through `escapeHtml`, `pre-wrap`; the

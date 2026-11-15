@@ -267,6 +267,29 @@ class PreorderController extends Controller
     }
 
     /**
+     * 069-courier-shipping-label-a4 — data label kurir (tunggal & massal) dari
+     * shipment TERSIMPAN. Kelayakan dan urutan di PreorderShippingLabels;
+     * identitas toko dibangun SEKALI per permintaan, bukan per label (research
+     * D3 — pelajaran 054: Setting::get per dokumen melipatgandakan query).
+     * Hanya empat isian pengirim yang dicetak di label yang dikirim.
+     */
+    public function shippingLabels(\App\Http\Requests\PreorderShippingLabelsRequest $request): JsonResponse
+    {
+        $result = \App\Support\PreorderShippingLabels::build($request->validated('preorder_ids'));
+        $identity = $this->buildStoreIdentity($this->imageUploadService);
+
+        return response()->json([
+            ...$result,
+            'store_identity' => [
+                'name' => $identity['name'],
+                'address' => $identity['address'],
+                'contact_phone' => $identity['contact_phone'],
+                'contact_person' => $identity['contact_person'],
+            ],
+        ]);
+    }
+
+    /**
      * 022-preorder-invoice-crud-overhaul (US5, FR-014/FR-015) — satu email
      * per pre-order terpilih, memakai PreorderInvoiceMail (badan HTML,
      * TANPA lampiran PDF — research.md Decision 5), mengikuti pola
