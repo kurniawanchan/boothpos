@@ -226,7 +226,8 @@ describe('RolesView', () => {
       await user.click(within(dialog).getByRole('button', { name: /^simpan$/i }));
 
       await waitFor(() =>
-        expect(updateRole).toHaveBeenCalledWith(1, { name: 'Kasir Event A', menu_keys: ['pos', 'session'], permissions: ['menu.price.bulk'] })
+        // 094 — payload kini selalu membawa `manager_app_enabled` (peran fixture tanpa penanda → false).
+        expect(updateRole).toHaveBeenCalledWith(1, { name: 'Kasir Event A', menu_keys: ['pos', 'session'], permissions: ['menu.price.bulk'], manager_app_enabled: false })
       );
     });
 

@@ -1355,7 +1355,9 @@
     "loading_permission_list": "Loading permissions…",
     "permission_list_failed": "Could not load the permission list.",
     "all_outlets": "Sees all outlets",
-    "all_outlets_hint": "Users of this role see every outlet without per-user assignment. Only a user who sees all outlets can change this."
+    "all_outlets_hint": "Users of this role see every outlet without per-user assignment. Only a user who sees all outlets can change this.",
+    "manager_app_enabled": "Can use the management app",
+    "manager_app_enabled_hint": "Users of this role can sign in to the Android management app (Dashboard, inventory, purchasing, kitchen). Turning it off signs out running app sessions."
   },
   "activity_log": {
     "col_when": "Time",
