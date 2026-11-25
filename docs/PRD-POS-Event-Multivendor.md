@@ -1103,3 +1103,12 @@ Poin berikut masih berstatus ASSUMPTION dan perlu dikonfirmasi:
 > **DITOLAK** (409 `insufficient_recipe_stock`), membalik keputusan 087 bahwa penjualan tidak pernah ditolak karena bahan — pembalikan ini
 > berlaku HANYA untuk kebutuhan yang berasal dari resep; bahan dari pilihan modifier tetap hanya peringatan. Bahan tetap dipotong saat pesanan
 > selesai (087/089 tidak berubah). Tanpa nomor F- baru; tidak ada butir 10.2 yang dihidupkan kembali. Lihat `specs/092-recipe-based-menu-stock/`.
+
+> **Catatan bertanggal 2026-11-25 (fitur 094, atas permintaan pemilik produk) — kapabilitas baru pasca-MVP, bukan pembatalan cakupan lama.**
+> Aplikasi Android KEDUA untuk manajemen (`android-pos/manager/`, terpisah dari aplikasi kasir) bagi peran yang diberi penanda
+> `roles.manager_app_enabled` (bawaan Owner, Admin, Outlet Manager): Dashboard, Dapur & Bar, Pengaturan Restoran (meja, stasiun, grup modifier),
+> Kategori, Produk (varian, harga outlet, tautan modifier, resep), Stok (koreksi, transfer), Vendor, Bahan, dan Purchase Order — dengan
+> aturan formulir yang sama dengan web. **Lantai & Tab TIDAK termasuk.** Login username + kata sandi lewat `POST /auth/manager-sessions`;
+> akses dicabut seketika bila penanda peran dimatikan. Daring saja (tanpa mode luring). Tidak menghidupkan kembali butir §10.2/§10.3.
+> Lihat `specs/094-android-management-app/`.
+
