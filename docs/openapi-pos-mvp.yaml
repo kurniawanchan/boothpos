@@ -153,6 +153,53 @@ paths:
         '422': { $ref: '#/components/responses/ValidationError' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /auth/manager-sessions:
+    post:
+      tags: [Auth]
+      summary: Login aplikasi Android manajemen (094)
+      description: |
+        094 — username + kata sandi akun web, plus outlet yang dipilih SEBELUM login. Kredensial dan jatah percobaan memakai
+        `CredentialLogin` yang SAMA dengan `/auth/login` (hitungan bersama: akun+IP 5/menit, 30 kegagalan/menit per akun).
+        Setelah kredensial benar: peran wajib memegang `manager_app_enabled` (403 `manager_app_denied`), dan `outlet_id` harus
+        termasuk outlet yang boleh dilihat pengguna — penugasan atau peran `all_outlets` (403 `outlet_not_permitted`).
+        `outlet_id` hanya diperiksa; sesudah login outlet dikirim lewat header `X-Outlet-Id`. Token bernama `manager-app` dan
+        diperiksa ulang tiap permintaan: mematikan penanda peran mencabut token pada permintaan berikutnya (403 `manager_app_denied`).
+        Tidak ada token yang dibuat pada 401/403.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, outlet_id]
+              properties:
+                username: { type: string, maxLength: 50 }
+                password: { type: string, format: password }
+                outlet_id: { type: integer, description: Outlet aktif pada mode data yang berlaku (selain itu 422). }
+      responses:
+        '200':
+          description: Berhasil
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  user: { $ref: '#/components/schemas/AuthenticatedUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: '`manager_app_denied` (peran tanpa penanda) atau `outlet_not_permitted` (outlet di luar akun).'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  code: { type: string, enum: [manager_app_denied, outlet_not_permitted] }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /staff/roster:
     get:
       tags: [Auth]
@@ -4009,6 +4056,9 @@ paths:
         Aturan tautan (`is_required`, `min_select`, `max_select`, `display_order`) menimpa aturan grup saat order
         (`ModifierResolver`). `max_select` kosong = tanpa batas. Rilis aktif: diantrekan sebagai `menu_change`
         jenis `modifier_link` (`applied:false`).
+
+        094 — grup `selection_type = single` hanya boleh ditautkan dengan `max_select = 1` dan `min_select` 0 atau 1;
+        selain itu 422 di `links.N.max_select` (dulu hanya dijaga klien web).
 
         086 — `excluded_group_ids` (OPSIONAL): grup yang DIWARISI dari kategori tetapi DILEPAS untuk item ini saja
         (kategori dan item lain tidak berubah; tautan item ke grup yang sama tetap menang). Tanpa kunci = pengecualian
@@ -8253,6 +8303,9 @@ components:
           description: |
             `true` untuk 4 peran bawaan (Owner/Admin/Kasir/Inventory) yang
             direproduksi seeder — informasional saja, tidak memblokir edit.
+        manager_app_enabled:
+          type: boolean
+          description: 094 — boleh login ke aplikasi Android manajemen.
         user_count:
           type: integer
           readOnly: true
@@ -8273,6 +8326,13 @@ components:
             045 — peran melihat SEMUA outlet tanpa penugasan per pengguna. Hanya pengguna yang sendiri melihat semua
             outlet yang boleh mengubahnya (selain itu 403 `outlet_forbidden`); peran Owner/Admin tidak bisa dimatikan
             (409 `outlet_all_by_role`). Perubahan dicatat `role_outlet_scope_changed`.
+        manager_app_enabled:
+          type: boolean
+          default: false
+          description: >
+            094 — boleh login ke aplikasi Android manajemen (`POST /auth/manager-sessions`). Bawaan mati untuk peran baru;
+            menyala untuk Owner/Admin dan Outlet Manager hasil migrasi. Mematikannya mencabut sesi aplikasi pada permintaan
+            berikutnya. Perubahan dicatat `role_manager_app_changed`.
 
     UserInput:
       type: object

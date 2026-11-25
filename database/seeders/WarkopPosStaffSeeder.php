@@ -69,6 +69,11 @@ class WarkopPosStaffSeeder extends Seeder
                 }
             }
 
+            // 094 — hanya Outlet Manager yang boleh memakai aplikasi manajemen di antara peran dev ini (sama dengan migrasi).
+            foreach ($roles as $name => $role) {
+                $role->forceFill(['manager_app_enabled' => $name === 'Outlet Manager'])->save();
+            }
+
             // 048 / T058 — batas diskon persen per peran (ASUMSI dev; pemilik/admin tetap tanpa batas).
             foreach (self::DISCOUNT_LIMITS as $name => $limit) {
                 $roles[$name]->forceFill(['discount_limit_pct' => $limit])->save();

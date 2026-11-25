@@ -125,15 +125,27 @@ class RoleController extends Controller
             return $denied;
         }
 
-        $before = (bool) $role->all_outlets;
-        $role->update($data);
-        if ($before !== (bool) $role->all_outlets) {
-            $this->activityLogger->log(
-                userId: $request->user()?->id, action: 'role_outlet_scope_changed', entityType: 'Role', entityId: $role->id,
-                description: "Cakupan outlet peran {$role->name}: ".($before ? 'semua outlet' : 'outlet ditugaskan').' → '.($role->all_outlets ? 'semua outlet' : 'outlet ditugaskan').'.',
-                oldValues: ['all_outlets' => $before], newValues: ['all_outlets' => (bool) $role->all_outlets],
-            );
-        }
+        // 094 — perubahan dan log-nya dalam SATU transaksi (Konstitusi IV): perubahan yang di-rollback tidak meninggalkan catatan.
+        DB::transaction(function () use ($request, $role, $data) {
+            $before = (bool) $role->all_outlets;
+            $managerBefore = (bool) $role->manager_app_enabled;
+            $role->update($data);
+            if ($before !== (bool) $role->all_outlets) {
+                $this->activityLogger->log(
+                    userId: $request->user()?->id, action: 'role_outlet_scope_changed', entityType: 'Role', entityId: $role->id,
+                    description: "Cakupan outlet peran {$role->name}: ".($before ? 'semua outlet' : 'outlet ditugaskan').' → '.($role->all_outlets ? 'semua outlet' : 'outlet ditugaskan').'.',
+                    oldValues: ['all_outlets' => $before], newValues: ['all_outlets' => (bool) $role->all_outlets],
+                );
+            }
+            // 094 — siapa menyalakan/mematikan akses aplikasi manajemen harus bisa ditelusuri (mematikan mencabut sesi aplikasi).
+            if ($managerBefore !== (bool) $role->manager_app_enabled) {
+                $this->activityLogger->log(
+                    userId: $request->user()?->id, action: 'role_manager_app_changed', entityType: 'Role', entityId: $role->id,
+                    description: "Akses aplikasi manajemen peran {$role->name}: ".($managerBefore ? 'boleh' : 'tidak boleh').' → '.($role->manager_app_enabled ? 'boleh' : 'tidak boleh').'.',
+                    oldValues: ['manager_app_enabled' => $managerBefore], newValues: ['manager_app_enabled' => (bool) $role->manager_app_enabled],
+                );
+            }
+        });
         $role->refresh()->loadCount(['users as active_users_count' => fn ($q) => $q->where('is_active', true)]);
 
         return response()->json(new RoleResource($role));

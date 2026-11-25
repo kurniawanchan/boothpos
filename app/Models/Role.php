@@ -24,6 +24,8 @@ class Role extends Model
         'discount_limit_pct',
         'is_system_default',
         'all_outlets',
+        // 094 — boleh login ke aplikasi Android manajemen (ditegakkan di ManagerSessionController + EnsureManagerAppAccess).
+        'manager_app_enabled',
     ];
 
     protected function casts(): array
@@ -35,6 +37,7 @@ class Role extends Model
             'is_system_default' => 'boolean',
             // 045 Stage 2 — Owner/Admin melihat semua outlet aktif tanpa baris penugasan (D6).
             'all_outlets' => 'boolean',
+            'manager_app_enabled' => 'boolean',
         ];
     }
 

@@ -108,7 +108,11 @@ class UserFactory extends Factory
 
         return Role::firstOrCreate(
             ['name' => $definition['name']],
-            ['menu_keys' => $definition['menu_keys'], 'is_system_default' => true, 'all_outlets' => $definition['all_outlets'] ?? false]
+            [
+                'menu_keys' => $definition['menu_keys'], 'is_system_default' => true, 'all_outlets' => $definition['all_outlets'] ?? false,
+                // 094 — sama dengan migrasi 2027_01_10_000001: Owner/Admin boleh memakai aplikasi manajemen.
+                'manager_app_enabled' => $definition['all_outlets'] ?? false,
+            ]
         )->id;
     }
 }
