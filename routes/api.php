@@ -83,11 +83,13 @@ Route::prefix('v1')->group(function () {
 
     // 078 — percobaan gagal dihitung per akun di AuthController::login; ini hanya batas banjir per IP (hitungan terpisah).
     Route::post('/auth/login', [AuthController::class, 'login'])->middleware('throttle:login-flood');
+    // 094 — login aplikasi Android manajemen. Jatah percobaan per akun BERSAMA login web (CredentialLogin); login-flood = batas banjir per IP.
+    Route::post('/auth/manager-sessions', [\App\Http\Controllers\Api\ManagerSessionController::class, 'store'])->middleware('throttle:login-flood');
 
     // SetLocaleFromUser HANYA di sini, bukan pada POST /auth/login di
     // atas — layar login selalu Bahasa Indonesia (FR-001), locale
     // per-akun baru berlaku setelah $request->user() resolve.
-    Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserIsActive::class, SetLocaleFromUser::class, \App\Http\Middleware\ResolveOutletContext::class])->group(function () {
+    Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserIsActive::class, \App\Http\Middleware\EnsureManagerAppAccess::class, SetLocaleFromUser::class, \App\Http\Middleware\ResolveOutletContext::class])->group(function () {
         // 045 Stage 2 — outlet yang boleh dilihat pengguna dan pilihan X-Outlet-Id (contracts/api-scope.md).
         Route::get('/me/scope', [\App\Http\Controllers\Api\MeScopeController::class, 'show']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);

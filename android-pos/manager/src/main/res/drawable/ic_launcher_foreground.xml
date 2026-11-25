@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Empat petak dasbor di zona aman 66dp dari kanvas 108dp. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M34,34h17v24h-17z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M57,34h17v12h-17z" />
+    <path android:fillColor="#FFF2C14E" android:pathData="M57,52h17v22h-17z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M34,64h17v10h-17z" />
+</vector>

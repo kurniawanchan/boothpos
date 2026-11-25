@@ -1355,7 +1355,9 @@
     "loading_permission_list": "Memuat daftar izin…",
     "permission_list_failed": "Gagal memuat daftar izin.",
     "all_outlets": "Melihat semua outlet",
-    "all_outlets_hint": "Pengguna peran ini melihat semua outlet tanpa penugasan per pengguna. Hanya pengguna yang sendiri melihat semua outlet yang dapat mengubahnya."
+    "all_outlets_hint": "Pengguna peran ini melihat semua outlet tanpa penugasan per pengguna. Hanya pengguna yang sendiri melihat semua outlet yang dapat mengubahnya.",
+    "manager_app_enabled": "Boleh memakai aplikasi manajemen",
+    "manager_app_enabled_hint": "Pengguna peran ini boleh login ke aplikasi Android manajemen (Dashboard, inventori, pembelian, dapur). Mematikannya mengeluarkan sesi aplikasi yang sedang berjalan."
   },
   "activity_log": {
     "col_when": "Waktu",

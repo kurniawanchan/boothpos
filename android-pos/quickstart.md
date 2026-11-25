@@ -49,3 +49,10 @@ On the first-launch setup screen, enter the outlet server address:
 ## 6. Production (Release) APK
 Debug APKs are not for stores. For the signed release build (keystore, `local.properties`, versioning, verification,
 Xiaomi install issues) see `docs/RUNBOOK.md` §13.6.
+
+## 7. Aplikasi manajemen (fitur 094)
+
+Modul kedua `:manager` (paket `com.warkop.manager`) berbagi `:core-network`/`:core-domain` dengan aplikasi kasir.
+Bangun dan uji: `./gradlew :manager:testDebugUnitTest :manager:assembleDebug`; APK di `manager/build/outputs/apk/debug/`.
+Akses, pemasangan di HP MIUI, dan `adb reverse`: lihat `docs/RUNBOOK.md` §16.
+

@@ -49,7 +49,7 @@ const columns = computed(() => [
 
 const showForm = ref(false);
 const editingRole = ref(null);
-const form = reactive({ name: '', menu_keys: [], permissions: [], all_outlets: false });
+const form = reactive({ name: '', menu_keys: [], permissions: [], all_outlets: false, manager_app_enabled: false });
 // 045 — "Melihat semua outlet": hanya bila ada lebih dari satu outlet dan pengguna sendiri melihat semuanya (server menolak
 // selain itu); peran bawaan Owner/Admin selalu menyala, jadi kontrolnya disembunyikan untuk keduanya.
 const showAllOutlets = computed(() => outletStore.multi && outletStore.canSeeAll && !(editingRole.value?.all_outlets && editingRole.value?.is_system_default));
@@ -58,7 +58,7 @@ const saving = ref(false);
 
 function openCreate() {
   editingRole.value = null;
-  Object.assign(form, { name: '', menu_keys: [], permissions: [], all_outlets: false });
+  Object.assign(form, { name: '', menu_keys: [], permissions: [], all_outlets: false, manager_app_enabled: false });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -67,7 +67,7 @@ function openEdit(role) {
   editingRole.value = role;
   // `permissions` = izin yang BERLAKU menurut server (bawaan menurut nama peran bila belum diatur); menyimpan
   // mengunci daftar ini secara eksplisit.
-  Object.assign(form, { name: role.name, menu_keys: [...role.menu_keys], permissions: [...(role.permissions ?? [])], all_outlets: role.all_outlets === true });
+  Object.assign(form, { name: role.name, menu_keys: [...role.menu_keys], permissions: [...(role.permissions ?? [])], all_outlets: role.all_outlets === true, manager_app_enabled: role.manager_app_enabled === true });
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
   showForm.value = true;
 }
@@ -75,7 +75,8 @@ function openEdit(role) {
 async function saveRole() {
   saving.value = true;
   Object.keys(formErrors).forEach((k) => delete formErrors[k]);
-  const payload = { name: form.name, menu_keys: form.menu_keys, permissions: form.permissions, ...(showAllOutlets.value ? { all_outlets: form.all_outlets } : {}) };
+  // 094 — `manager_app_enabled` selalu dikirim: akses aplikasi Android manajemen tidak bergantung pada jumlah outlet.
+  const payload = { name: form.name, menu_keys: form.menu_keys, permissions: form.permissions, manager_app_enabled: form.manager_app_enabled, ...(showAllOutlets.value ? { all_outlets: form.all_outlets } : {}) };
   try {
     if (editingRole.value) {
       await updateRole(editingRole.value.id, payload);
@@ -187,6 +188,14 @@ async function performDelete() {
           <span class="block text-[12px] text-muted-4">{{ t('roles.all_outlets_hint') }}</span>
         </span>
       </label>
+      <label class="flex cursor-pointer items-start gap-2.5 text-[13px]" data-testid="role-manager-app">
+        <input v-model="form.manager_app_enabled" type="checkbox" class="mt-0.5 h-4 w-4 accent-brand" />
+        <span>
+          <span class="font-semibold">{{ t('roles.manager_app_enabled') }}</span>
+          <span class="block text-[12px] text-muted-4">{{ t('roles.manager_app_enabled_hint') }}</span>
+        </span>
+      </label>
+      <p v-if="formErrors.manager_app_enabled" class="text-[12px] text-danger-text">{{ formErrors.manager_app_enabled }}</p>
       <div class="mt-1 flex justify-end gap-2">
         <BaseButton type="button" variant="secondary" @click="showForm = false">{{ t('common.cancel') }}</BaseButton>
         <BaseButton type="submit" :loading="saving">{{ t('common.save') }}</BaseButton>

@@ -17,5 +17,6 @@ dependencyResolutionManagement {
 rootProject.name = "android-pos"
 
 include(":app")
+include(":manager")
 include(":core-domain")
 include(":core-network")

@@ -13,6 +13,14 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.util.concurrent.TimeUnit
 
+/**
+ * 094 — endpoint yang TIDAK boleh membawa X-Outlet-Id (setara `skipOutletHeader` web, pola 070): header hanya
+ * menyempitkan, jadi daftar yang memilih outlet lewat `outlet_id[]` (mis. `GET /products`) harus dikirim tanpa header.
+ */
+@Target(AnnotationTarget.FUNCTION)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class NoOutletHeader
+
 /** Sumber nilai header yang berubah selama sesi; dibaca TIAP permintaan (token diperpanjang, outlet dipilih). */
 class RequestContext(
     val token: () -> String?,
@@ -32,7 +40,14 @@ object ApiClient {
         encodeDefaults = false
     }
 
-    fun create(baseUrl: String, context: RequestContext, log: (String) -> Unit = {}): PosApi {
+    fun create(baseUrl: String, context: RequestContext, log: (String) -> Unit = {}): PosApi =
+        create(PosApi::class.java, baseUrl, context, log)
+
+    /**
+     * 094 / research D1 — klien yang sama untuk antarmuka Retrofit lain (aplikasi manajemen memakai `ManagerApi`). Batas
+     * waktu, header, dan log tersamarkan tetap SATU implementasi; `create(...)` di atas hanya meneruskan ke sini.
+     */
+    fun <T> create(service: Class<T>, baseUrl: String, context: RequestContext, log: (String) -> Unit = {}): T {
         val http = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
@@ -46,7 +61,7 @@ object ApiClient {
             .client(http)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
-            .create(PosApi::class.java)
+            .create(service)
     }
 
     /** "http://10.0.2.2:8010" → ".../api/v1/" (Retrofit butuh garis miring akhir). */
@@ -60,7 +75,8 @@ object ApiClient {
     private fun headers(ctx: RequestContext) = Interceptor { chain ->
         val b = chain.request().newBuilder().header("Accept", "application/json")
         ctx.token()?.let { b.header("Authorization", "Bearer $it") }
-        ctx.outletId()?.let { b.header("X-Outlet-Id", it.toString()) }
+        val skipOutlet = chain.request().tag(retrofit2.Invocation::class.java)?.method()?.isAnnotationPresent(NoOutletHeader::class.java) == true
+        if (!skipOutlet) ctx.outletId()?.let { b.header("X-Outlet-Id", it.toString()) }
         ctx.deviceId()?.let { b.header("X-Device-Id", it.toString()) }
         chain.proceed(b.build())
     }

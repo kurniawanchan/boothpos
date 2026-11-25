@@ -42,6 +42,8 @@ class StoreRoleRequest extends FormRequest
             // 045 — peran yang melihat SEMUA outlet tanpa penugasan. Hanya pemegang cakupan penuh yang boleh mengubahnya
             // (ditegakkan di RoleController); di sini hanya bentuknya.
             'all_outlets' => ['sometimes', 'boolean'],
+            // 094 — boleh login ke aplikasi Android manajemen. Bawaan mati untuk peran baru (kolom DB).
+            'manager_app_enabled' => ['sometimes', 'boolean'],
         ];
     }
 

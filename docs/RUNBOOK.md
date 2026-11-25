@@ -807,3 +807,31 @@ di belakang satu IP (NAT), 20/jam per IP bisa terlalu ketat: naikkan di `AppServ
 
 **Android.** Tablet memberi tahu pesanan baru ("Pesanan dari meja X") hanya saat aplikasi di layar depan; memeriksa dan memverifikasi dikerjakan di web
 (Penjualan → Self-Service). Suara dapat dimatikan di layar Koneksi (per perangkat).
+
+## 16. Aplikasi Android manajemen (fitur 094, 2026-11-25)
+
+Aplikasi KEDUA (`android-pos/manager/`, paket `com.warkop.manager`) untuk Owner/Admin/Outlet Manager: Dashboard, Dapur & Bar,
+Pengaturan Restoran, Kategori, Produk, Stok, Vendor, Bahan, PO. Bisa dipasang berdampingan dengan aplikasi kasir.
+
+### 16.1 Mengaktifkan akses
+1. Jalankan migrasi (`php artisan migrate`); `2027_01_10_000001_add_manager_app_enabled_to_roles` mengaktifkan penanda untuk Owner, Admin, dan peran bernama "Outlet Manager".
+2. Peran lain: web → Pengaturan → Peran → sakelar **"Boleh memakai aplikasi manajemen"**.
+3. Mematikan sakelar mencabut akses SEKETIKA: permintaan berikut dari aplikasi ditolak 403 `manager_app_denied` dan tokennya dihapus. Aplikasi kasir tidak terpengaruh.
+
+### 16.2 Membangun dan memasang
+```bash
+cd android-pos
+./gradlew :manager:testDebugUnitTest :manager:assembleDebug
+adb install -r manager/build/outputs/apk/debug/manager-debug.apk
+```
+- HP Xiaomi/MIUI menolak `adb install` (`INSTALL_FAILED_USER_RESTRICTED`) sampai **Opsi pengembang → Instal via USB** aktif; setelah mengaktifkannya cabut-pasang kabel. Jalan pintas: `adb push … /sdcard/Download/` lalu pasang dari Pengelola File.
+- Uji terhadap server dev di Mac tanpa satu Wi-Fi: `adb reverse tcp:8010 tcp:8010`, lalu di aplikasi isi alamat lokal `http://127.0.0.1:8010`.
+- Emulator API 37 butuh ruang disk besar; bila disk penuh, pakai HP fisik.
+
+### 16.3 Alur pertama kali di aplikasi
+Pengaturan server (profil Lokal/Online; "Ambil dari server" membaca alamat pilihan admin) → pilih outlet → login username + kata sandi.
+Profil Online lewat `http://` memunculkan peringatan karena kata sandi tidak terenkripsi.
+
+### 16.4 Yang belum ada di aplikasi (sengaja)
+Lantai & Tab, ekspor/impor Excel, cetak PDF (faktur PO, QR meja, tiket dapur), QR massal, pembayaran PO non-tunai (web pun selalu gagal 422 — lihat `specs/094-android-management-app/evidence.md` temuan 7).
+

@@ -109,7 +109,8 @@ class ModifierLinkService
             $min = (int) ($l['min_select'] ?? 0);
             $max = array_key_exists('max_select', $l) && $l['max_select'] !== null ? (int) $l['max_select'] : null;
 
-            if ($gid <= 0 || ! ModifierGroup::query()->whereKey($gid)->exists()) {
+            $group = $gid > 0 ? ModifierGroup::query()->find($gid) : null;
+            if ($group === null) {
                 $errors["links.{$i}.group_id"] = __('products.modifier_group_unknown');
             } elseif (isset($seen[$gid])) {
                 $errors["links.{$i}.group_id"] = __('products.modifier_group_duplicate');
@@ -121,6 +122,12 @@ class ModifierLinkService
             }
             if ($max !== null && ($max < 1 || $max < $min)) {
                 $errors["links.{$i}.max_select"] = __('products.modifier_max_invalid');
+            }
+            // 094 / research D16 C1 — grup pilihan TUNGGAL: maksimum 1, minimum 0 atau 1. Dulu hanya dijaga klien web
+            // (modifierLinkRows.js::validateRows); klien kedua (aplikasi Android) bisa melewatinya. Galat di `max_select`,
+            // sama dengan letak galat web, dan hanya bila batas dasarnya sudah valid (tidak menimpa galat di atas).
+            elseif ($group !== null && $group->selection_type === ModifierGroup::SINGLE && $min >= 0 && ($max === null || $max > 1 || $min > 1)) {
+                $errors["links.{$i}.max_select"] = __('products.modifier_single_invalid');
             }
 
             $clean[] = [

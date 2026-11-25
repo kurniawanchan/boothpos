@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  094 — sama dengan aplikasi kasir: server lokal per toko umumnya tanpa TLS, jadi HTTP polos DIIZINKAN. Profil "Online"
+  memakai HTTP diberi peringatan di layar Pengaturan sebelum kata sandi dikirim (research D5).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
