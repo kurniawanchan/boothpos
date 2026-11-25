@@ -37,6 +37,8 @@ return [
     'modifier_group_duplicate' => 'Grup yang sama tidak boleh ditautkan dua kali.',
     'modifier_min_invalid' => 'Minimum tidak boleh negatif.',
     'modifier_max_invalid' => 'Maksimum harus minimal 1 dan tidak kurang dari minimum (kosong = tanpa batas).',
+    // 094 — teks sama dengan `products.ml_err_single` di locale web.
+    'modifier_single_invalid' => 'Grup pilihan tunggal: maksimum 1 dan minimum 0 atau 1.',
     'recipe_yield_invalid' => 'Porsi harus lebih dari 0.',
     'recipe_name_required' => 'Beri nama resep (maksimal 100 karakter).',
     'recipe_archived' => 'Ini resep arsip dari sebelum versi dihapus. Hanya bisa dibaca; buat resep baru.',

@@ -37,6 +37,8 @@ return [
     'modifier_group_duplicate' => 'The same group cannot be linked twice.',
     'modifier_min_invalid' => 'The minimum cannot be negative.',
     'modifier_max_invalid' => 'The maximum must be at least 1 and not below the minimum (empty = unlimited).',
+    // 094 — teks sama dengan `products.ml_err_single` di locale web.
+    'modifier_single_invalid' => 'Single-choice group: maximum 1 and minimum 0 or 1.',
     'recipe_yield_invalid' => 'Portions must be greater than 0.',
     'recipe_name_required' => 'Give the recipe a name (up to 100 characters).',
     'recipe_archived' => 'This is an archived recipe from before versions were removed. It is read-only; create a new recipe instead.',

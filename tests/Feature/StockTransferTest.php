@@ -315,6 +315,19 @@ class StockTransferTest extends TestCase
 /** Pembantu kecil agar pernyataan ledger di tes pertama tidak bergantung pada urutan kunci JSON. */
 final class StockTransferLedger
 {
+    /**
+     * 094 / research D16 C3 — produk dipindah dalam jumlah BULAT; bahan boleh pecahan. Dulu dikira hanya dijaga klien web
+     * (`NewTransferDrawer.vue`); `StockTransferService::normalise` sudah menolaknya. Tes ini mengunci perilaku untuk klien kedua.
+     */
+    public function test_a_product_line_must_be_a_whole_quantity_but_a_material_line_may_be_fractional(): void
+    {
+        $this->dispatch(['lines' => [['kind' => 'variant', 'item_id' => $this->variant->id, 'qty' => 1.5]]])
+            ->assertStatus(422)->assertJsonValidationErrors(['lines.0.qty']);
+        $this->assertSame(30, $this->bal($this->a));
+
+        $this->dispatch(['lines' => [['kind' => 'material', 'item_id' => $this->material->id, 'qty' => 1.5]]])->assertCreated();
+    }
+
     public static function first(array $transfer): array
     {
         return $transfer['ledger'][0] ?? [];

@@ -334,4 +334,19 @@ class RecipeApiTest extends TestCase
         ]])->assertStatus(422)->assertJsonValidationErrors(['blocks.1.modifier_option_id']);
         $this->assertSame($before, Recipe::count());
     }
+
+    /**
+     * 094 / research D16 C2 — bentuk `blocks` juga wajib ≥ 1 blok dan tiap blok ≥ 1 baris. Aturan ini dulu dikira hanya di
+     * klien web (`RecipeDrawer.vue`); ternyata `RecipeService::validate` sudah menolaknya. Tes ini MENGUNCI perilaku itu supaya
+     * klien kedua (aplikasi Android) tidak pernah bisa menyimpan resep kosong.
+     */
+    public function test_the_blocks_shape_needs_at_least_one_block_and_one_line_per_block(): void
+    {
+        $this->create(['variant_ids' => null, 'lines' => null, 'blocks' => []])
+            ->assertStatus(422)->assertJsonValidationErrors(['blocks']);
+        $this->create(['variant_ids' => null, 'lines' => null, 'blocks' => [['variant_id' => $this->variant->id, 'lines' => []]]])
+            ->assertStatus(422)->assertJsonValidationErrors(['blocks.0.lines']);
+
+        $this->assertSame(0, Recipe::count());
+    }
 }
